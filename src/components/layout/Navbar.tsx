@@ -132,7 +132,7 @@ export const Navbar: React.FC<NavbarProps> = ({
       {/* 1. GREETING & DATE */}
       <div>
         <h2 className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white leading-tight">
-          {t.greeting}
+          {currentTeacher ? `Selamat Datang, ${currentTeacher.name}` : t.greeting}
         </h2>
         <p className="text-xs text-slate-400 dark:text-slate-500 font-medium mt-0.5">
           {t.examDateInfo}

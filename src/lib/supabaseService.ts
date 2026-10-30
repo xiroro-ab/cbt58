@@ -14,8 +14,13 @@ export async function fetchAllSubjects(): Promise<Subject[]> {
       .select('*')
       .order('title', { ascending: true });
 
-    if (error || !data || data.length === 0) {
-      return sampleSubjects;
+    if (error) {
+      console.warn('Catatan fetchAllSubjects Supabase:', error.message);
+      return [];
+    }
+
+    if (!data || data.length === 0) {
+      return [];
     }
 
     return data.map(d => ({
@@ -30,7 +35,7 @@ export async function fetchAllSubjects(): Promise<Subject[]> {
     }));
   } catch (err) {
     console.error('Error fetchAllSubjects:', err);
-    return sampleSubjects;
+    return [];
   }
 }
 
@@ -230,6 +235,12 @@ export async function insertSubject(sub: Subject): Promise<boolean> {
  */
 export async function deleteSubject(subId: string): Promise<boolean> {
   try {
+    // Bersihkan data relasi terkait subject terlebih dahulu
+    await supabase.from('questions').delete().eq('subject_id', subId);
+    await supabase.from('exam_results').delete().eq('subject_id', subId);
+    await supabase.from('exam_notifications').delete().eq('subject_id', subId);
+    await supabase.from('exam_messages').delete().eq('subject_id', subId);
+
     const { error } = await supabase.from('subjects').delete().eq('id', subId);
     if (error) {
       console.warn('Gagal delete subject dari Supabase, fallback ke lokal:', error.message);

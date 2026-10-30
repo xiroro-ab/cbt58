@@ -121,6 +121,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   const [isEditScheduleModalOpen, setIsEditScheduleModalOpen] = useState(false);
   const [scheduleToEdit, setScheduleToEdit] = useState<Subject | null>(null);
   const [subjectToDelete, setSubjectToDelete] = useState<Subject | null>(null);
+  const [deletedSubjectIds, setDeletedSubjectIds] = useState<string[]>([]);
   const [copiedTokenSubjectId, setCopiedTokenSubjectId] = useState<string | null>(null);
 
   // Form State Buat Jadwal Baru
@@ -205,9 +206,20 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
     );
   }, [results, searchQuery]);
 
+  // Helper tampilan nama mapel rapi tanpa prefix berlebih
+  const formatSubjectTitle = (title: string) => {
+    if (!title) return '';
+    return title
+      .replace(/^Asesmen Sumatif( Akhir)?( Tengah)? Semester( - )?/i, '')
+      .replace(/^Asesmen Sumatif - /i, '')
+      .trim();
+  };
+
   // Daftar mapel yang berhak diakses (Admin: SEMUA mapel; Guru Mapel: HANYA mapel miliknya)
   const accessibleSubjects = useMemo(() => {
-    const all = allSubjects && allSubjects.length > 0 ? allSubjects : [subject];
+    const rawAll = allSubjects !== undefined ? allSubjects : (subject?.id ? [subject] : []);
+    const all = rawAll.filter(s => s && s.id && !deletedSubjectIds.includes(s.id));
+
     if (currentTeacher?.role === 'admin' || !currentTeacher) {
       return all;
     }
@@ -218,22 +230,24 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
         const sLower = s.title.toLowerCase();
         return assignedMapelNames.some(name => sLower.includes(name) || name.includes(sLower));
       });
-      return filtered.length > 0 ? filtered : all;
+      return filtered;
     }
 
     if (currentTeacher.subject) {
       const tSubjectLower = currentTeacher.subject.toLowerCase();
       const matched = all.filter(s => s.title.toLowerCase().includes(tSubjectLower));
-      return matched.length > 0 ? matched : all;
+      return matched;
     }
 
     return all;
-  }, [allSubjects, subject, currentTeacher]);
+  }, [allSubjects, subject, currentTeacher, deletedSubjectIds]);
 
   // Sinkronkan selectedBankSubjectId jika belum ada di accessibleSubjects
   useEffect(() => {
     if (accessibleSubjects.length > 0 && !accessibleSubjects.some(s => s.id === selectedBankSubjectId)) {
       setSelectedBankSubjectId(accessibleSubjects[0].id);
+    } else if (accessibleSubjects.length === 0) {
+      setSelectedBankSubjectId('');
     }
   }, [accessibleSubjects, selectedBankSubjectId]);
 
@@ -241,10 +255,10 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   const currentBankSubject = useMemo(() => {
     return (
       accessibleSubjects.find(s => s.id === selectedBankSubjectId) ||
-      allSubjects?.find(s => s.id === selectedBankSubjectId) ||
+      accessibleSubjects[0] ||
       subject
     );
-  }, [accessibleSubjects, allSubjects, selectedBankSubjectId, subject]);
+  }, [accessibleSubjects, selectedBankSubjectId, subject]);
 
   // Butir soal milik mapel yang sedang aktif dipilih
   const bankSubjectQuestions = useMemo(() => {
@@ -265,7 +279,31 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
     });
   }, [bankSubjectQuestions, searchQuery, bankTypeFilter]);
 
-  // Filter katalog card mapel berdasarkan pencarian & kategori
+  // Chips filter dinamis berbasis data riil mapel yang diinputkan guru / tersedia di database
+  const dynamicFilterChips = useMemo(() => {
+    const mapelNames = Array.from(
+      new Set(
+        accessibleSubjects.map(s => formatSubjectTitle(s.title)).filter(Boolean)
+      )
+    );
+    return [
+      { id: 'ALL', label: 'Semua Mapel', count: accessibleSubjects.length },
+      ...mapelNames.map(name => ({
+        id: name,
+        label: name,
+        count: accessibleSubjects.filter(s => formatSubjectTitle(s.title) === name).length
+      }))
+    ];
+  }, [accessibleSubjects]);
+
+  // Sinkronisasi bankCategoryFilter jika filter tidak ditemukan lagi di dynamicFilterChips
+  useEffect(() => {
+    if (bankCategoryFilter !== 'ALL' && !dynamicFilterChips.some(c => c.id === bankCategoryFilter)) {
+      setBankCategoryFilter('ALL');
+    }
+  }, [dynamicFilterChips, bankCategoryFilter]);
+
+  // Filter katalog card mapel berdasarkan pencarian & chips filter dinamis
   const filteredCatalogSubjects = useMemo(() => {
     return accessibleSubjects.filter(s => {
       const matchesSearch =
@@ -277,27 +315,14 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
       if (!matchesSearch) return false;
       if (bankCategoryFilter === 'ALL') return true;
 
-      const t = s.title.toLowerCase();
-      if (bankCategoryFilter === 'MIPA') return t.includes('ipa') || t.includes('matematika');
-      if (bankCategoryFilter === 'TIK') return t.includes('informatika') || t.includes('tik');
-      if (bankCategoryFilter === 'BAHASA') return t.includes('bahasa') || t.includes('indonesia') || t.includes('inggris');
-      if (bankCategoryFilter === 'SOSIAL') return t.includes('ips') || t.includes('pancasila') || t.includes('ppkn');
-      if (bankCategoryFilter === 'AGAMA') return t.includes('agama') || t.includes('pai');
-
-      return true;
+      const titleFormatted = formatSubjectTitle(s.title);
+      return titleFormatted === bankCategoryFilter || s.title.toLowerCase().includes(bankCategoryFilter.toLowerCase());
     });
   }, [accessibleSubjects, searchQuery, bankCategoryFilter]);
 
   // Soal aktif untuk metrik ringkas dashboard
   const activeQuestions = bankSubjectQuestions;
 
-  // Helper tampilan nama mapel rapi tanpa prefix berlebih
-  const formatSubjectTitle = (title: string) => {
-    return title
-      .replace(/^Asesmen Sumatif( Akhir)?( Tengah)? Semester( - )?/i, '')
-      .replace(/^Asesmen Sumatif - /i, '')
-      .trim();
-  };
 
   // Helper gaya tema warna card mapel
   const getSubjectTheme = (title: string) => {
@@ -452,6 +477,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
       scoringRules: newSubScoringRules
     };
 
+    setDeletedSubjectIds(prev => prev.filter(id => id !== newSub.id));
     if (onAddSubject) {
       onAddSubject(newSub);
     } else {
@@ -467,14 +493,17 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   const handleConfirmDeleteSchedule = () => {
     if (!subjectToDelete) return;
     const deletedId = subjectToDelete.id;
+    setDeletedSubjectIds(prev => [...prev, deletedId]);
     if (onDeleteSubject) {
       onDeleteSubject(deletedId);
     }
     if (selectedBankSubjectId === deletedId) {
       setBankView('catalog');
-      const remaining = accessibleSubjects.filter(s => s.id !== deletedId);
+      const remaining = accessibleSubjects.filter(s => s.id !== deletedId && !deletedSubjectIds.includes(s.id));
       if (remaining.length > 0) {
         setSelectedBankSubjectId(remaining[0].id);
+      } else {
+        setSelectedBankSubjectId('');
       }
     }
     setSubjectToDelete(null);
@@ -1098,26 +1127,28 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
 
               {/* Filter Kategori & Pencarian */}
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs">
-                {/* Kategori Tabs */}
+                {/* Kategori Tabs Dinamis Real Berdasarkan Inputan Guru */}
                 <div className="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0 scrollbar-none">
-                  {[
-                    { id: 'ALL', label: 'Semua Mapel' },
-                    { id: 'MIPA', label: 'MIPA' },
-                    { id: 'TIK', label: 'Teknologi & TIK' },
-                    { id: 'BAHASA', label: 'Bahasa' },
-                    { id: 'SOSIAL', label: 'Sosial & PPKn' },
-                    { id: 'AGAMA', label: 'PAI & Budi Pekerti' }
-                  ].map(cat => (
+                  {dynamicFilterChips.map(cat => (
                     <button
                       key={cat.id}
                       onClick={() => setBankCategoryFilter(cat.id)}
-                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition whitespace-nowrap cursor-pointer ${
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition whitespace-nowrap cursor-pointer flex items-center gap-1.5 ${
                         bankCategoryFilter === cat.id
                           ? 'bg-violet-600 text-white shadow-xs'
                           : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                       }`}
                     >
-                      {cat.label}
+                      <span>{cat.label}</span>
+                      <span
+                        className={`text-[10px] px-1.5 py-0.2 rounded-full font-semibold ${
+                          bankCategoryFilter === cat.id
+                            ? 'bg-white/20 text-white'
+                            : 'bg-slate-200/80 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
+                        }`}
+                      >
+                        {cat.count}
+                      </span>
                     </button>
                   ))}
                 </div>
@@ -1133,13 +1164,27 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                 <div className="p-12 text-center rounded-2xl bg-white dark:bg-slate-900 border border-dashed border-slate-300 dark:border-slate-800 space-y-3">
                   <BookOpen className="w-10 h-10 text-slate-400 mx-auto opacity-40" />
                   <h4 className="text-sm font-bold text-slate-700 dark:text-slate-300">
-                    Tidak ada paket mata pelajaran yang sesuai
+                    {accessibleSubjects.length === 0
+                      ? 'Belum Ada Paket Mata Pelajaran'
+                      : 'Tidak ada paket mata pelajaran yang sesuai filter'}
                   </h4>
                   <p className="text-xs text-slate-400 max-w-md mx-auto">
-                    {currentTeacher?.role !== 'admin'
+                    {accessibleSubjects.length === 0
+                      ? 'Bank soal masih kosong. Silakan klik tombol "+ Tambah Paket Mapel" di atas untuk membuat jadwal dan paket soal baru.'
+                      : currentTeacher?.role !== 'admin'
                       ? 'Anda hanya memiliki akses pada mata pelajaran yang ditugaskan kepada akun Anda.'
-                      : 'Cobalah gunakan filter kategori lain atau buat paket jadwal mata pelajaran baru.'}
+                      : 'Cobalah gunakan filter mata pelajaran lain atau buat paket jadwal baru.'}
                   </p>
+                  {accessibleSubjects.length === 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setIsAddScheduleModalOpen(true)}
+                      className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-xs font-bold transition shadow-md shadow-violet-600/20 cursor-pointer mt-2"
+                    >
+                      <Plus className="w-4 h-4" />
+                      <span>+ Tambah Paket Mapel Baru</span>
+                    </button>
+                  )}
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
@@ -2908,12 +2953,14 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
 
             <div className="flex justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
               <button
+                type="button"
                 onClick={() => setSubjectToDelete(null)}
                 className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold text-xs cursor-pointer"
               >
                 Batal
               </button>
               <button
+                type="button"
                 onClick={handleConfirmDeleteSchedule}
                 className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-semibold text-xs transition cursor-pointer"
               >

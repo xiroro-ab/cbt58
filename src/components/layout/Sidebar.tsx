@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { useLanguage } from '@/context/LanguageContext';
+import { Teacher } from '@/types/cbt';
 import {
   LayoutDashboard,
   FileCheck2,
@@ -14,7 +15,8 @@ import {
   Settings,
   Search,
   ChevronRight,
-  Sparkles
+  Sparkles,
+  LogOut
 } from 'lucide-react';
 
 export type NavItem =
@@ -35,6 +37,8 @@ interface SidebarProps {
   searchQuery: string;
   onSearchChange: (query: string) => void;
   onOpenHelp: () => void;
+  currentTeacher?: Teacher | null;
+  onLogout?: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -44,7 +48,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
   resultsCount,
   searchQuery,
   onSearchChange,
-  onOpenHelp
+  onOpenHelp,
+  currentTeacher,
+  onLogout
 }) => {
   const { t } = useLanguage();
 
@@ -245,16 +251,55 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
       </div>
 
-      {/* 4. FOOTER INFO */}
-      <div className="p-4 border-t border-slate-100 dark:border-slate-800/60 bg-slate-50/50 dark:bg-slate-950/40">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-full bg-violet-600 text-white font-bold flex items-center justify-center text-xs">
-            PG
+      {/* 4. FOOTER INFO AKUN YANG SEDANG LOGIN */}
+      <div className="p-3.5 border-t border-slate-100 dark:border-slate-800/60 bg-slate-50/50 dark:bg-slate-950/40">
+        <div className="flex items-center justify-between gap-2.5">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div
+              className={`w-8 h-8 rounded-full ${
+                currentTeacher?.avatarColor || 'bg-violet-600'
+              } text-white font-bold flex items-center justify-center text-xs flex-shrink-0 shadow-xs`}
+            >
+              {currentTeacher
+                ? currentTeacher.name
+                    .split(' ')
+                    .filter(Boolean)
+                    .map(n => n[0])
+                    .slice(0, 2)
+                    .join('')
+                    .toUpperCase()
+                : 'PG'}
+            </div>
+            <div className="truncate">
+              <p
+                className="text-xs font-bold text-slate-900 dark:text-slate-100 truncate"
+                title={currentTeacher?.name || 'Pak Guru'}
+              >
+                {currentTeacher?.name || 'Pak Guru'}
+              </p>
+              <p className="text-[10px] text-slate-400 dark:text-slate-500 truncate">
+                {currentTeacher?.role === 'admin'
+                  ? 'Superadmin CBT'
+                  : currentTeacher?.role === 'pengawas'
+                  ? 'Pengawas CBT'
+                  : currentTeacher?.subject
+                  ? `Guru ${currentTeacher.subject}`
+                  : 'Guru Pengampu'}
+                {' • SMPN 58'}
+              </p>
+            </div>
           </div>
-          <div className="truncate">
-            <p className="text-xs font-semibold text-slate-900 dark:text-slate-100 truncate">Pak Guru</p>
-            <p className="text-[10px] text-slate-400 dark:text-slate-500 truncate">SMPN 58 Palembang</p>
-          </div>
+
+          {onLogout && (
+            <button
+              type="button"
+              onClick={onLogout}
+              className="p-1.5 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition cursor-pointer flex-shrink-0"
+              title="Keluar / Ganti Akun"
+            >
+              <LogOut className="w-4 h-4" />
+            </button>
+          )}
         </div>
       </div>
     </aside>

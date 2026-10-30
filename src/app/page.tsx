@@ -176,20 +176,37 @@ export default function Home() {
         if (allSubs && allSubs.length > 0) {
           setSubjects(allSubs);
           activeSub = allSubs.find(s => s.isActive) || allSubs[0];
+          setSubject(activeSub);
+          if (activeSub.token) setInputToken(activeSub.token);
+
+          const qList = await fetchQuestionsBySubject(activeSub.id);
+          if (qList && qList.length > 0) {
+            setQuestions(qList);
+          } else {
+            setQuestions([]);
+          }
+
+          const resList = await fetchExamResults(activeSub.id);
+          if (resList && resList.length > 0) {
+            setResults(resList);
+          } else {
+            setResults([]);
+          }
         } else {
-          activeSub = await fetchActiveSubject();
-        }
-        setSubject(activeSub);
-        if (activeSub.token) setInputToken(activeSub.token);
-
-        const qList = await fetchQuestionsBySubject(activeSub.id);
-        if (qList && qList.length > 0) {
-          setQuestions(qList);
-        }
-
-        const resList = await fetchExamResults(activeSub.id);
-        if (resList && resList.length > 0) {
-          setResults(resList);
+          activeSub = {
+            id: '',
+            title: 'Belum Ada Ujian',
+            className: '',
+            durationMinutes: 60,
+            violationLimit: 3,
+            token: '',
+            isActive: false,
+            scoringRules: initialSubject.scoringRules
+          };
+          setSubjects([]);
+          setSubject(activeSub);
+          setQuestions([]);
+          setResults([]);
         }
 
         // Ambil data roster siswa dari Supabase (fallback ke 301 initialStudents)
@@ -343,13 +360,26 @@ export default function Home() {
   };
 
   const handleDeleteSubject = async (subId: string) => {
-    setSubjects(prev => prev.filter(s => s.id !== subId));
-    if (subject.id === subId) {
-      const remaining = subjects.filter(s => s.id !== subId);
-      if (remaining.length > 0) {
-        setSubject(remaining[0]);
+    setSubjects(prev => {
+      const remaining = prev.filter(s => s.id !== subId);
+      if (subject.id === subId) {
+        if (remaining.length > 0) {
+          setSubject(remaining[0]);
+        } else {
+          setSubject({
+            id: '',
+            title: 'Belum Ada Ujian',
+            className: '',
+            durationMinutes: 60,
+            violationLimit: 3,
+            token: '',
+            isActive: false,
+            scoringRules: initialSubject.scoringRules
+          });
+        }
       }
-    }
+      return remaining;
+    });
     try {
       await deleteSubject(subId);
     } catch (err) {
@@ -1034,6 +1064,8 @@ export default function Home() {
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
         onOpenHelp={() => setIsHelpModalOpen(true)}
+        currentTeacher={currentTeacher}
+        onLogout={handleTeacherLogout}
       />
 
       {/* MAIN CONTAINER */}

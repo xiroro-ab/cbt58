@@ -663,16 +663,8 @@ export const Navbar: React.FC<NavbarProps> = ({
         {/* Tombol Aksi Cepat */}
         <div className="flex items-center gap-2 pl-2">
           <button
-            onClick={onOpenAddQuestion}
-            className="hidden sm:flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-900 dark:bg-slate-100 hover:bg-slate-800 dark:hover:bg-white text-white dark:text-slate-900 text-xs font-semibold transition shadow-xs"
-          >
-            <PlusCircle className="w-3.5 h-3.5" />
-            <span>{t.addQuestionBtn}</span>
-          </button>
-
-          <button
             onClick={onStartStudentExam}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-xs font-semibold transition shadow-md shadow-violet-600/20"
+            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-xs font-semibold transition shadow-md shadow-violet-600/20 cursor-pointer"
           >
             <Eye className="w-3.5 h-3.5" />
             <span>{t.studentViewBtn}</span>

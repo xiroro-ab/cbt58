@@ -206,10 +206,10 @@ export async function updateSubjectInSupabase(sub: Subject): Promise<boolean> {
 /**
  * Menambahkan mata pelajaran / paket jadwal ujian baru ke Supabase
  */
-export async function insertSubject(sub: Subject): Promise<boolean> {
+export async function insertSubject(sub: Subject): Promise<Subject | null> {
   try {
-    const { error } = await supabase.from('subjects').insert({
-      id: sub.id,
+    const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(sub.id);
+    const payload: any = {
       title: sub.title,
       class_target: sub.className,
       duration_minutes: sub.durationMinutes,
@@ -217,16 +217,31 @@ export async function insertSubject(sub: Subject): Promise<boolean> {
       token: sub.token,
       is_active: sub.isActive,
       scoring_rules: sub.scoringRules
-    });
+    };
+    if (isUUID) {
+      payload.id = sub.id;
+    }
+
+    const { data, error } = await supabase.from('subjects').insert(payload).select().single();
 
     if (error) {
-      console.warn('Gagal insert subject ke Supabase, fallback ke lokal:', error.message);
-      return false;
+      console.warn('Gagal insert subject ke Supabase:', error.message);
+      return null;
     }
-    return true;
+
+    return {
+      id: data.id,
+      title: data.title,
+      className: data.class_target,
+      durationMinutes: data.duration_minutes,
+      violationLimit: data.violation_limit,
+      token: data.token,
+      isActive: data.is_active,
+      scoringRules: data.scoring_rules || sub.scoringRules
+    };
   } catch (err) {
     console.error('Exception insertSubject:', err);
-    return false;
+    return null;
   }
 }
 

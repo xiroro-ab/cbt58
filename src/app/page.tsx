@@ -351,9 +351,17 @@ export default function Home() {
   };
 
   const handleAddSubject = async (newSub: Subject) => {
-    setSubjects(prev => [...prev, newSub]);
+    setSubjects(prev => {
+      const exists = prev.some(s => s.id === newSub.id);
+      return exists ? prev.map(s => s.id === newSub.id ? newSub : s) : [...prev, newSub];
+    });
+    setSubject(newSub);
     try {
-      await insertSubject(newSub);
+      const inserted = await insertSubject(newSub);
+      if (inserted && inserted.id) {
+        setSubjects(prev => prev.map(s => s.id === newSub.id ? inserted : s));
+        setSubject(inserted);
+      }
     } catch (err) {
       console.warn('Supabase insert subject fallback:', err);
     }

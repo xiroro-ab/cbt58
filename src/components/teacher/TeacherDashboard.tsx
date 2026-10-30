@@ -128,10 +128,10 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   // Form State Buat Jadwal Baru
   const [newSubTitle, setNewSubTitle] = useState('');
   const [newSubClass, setNewSubClass] = useState('VII.1, VII.2, VII.3');
-  const [newSubDuration, setNewSubDuration] = useState(60);
+  const [newSubDuration, setNewSubDuration] = useState<number | string>(60);
   const [newSubToken, setNewSubToken] = useState(() => 'SMP58' + Math.floor(100 + Math.random() * 900));
-  const [newSubViolationLimit, setNewSubViolationLimit] = useState(3);
-  const [newSubScoringRules, setNewSubScoringRules] = useState<ScoringRules>({
+  const [newSubViolationLimit, setNewSubViolationLimit] = useState<number | string>(3);
+  const [newSubScoringRules, setNewSubScoringRules] = useState<Record<string, number | string>>({
     'Pilihan Ganda': 1,
     'Pilihan Ganda Kompleks': 2,
     'Benar/Salah': 2,
@@ -143,10 +143,11 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   // Form State Edit Jadwal
   const [editSubTitle, setEditSubTitle] = useState('');
   const [editSubClass, setEditSubClass] = useState('');
-  const [editSubDuration, setEditSubDuration] = useState(60);
+  const [editSubDuration, setEditSubDuration] = useState<number | string>(60);
   const [editSubToken, setEditSubToken] = useState('');
-  const [editSubViolationLimit, setEditSubViolationLimit] = useState(3);
-  const [editSubScoringRules, setEditSubScoringRules] = useState<ScoringRules>({});
+  const [editSubViolationLimit, setEditSubViolationLimit] = useState<number | string>(3);
+  const [editSubScoringRules, setEditSubScoringRules] = useState<Record<string, number | string>>({});
+  const [createdSubjectIds, setCreatedSubjectIds] = useState<string[]>([]);
 
   // Form State untuk Tambah Soal
   const [modalType, setModalType] = useState<QuestionType>('Pilihan Ganda');
@@ -216,7 +217,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
       .trim();
   };
 
-  // Daftar mapel yang berhak diakses (Admin: SEMUA mapel; Guru Mapel: HANYA mapel miliknya)
+  // Daftar mapel yang berhak diakses (Admin: SEMUA mapel; Guru Mapel: HANYA mapel miliknya atau yang baru dibuatnya)
   const accessibleSubjects = useMemo(() => {
     const rawAll = allSubjects !== undefined ? allSubjects : (subject?.id ? [subject] : []);
     const all = rawAll.filter(s => s && s.id && !deletedSubjectIds.includes(s.id));
@@ -225,9 +226,12 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
       return all;
     }
 
+    const isCreatedBySelf = (s: Subject) => createdSubjectIds.includes(s.id);
+
     if (currentTeacher.assignments && currentTeacher.assignments.length > 0) {
       const assignedMapelNames = currentTeacher.assignments.map(a => a.subject.toLowerCase());
       const filtered = all.filter(s => {
+        if (isCreatedBySelf(s)) return true;
         const sLower = s.title.toLowerCase();
         return assignedMapelNames.some(name => sLower.includes(name) || name.includes(sLower));
       });
@@ -236,12 +240,12 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
 
     if (currentTeacher.subject) {
       const tSubjectLower = currentTeacher.subject.toLowerCase();
-      const matched = all.filter(s => s.title.toLowerCase().includes(tSubjectLower));
+      const matched = all.filter(s => isCreatedBySelf(s) || s.title.toLowerCase().includes(tSubjectLower));
       return matched;
     }
 
     return all;
-  }, [allSubjects, subject, currentTeacher, deletedSubjectIds]);
+  }, [allSubjects, subject, currentTeacher, deletedSubjectIds, createdSubjectIds]);
 
   // Sinkronkan selectedBankSubjectId jika belum ada di accessibleSubjects
   useEffect(() => {
@@ -438,7 +442,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
     setEditSubDuration(targetSub.durationMinutes);
     setEditSubToken(targetSub.token);
     setEditSubViolationLimit(targetSub.violationLimit);
-    setEditSubScoringRules(targetSub.scoringRules || subject.scoringRules);
+    setEditSubScoringRules(targetSub.scoringRules || subject.scoringRules || {});
     setIsEditScheduleModalOpen(true);
   };
 
@@ -447,6 +451,10 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
     e.preventDefault();
     if (!scheduleToEdit || !editSubTitle.trim() || !editSubToken.trim()) return;
 
+    const parsedScoringRules: ScoringRules = Object.fromEntries(
+      Object.entries(editSubScoringRules).map(([k, v]) => [k, Number(v) || 1])
+    ) as ScoringRules;
+
     const updated: Subject = {
       ...scheduleToEdit,
       title: editSubTitle.trim(),
@@ -454,7 +462,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
       durationMinutes: Number(editSubDuration) || 60,
       token: editSubToken.trim().toUpperCase(),
       violationLimit: Number(editSubViolationLimit) || 3,
-      scoringRules: editSubScoringRules
+      scoringRules: parsedScoringRules
     };
 
     onUpdateSubject(updated);
@@ -467,18 +475,27 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
     e.preventDefault();
     if (!newSubTitle.trim() || !newSubToken.trim()) return;
 
+    const newId = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `sub-${Date.now()}`;
+    const parsedScoringRules: ScoringRules = Object.fromEntries(
+      Object.entries(newSubScoringRules).map(([k, v]) => [k, Number(v) || 1])
+    ) as ScoringRules;
+
     const newSub: Subject = {
-      id: `sub-${Date.now()}`,
+      id: newId,
       title: newSubTitle.trim(),
       className: newSubClass.trim() || 'Semua Kelas',
       durationMinutes: Number(newSubDuration) || 60,
       token: newSubToken.trim().toUpperCase(),
       violationLimit: Number(newSubViolationLimit) || 3,
       isActive: true,
-      scoringRules: newSubScoringRules
+      scoringRules: parsedScoringRules
     };
 
-    setDeletedSubjectIds(prev => prev.filter(id => id !== newSub.id));
+    setCreatedSubjectIds(prev => [...prev, newId]);
+    setDeletedSubjectIds(prev => prev.filter(id => id !== newId));
+    setBankCategoryFilter('ALL');
+    setSelectedBankSubjectId(newId);
+
     if (onAddSubject) {
       onAddSubject(newSub);
     } else {
@@ -487,6 +504,8 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
 
     setIsAddScheduleModalOpen(false);
     setNewSubTitle('');
+    setNewSubDuration(60);
+    setNewSubViolationLimit(3);
     setNewSubToken('SMP58' + Math.floor(100 + Math.random() * 900));
   };
 
@@ -3471,7 +3490,11 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                     max={300}
                     required
                     value={newSubDuration}
-                    onChange={e => setNewSubDuration(parseInt(e.target.value) || 60)}
+                    onChange={e => setNewSubDuration(e.target.value)}
+                    onBlur={() => {
+                      const val = Number(newSubDuration);
+                      if (!newSubDuration || isNaN(val) || val < 1) setNewSubDuration(60);
+                    }}
                     className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white font-bold"
                   />
                 </div>
@@ -3508,7 +3531,11 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                     max={10}
                     required
                     value={newSubViolationLimit}
-                    onChange={e => setNewSubViolationLimit(parseInt(e.target.value) || 3)}
+                    onChange={e => setNewSubViolationLimit(e.target.value)}
+                    onBlur={() => {
+                      const val = Number(newSubViolationLimit);
+                      if (!newSubViolationLimit || isNaN(val) || val < 1) setNewSubViolationLimit(3);
+                    }}
                     className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white font-bold"
                   />
                 </div>
@@ -3527,11 +3554,17 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                         type="number"
                         min={1}
                         max={50}
-                        value={newSubScoringRules[typeKey] || 1}
-                        onChange={e => setNewSubScoringRules((prev: ScoringRules) => ({
-                          ...prev,
-                          [typeKey]: parseFloat(e.target.value) || 1
-                        }))}
+                        value={newSubScoringRules[typeKey] ?? ''}
+                        onChange={e => {
+                          const val = e.target.value;
+                          setNewSubScoringRules(prev => ({ ...prev, [typeKey]: val }));
+                        }}
+                        onBlur={() => {
+                          const val = Number(newSubScoringRules[typeKey]);
+                          if (!newSubScoringRules[typeKey] || isNaN(val) || val < 1) {
+                            setNewSubScoringRules(prev => ({ ...prev, [typeKey]: 1 }));
+                          }
+                        }}
                         className="w-full mt-1 p-1 bg-white dark:bg-slate-900 rounded border border-slate-200 dark:border-slate-700 text-center font-bold text-violet-600 dark:text-violet-400"
                       />
                     </div>
@@ -3720,7 +3753,11 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                     max={300}
                     required
                     value={editSubDuration}
-                    onChange={e => setEditSubDuration(parseInt(e.target.value) || 60)}
+                    onChange={e => setEditSubDuration(e.target.value)}
+                    onBlur={() => {
+                      const val = Number(editSubDuration);
+                      if (!editSubDuration || isNaN(val) || val < 1) setEditSubDuration(60);
+                    }}
                     className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white font-bold"
                   />
                 </div>
@@ -3763,7 +3800,11 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                     max={10}
                     required
                     value={editSubViolationLimit}
-                    onChange={e => setEditSubViolationLimit(parseInt(e.target.value) || 3)}
+                    onChange={e => setEditSubViolationLimit(e.target.value)}
+                    onBlur={() => {
+                      const val = Number(editSubViolationLimit);
+                      if (!editSubViolationLimit || isNaN(val) || val < 1) setEditSubViolationLimit(3);
+                    }}
                     className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white font-bold"
                   />
                 </div>
@@ -3782,11 +3823,17 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                         type="number"
                         min={1}
                         max={50}
-                        value={editSubScoringRules[typeKey] || 1}
-                        onChange={e => setEditSubScoringRules((prev: ScoringRules) => ({
-                          ...prev,
-                          [typeKey]: parseFloat(e.target.value) || 1
-                        }))}
+                        value={editSubScoringRules[typeKey] ?? ''}
+                        onChange={e => {
+                          const val = e.target.value;
+                          setEditSubScoringRules(prev => ({ ...prev, [typeKey]: val }));
+                        }}
+                        onBlur={() => {
+                          const val = Number(editSubScoringRules[typeKey]);
+                          if (!editSubScoringRules[typeKey] || isNaN(val) || val < 1) {
+                            setEditSubScoringRules(prev => ({ ...prev, [typeKey]: 1 }));
+                          }
+                        }}
                         className="w-full mt-1 p-1 bg-white dark:bg-slate-900 rounded border border-slate-200 dark:border-slate-700 text-center font-bold text-violet-600 dark:text-violet-400"
                       />
                     </div>

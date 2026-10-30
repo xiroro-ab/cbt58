@@ -22,6 +22,7 @@ import {
   removeQuestion,
   saveExamResult,
   updateExamResult,
+  saveOrUpdateExamResult,
   deleteExamResult,
   fetchExamResults,
   updateSubjectInSupabase,
@@ -464,18 +465,33 @@ export default function Home() {
   };
 
   const handleUpdateResult = async (updatedResult: ExamResult) => {
-    setResults(prev => prev.map(r => r.id === updatedResult.id ? updatedResult : r));
+    setResults(prev => {
+      const matchIndex = prev.findIndex(
+        r => r.id === updatedResult.id ||
+             (r.studentName.toLowerCase().trim() === updatedResult.studentName.toLowerCase().trim() && r.subjectId === updatedResult.subjectId)
+      );
+      if (matchIndex >= 0) {
+        const next = [...prev];
+        next[matchIndex] = updatedResult;
+        return next;
+      }
+      return [updatedResult, ...prev];
+    });
     try {
-      await updateExamResult(updatedResult);
+      await saveOrUpdateExamResult(updatedResult);
     } catch (err) {
       console.warn('Supabase update result fallback to local state:', err);
     }
   };
 
-  const handleDeleteResult = async (resultId: string, subjectId?: string) => {
-    setResults(prev => prev.filter(r => r.id !== resultId));
+  const handleDeleteResult = async (resultId: string, subjectId?: string, studentName?: string) => {
+    setResults(prev =>
+      prev.filter(
+        r => r.id !== resultId && !(studentName && r.studentName.toLowerCase().trim() === studentName.toLowerCase().trim() && r.subjectId === subjectId)
+      )
+    );
     try {
-      await deleteExamResult(resultId, subjectId || subject?.id);
+      await deleteExamResult(resultId, subjectId || subject?.id, studentName);
     } catch (err) {
       console.warn('Supabase delete result fallback to local state:', err);
     }
@@ -728,7 +744,24 @@ export default function Home() {
 
     // 3. Validasi Anti Re-Login (Cegah Siswa Mengerjakan Ulang Tanpa Izin Pengawas)
     const normalizedName = studentName.toLowerCase().trim();
-    const alreadySubmittedInState = results.find(
+
+    // Selalu sinkronkan riwayat ujian siswa dari database cloud
+    let currentResults = results;
+    try {
+      const cloudResults = await fetchExamResults(matchedSub.id);
+      if (cloudResults && cloudResults.length > 0) {
+        currentResults = cloudResults;
+        setResults(prev => {
+          const cloudIds = new Set(cloudResults.map(r => r.id));
+          const others = prev.filter(r => r.subjectId !== matchedSub.id && !cloudIds.has(r.id));
+          return [...cloudResults, ...others];
+        });
+      }
+    } catch (err) {
+      console.warn('Gagal sinkronisasi anti-relogin dari database:', err);
+    }
+
+    const alreadySubmittedInState = currentResults.find(
       r => r.subjectId === matchedSub.id && r.studentName.toLowerCase().trim() === normalizedName
     );
 
@@ -748,8 +781,8 @@ export default function Home() {
     if (previousSubmission) {
       setLoginError(
         language === 'id'
-          ? `AKSES DITOLAK (ANTI-RELOGIN): Siswa "${studentName}" sudah pernah menyelesaikan dan mengumpulkan ujian "${matchedSub.title}" pada ${previousSubmission.submittedAt} (Skor: ${previousSubmission.score}%). Anda tidak diperbolehkan mengerjakan ulang kecuali lembar ujian Anda di-reset oleh Guru Pengawas.`
-          : `ACCESS DENIED: Student "${studentName}" has already completed and submitted "${matchedSub.title}" on ${previousSubmission.submittedAt}. Retakes are not allowed unless reset by your proctor.`
+          ? `AKSES DITOLAK (ANTI-RELOGIN): Siswa "${studentName}" sudah pernah menyelesaikan dan mengumpulkan ujian "${matchedSub.title}" pada ${previousSubmission.submittedAt || 'sesi sebelumnya'} (Skor: ${previousSubmission.score}%). Anda tidak diperbolehkan mengerjakan ulang kecuali lembar ujian Anda di-reset oleh Guru Pengawas.`
+          : `ACCESS DENIED: Student "${studentName}" has already completed and submitted "${matchedSub.title}" on ${previousSubmission.submittedAt || 'previous session'}. Retakes are not allowed unless reset by your proctor.`
       );
       return;
     }

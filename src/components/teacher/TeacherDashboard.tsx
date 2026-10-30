@@ -6,7 +6,7 @@ import { NavItem } from '../layout/Sidebar';
 import { useLanguage } from '@/context/LanguageContext';
 import { StudentManagement } from './StudentManagement';
 import { evaluateFullExam, calculateSingleQuestionScore } from '@/lib/scoringEngine';
-import { sendProctorCommand, subscribeToLiveSessions } from '@/lib/liveMonitoringService';
+import { sendProctorCommand, subscribeToLiveSessions, removeStudentSession } from '@/lib/liveMonitoringService';
 import {
   TrendingUp,
   Award,
@@ -58,7 +58,8 @@ import {
   Lock,
   Unlock,
   RefreshCw,
-  CheckSquare
+  CheckSquare,
+  Info
 } from 'lucide-react';
 
 interface TeacherDashboardProps {
@@ -78,7 +79,7 @@ interface TeacherDashboardProps {
   onUpdateQuestion?: (updatedQuestion: Question) => void;
   onDeleteQuestion: (questionId: string) => void;
   onUpdateResult?: (updatedResult: ExamResult) => void;
-  onDeleteResult?: (resultId: string, subjectId?: string) => void;
+  onDeleteResult?: (resultId: string, subjectId?: string, studentName?: string) => void;
   onAddStudent?: (s: Student) => void;
   onUpdateStudent?: (s: Student) => void;
   onDeleteStudent?: (studentId: string) => void;
@@ -128,6 +129,76 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   const [manualEssayScores, setManualEssayScores] = useState<Record<string, number>>({});
   const [essaySavedNotice, setEssaySavedNotice] = useState(false);
   const [essayMaxNotice, setEssayMaxNotice] = useState<string | null>(null);
+  const [dossierSuccessToast, setDossierSuccessToast] = useState<string | null>(null);
+
+  // ==========================================
+  // CUSTOM THEMED MODAL DIALOG STATE (ANTI-SLOP BROWSER POPUPS)
+  // ==========================================
+  interface CustomDialogConfig {
+    isOpen: boolean;
+    type: 'confirm' | 'alert';
+    variant?: 'danger' | 'warning' | 'info';
+    title: string;
+    message: string;
+    confirmLabel?: string;
+    cancelLabel?: string;
+    onConfirm: () => void;
+    onCancel?: () => void;
+  }
+
+  const [customDialog, setCustomDialog] = useState<CustomDialogConfig>({
+    isOpen: false,
+    type: 'alert',
+    title: '',
+    message: '',
+    onConfirm: () => {}
+  });
+
+  const showThemedConfirm = (options: {
+    title: string;
+    message: string;
+    variant?: 'danger' | 'warning' | 'info';
+    confirmLabel?: string;
+    cancelLabel?: string;
+    onConfirm: () => void;
+    onCancel?: () => void;
+  }) => {
+    setCustomDialog({
+      isOpen: true,
+      type: 'confirm',
+      variant: options.variant || 'danger',
+      title: options.title,
+      message: options.message,
+      confirmLabel: options.confirmLabel || 'Ya, Lanjutkan',
+      cancelLabel: options.cancelLabel || 'Batal',
+      onConfirm: () => {
+        setCustomDialog(prev => ({ ...prev, isOpen: false }));
+        options.onConfirm();
+      },
+      onCancel: () => {
+        setCustomDialog(prev => ({ ...prev, isOpen: false }));
+        if (options.onCancel) options.onCancel();
+      }
+    });
+  };
+
+  const showThemedAlert = (
+    title: string,
+    message: string,
+    variant: 'warning' | 'info' | 'danger' = 'warning'
+  ) => {
+    setCustomDialog({
+      isOpen: true,
+      type: 'alert',
+      variant,
+      title,
+      message,
+      confirmLabel: 'Mengerti',
+      onConfirm: () => {
+        setCustomDialog(prev => ({ ...prev, isOpen: false }));
+      }
+    });
+  };
 
   // DOSSIER COMPUTATIONS
   const dossierSubject = useMemo(() => {
@@ -591,7 +662,11 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
       s => s.id !== scheduleToEdit.id && s.token.trim().toUpperCase() === cleanToken && s.isActive
     );
     if (isTokenTaken) {
-      alert(`Token "${cleanToken}" sudah digunakan oleh jadwal ujian lain yang sedang aktif! Silakan ganti atau acak token lain agar tidak tabrakan.`);
+      showThemedAlert(
+        'Token Sudah Digunakan',
+        `Token "${cleanToken}" sudah digunakan oleh jadwal ujian lain yang sedang aktif! Silakan ganti atau acak token lain agar tidak tabrakan.`,
+        'warning'
+      );
       return;
     }
 
@@ -624,7 +699,11 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
       s => s.token.trim().toUpperCase() === cleanToken && s.isActive
     );
     if (isTokenTaken) {
-      alert(`Token "${cleanToken}" sudah digunakan oleh jadwal ujian lain yang sedang aktif! Silakan klik tombol 🎲 Acak untuk menghasilkan token unik.`);
+      showThemedAlert(
+        'Token Sudah Digunakan',
+        `Token "${cleanToken}" sudah digunakan oleh jadwal ujian lain yang sedang aktif! Silakan klik tombol 🎲 Acak untuk menghasilkan token unik.`,
+        'warning'
+      );
       return;
     }
 
@@ -3075,36 +3154,44 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                                 {/* TOMBOL SIMPAN PAKSA (FORCE FINISH) */}
                                 <button
                                   onClick={() => {
-                                    if (confirm(`Apakah Anda yakin ingin menyelesaikan paksa ujian siswa "${s.studentName}"? Jawaban yang tersimpan saat ini akan langsung direkam sebagai nilai akhir siswa.`)) {
-                                      sendProctorCommand({
-                                        action: 'FORCE_FINISH',
-                                        studentName: s.studentName,
-                                        subjectId: s.subjectId
-                                      });
+                                    showThemedConfirm({
+                                      title: 'Selesaikan Paksa Ujian Siswa',
+                                      message: `Apakah Anda yakin ingin menyelesaikan paksa ujian siswa "${s.studentName}"? Jawaban yang tersimpan saat ini akan langsung direkam sebagai nilai akhir siswa.`,
+                                      variant: 'danger',
+                                      confirmLabel: 'Ya, Selesaikan Paksa',
+                                      cancelLabel: 'Batal',
+                                      onConfirm: () => {
+                                        sendProctorCommand({
+                                          action: 'FORCE_FINISH',
+                                          studentName: s.studentName,
+                                          subjectId: s.subjectId
+                                        });
 
-                                      // Buat hasil evaluasi dan simpan ke database
-                                      const matchedSub = (allSubjects || []).find(sub => sub.id === s.subjectId) || subject;
-                                      const evalRes = evaluateFullExam(questions, s.answers || [], matchedSub.scoringRules);
-                                      const forcedResult: ExamResult = {
-                                        id: `res-${Date.now()}`,
-                                        subjectId: s.subjectId,
-                                        subjectTitle: matchedSub.title,
-                                        studentId: s.studentId,
-                                        studentName: s.studentName,
-                                        className: s.className,
-                                        score: evalRes.finalScore,
-                                        totalEarned: evalRes.totalEarned,
-                                        totalMax: evalRes.totalMax,
-                                        answers: s.answers || [],
-                                        submittedAt: new Date().toLocaleString('id-ID'),
-                                        violationCount: s.violationCount,
-                                        details: evalRes.details
-                                      };
-                                      if (onUpdateResult) {
-                                        onUpdateResult(forcedResult);
+                                        // Buat hasil evaluasi dan simpan ke database
+                                        const matchedSub = (allSubjects || []).find(sub => sub.id === s.subjectId) || subject;
+                                        const evalRes = evaluateFullExam(questions, s.answers || [], matchedSub.scoringRules);
+                                        const forcedResult: ExamResult = {
+                                          id: `res-${Date.now()}`,
+                                          subjectId: s.subjectId,
+                                          subjectTitle: matchedSub.title,
+                                          studentId: s.studentId,
+                                          studentName: s.studentName,
+                                          className: s.className,
+                                          score: evalRes.finalScore,
+                                          totalEarned: evalRes.totalEarned,
+                                          totalMax: evalRes.totalMax,
+                                          answers: s.answers || [],
+                                          submittedAt: new Date().toLocaleString('id-ID'),
+                                          violationCount: s.violationCount,
+                                          details: evalRes.details
+                                        };
+                                        if (onUpdateResult) {
+                                          onUpdateResult(forcedResult);
+                                        }
+                                        removeStudentSession(s.studentName, s.subjectId);
+                                        setMonitoringActionToast(`Ujian siswa ${s.studentName} telah diselesaikan paksa dan nilainya tersimpan.`);
                                       }
-                                      setMonitoringActionToast(`Ujian siswa ${s.studentName} telah diselesaikan paksa dan nilainya tersimpan.`);
-                                    }
+                                    });
                                   }}
                                   className="p-2 rounded-xl bg-rose-50 dark:bg-rose-950/50 hover:bg-rose-600 hover:text-white text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-900 transition cursor-pointer flex items-center gap-1 text-xs font-bold"
                                   title="Simpan Paksa & Hentikan Ujian Siswa"
@@ -3116,14 +3203,22 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                                 {/* TOMBOL RESET SESI */}
                                 <button
                                   onClick={() => {
-                                    if (confirm(`Apakah Anda yakin ingin mereset sesi ujian siswa "${s.studentName}"? Siswa akan dikeluarkan dari ujian agar dapat mengulang dari awal.`)) {
-                                      sendProctorCommand({
-                                        action: 'RESET_EXAM',
-                                        studentName: s.studentName,
-                                        subjectId: s.subjectId
-                                      });
-                                      setMonitoringActionToast(`Sesi ujian siswa ${s.studentName} berhasil dibersihkan.`);
-                                    }
+                                    showThemedConfirm({
+                                      title: 'Reset Sesi Ujian Siswa',
+                                      message: `Apakah Anda yakin ingin mereset sesi ujian siswa "${s.studentName}"? Siswa akan dikeluarkan dari ujian agar dapat mengulang dari awal.`,
+                                      variant: 'warning',
+                                      confirmLabel: 'Ya, Reset Sesi',
+                                      cancelLabel: 'Batal',
+                                      onConfirm: () => {
+                                        sendProctorCommand({
+                                          action: 'RESET_EXAM',
+                                          studentName: s.studentName,
+                                          subjectId: s.subjectId
+                                        });
+                                        removeStudentSession(s.studentName, s.subjectId);
+                                        setMonitoringActionToast(`Sesi ujian siswa ${s.studentName} berhasil dibersihkan.`);
+                                      }
+                                    });
                                   }}
                                   className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-500 hover:text-slate-900 dark:hover:text-slate-100 transition cursor-pointer"
                                   title="Reset Sesi (Izinkan Masuk Ulang)"
@@ -3889,6 +3984,14 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
       {/* ============================================================== */}
       {selectedResult && (
         <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
+          {/* FLOATING SUCCESS TOAST KOREKSI NILAI URAIAN */}
+          {dossierSuccessToast && (
+            <div className="fixed top-6 left-1/2 -translate-x-1/2 z-[60] px-5 py-3 rounded-2xl bg-emerald-600 text-white font-extrabold text-xs shadow-2xl flex items-center gap-2.5 animate-in slide-in-from-top-4 border border-emerald-400/30">
+              <CheckCircle2 className="w-5 h-5 text-white flex-shrink-0" />
+              <span>{dossierSuccessToast}</span>
+            </div>
+          )}
+
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-3xl w-full max-h-[90vh] overflow-y-auto p-5 sm:p-7 space-y-5 shadow-2xl animate-in zoom-in-95">
             {/* DOSSIER HEADER */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-800 pb-4">
@@ -4187,23 +4290,48 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                         onUpdateResult(updated);
                       }
                       setEssaySavedNotice(true);
-                      setTimeout(() => setEssaySavedNotice(false), 3500);
+                      setDossierSuccessToast(`Nilai uraian siswa "${selectedResult.studentName}" berhasil disimpan! Skor akhir baru: ${liveDossierEval.finalScore}%`);
+                      setTimeout(() => {
+                        setEssaySavedNotice(false);
+                        setDossierSuccessToast(null);
+                      }, 3500);
                     }}
-                    className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-md shadow-emerald-600/20 transition cursor-pointer"
+                    className={`flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-white text-xs font-bold shadow-md transition cursor-pointer ${
+                      essaySavedNotice
+                        ? 'bg-emerald-700 shadow-emerald-700/30'
+                        : 'bg-emerald-600 hover:bg-emerald-500 shadow-emerald-600/20'
+                    }`}
                   >
-                    <Save className="w-4 h-4" />
-                    <span>Simpan Nilai Uraian</span>
+                    {essaySavedNotice ? (
+                      <>
+                        <Check className="w-4 h-4 text-white" />
+                        <span>Nilai Tersimpan!</span>
+                      </>
+                    ) : (
+                      <>
+                        <Save className="w-4 h-4" />
+                        <span>Simpan Nilai Uraian</span>
+                      </>
+                    )}
                   </button>
 
                   <button
                     onClick={() => {
                       if (!selectedResult) return;
-                      if (confirm(`Apakah Anda yakin ingin mereset ujian siswa "${selectedResult.studentName}"? Seluruh lembar jawaban dan nilai akan dihapus, sehingga siswa dapat login dan mengerjakan ulang ujian ini.`)) {
-                        if (onDeleteResult) {
-                          onDeleteResult(selectedResult.id, selectedResult.subjectId);
+                      showThemedConfirm({
+                        title: 'Reset Lembar Ujian Siswa',
+                        message: `Apakah Anda yakin ingin mereset ujian siswa "${selectedResult.studentName}"? Seluruh lembar jawaban dan nilai akan dihapus, sehingga siswa dapat login dan mengerjakan ulang ujian ini.`,
+                        variant: 'danger',
+                        confirmLabel: 'Ya, Reset & Izinkan Ujian Ulang',
+                        cancelLabel: 'Batal',
+                        onConfirm: () => {
+                          if (onDeleteResult) {
+                            onDeleteResult(selectedResult.id, selectedResult.subjectId, selectedResult.studentName);
+                          }
+                          removeStudentSession(selectedResult.studentName, selectedResult.subjectId);
+                          setSelectedResult(null);
                         }
-                        setSelectedResult(null);
-                      }
+                      });
                     }}
                     className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-600 hover:text-white text-rose-600 dark:text-rose-400 text-xs font-bold border border-rose-200 dark:border-rose-900 transition cursor-pointer"
                     title="Hapus nilai agar siswa dapat ujian kembali"
@@ -4811,6 +4939,75 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                 className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-semibold text-xs transition cursor-pointer"
               >
                 Ya, Hapus Jadwal
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================== */}
+      {/* 12. MODAL DIALOG KONFIRMASI / ALERT TEMA APLIKASI (ANTI-SLOP)  */}
+      {/* ============================================================== */}
+      {customDialog.isOpen && (
+        <div className="fixed inset-0 z-[120] bg-black/70 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl animate-in zoom-in-95">
+            <div className="flex items-center gap-3">
+              <div
+                className={`w-11 h-11 rounded-2xl flex items-center justify-center flex-shrink-0 ${
+                  customDialog.variant === 'danger'
+                    ? 'bg-rose-100 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400'
+                    : customDialog.variant === 'warning'
+                    ? 'bg-amber-100 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400'
+                    : 'bg-violet-100 dark:bg-violet-950/60 text-violet-600 dark:text-violet-400'
+                }`}
+              >
+                {customDialog.variant === 'danger' ? (
+                  <AlertTriangle className="w-5 h-5" />
+                ) : customDialog.variant === 'warning' ? (
+                  <AlertTriangle className="w-5 h-5" />
+                ) : (
+                  <Info className="w-5 h-5" />
+                )}
+              </div>
+              <div className="flex-1">
+                <h3 className="font-extrabold text-slate-900 dark:text-white text-base">
+                  {customDialog.title}
+                </h3>
+                <p className="text-[11px] text-slate-400">
+                  {customDialog.type === 'confirm' ? 'Pemberitahuan Konfirmasi Pengawas' : 'Pemberitahuan Sistem CBT'}
+                </p>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+              {customDialog.message}
+            </p>
+
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
+              {customDialog.type === 'confirm' && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (customDialog.onCancel) customDialog.onCancel();
+                    setCustomDialog(prev => ({ ...prev, isOpen: false }));
+                  }}
+                  className="px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs transition cursor-pointer"
+                >
+                  {customDialog.cancelLabel || 'Batal'}
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={customDialog.onConfirm}
+                className={`px-4 py-2.5 rounded-xl text-white font-bold text-xs transition cursor-pointer shadow-md ${
+                  customDialog.variant === 'danger'
+                    ? 'bg-rose-600 hover:bg-rose-500 shadow-rose-600/20'
+                    : customDialog.variant === 'warning'
+                    ? 'bg-amber-600 hover:bg-amber-500 shadow-amber-600/20'
+                    : 'bg-violet-600 hover:bg-violet-500 shadow-violet-600/20'
+                }`}
+              >
+                {customDialog.confirmLabel || (customDialog.type === 'confirm' ? 'Ya, Lanjutkan' : 'Mengerti')}
               </button>
             </div>
           </div>

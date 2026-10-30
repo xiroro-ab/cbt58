@@ -234,9 +234,23 @@ export async function removeQuestion(qId: string, subjectId?: string): Promise<b
 }
 
 /**
- * Menyimpan hasil ujian siswa ke Supabase
+ * Menyimpan hasil ujian siswa ke Supabase dan localStorage
  */
 export async function saveExamResult(result: ExamResult): Promise<boolean> {
+  if (typeof window !== 'undefined' && result.subjectId) {
+    try {
+      const stored = localStorage.getItem(`cbt_results_${result.subjectId}`);
+      const list: ExamResult[] = stored ? JSON.parse(stored) : [];
+      const updated = [
+        result,
+        ...list.filter(
+          r => !(r.id === result.id || (r.studentName.toLowerCase().trim() === result.studentName.toLowerCase().trim() && r.subjectId === result.subjectId))
+        )
+      ];
+      localStorage.setItem(`cbt_results_${result.subjectId}`, JSON.stringify(updated));
+    } catch {}
+  }
+
   try {
     const { error } = await supabase.from('exam_results').insert({
       subject_id: result.subjectId,
@@ -261,58 +275,101 @@ export async function saveExamResult(result: ExamResult): Promise<boolean> {
 }
 
 /**
- * Memperbarui nilai dan koreksi uraian hasil ujian siswa di Supabase & localStorage
+ * Menyimpan hasil baru jika belum ada, atau mengupdate jika sudah ada di database
  */
-export async function updateExamResult(result: ExamResult): Promise<boolean> {
+export async function saveOrUpdateExamResult(result: ExamResult): Promise<boolean> {
+  // Simpan ke localStorage terlebih dahulu sebagai fail-safe instan
   if (typeof window !== 'undefined' && result.subjectId) {
     try {
       const stored = localStorage.getItem(`cbt_results_${result.subjectId}`);
-      if (stored) {
-        const list: ExamResult[] = JSON.parse(stored);
-        const updated = list.map(r => r.id === result.id ? result : r);
-        localStorage.setItem(`cbt_results_${result.subjectId}`, JSON.stringify(updated));
-      }
+      const list: ExamResult[] = stored ? JSON.parse(stored) : [];
+      const updated = [
+        result,
+        ...list.filter(
+          r => !(r.id === result.id || (r.studentName.toLowerCase().trim() === result.studentName.toLowerCase().trim() && r.subjectId === result.subjectId))
+        )
+      ];
+      localStorage.setItem(`cbt_results_${result.subjectId}`, JSON.stringify(updated));
     } catch {}
   }
 
   try {
-    const { error } = await supabase.from('exam_results').update({
-      score: result.score,
-      total_earned: result.totalEarned,
-      total_max: result.totalMax,
-      answers: result.answers
-    }).eq('id', result.id);
-
-    if (error) {
-      console.warn('Gagal update hasil ujian di Supabase:', error.message);
-      return false;
+    let existingId: string | null = null;
+    if (!result.id.startsWith('res-')) {
+      const { data: byId } = await supabase.from('exam_results').select('id').eq('id', result.id).limit(1);
+      if (byId && byId.length > 0) existingId = byId[0].id;
     }
-    return true;
+
+    if (!existingId) {
+      const { data: byName } = await supabase
+        .from('exam_results')
+        .select('id')
+        .eq('subject_id', result.subjectId)
+        .eq('student_name', result.studentName)
+        .limit(1);
+      if (byName && byName.length > 0) existingId = byName[0].id;
+    }
+
+    if (existingId) {
+      const { error } = await supabase.from('exam_results').update({
+        score: result.score,
+        total_earned: result.totalEarned,
+        total_max: result.totalMax,
+        answers: result.answers,
+        violation_count: result.violationCount
+      }).eq('id', existingId);
+      return !error;
+    } else {
+      const { error } = await supabase.from('exam_results').insert({
+        subject_id: result.subjectId,
+        student_name: result.studentName,
+        class_name: result.className,
+        score: result.score,
+        total_earned: result.totalEarned,
+        total_max: result.totalMax,
+        answers: result.answers,
+        violation_count: result.violationCount
+      });
+      return !error;
+    }
   } catch (err) {
-    console.error('Exception updateExamResult:', err);
+    console.error('Exception saveOrUpdateExamResult:', err);
     return false;
   }
 }
 
 /**
+ * Memperbarui nilai dan koreksi uraian hasil ujian siswa di Supabase & localStorage
+ */
+export async function updateExamResult(result: ExamResult): Promise<boolean> {
+  return saveOrUpdateExamResult(result);
+}
+
+/**
  * Menghapus/mereset hasil ujian siswa agar siswa dapat login dan mengerjakan ulang
  */
-export async function deleteExamResult(resultId: string, subjectId?: string): Promise<boolean> {
+export async function deleteExamResult(resultId: string, subjectId?: string, studentName?: string): Promise<boolean> {
   if (typeof window !== 'undefined' && subjectId) {
     try {
       const stored = localStorage.getItem(`cbt_results_${subjectId}`);
       if (stored) {
         const list: ExamResult[] = JSON.parse(stored);
-        localStorage.setItem(`cbt_results_${subjectId}`, JSON.stringify(list.filter(r => r.id !== resultId)));
+        localStorage.setItem(
+          `cbt_results_${subjectId}`,
+          JSON.stringify(
+            list.filter(r => r.id !== resultId && !(studentName && r.studentName.toLowerCase().trim() === studentName.toLowerCase().trim()))
+          )
+        );
       }
     } catch {}
   }
 
   try {
-    const { error } = await supabase.from('exam_results').delete().eq('id', resultId);
-    if (error) {
-      console.warn('Gagal delete exam result di Supabase:', error.message);
-      return false;
+    let { error } = await supabase.from('exam_results').delete().eq('id', resultId);
+    if ((error || resultId.startsWith('res-')) && subjectId && studentName) {
+      await supabase.from('exam_results').delete()
+        .eq('subject_id', subjectId)
+        .eq('student_name', studentName);
     }
     return true;
   } catch (err) {

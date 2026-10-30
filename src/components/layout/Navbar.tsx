@@ -31,6 +31,7 @@ interface NavbarProps {
   notifications: ExamNotification[];
   messages: ExamMessage[];
   onMarkAllNotificationsRead: () => void;
+  onMarkNotificationRead?: (notifId: string) => void;
   onDeleteNotification: (notifId: string) => void;
   onClearAllNotifications: () => void;
   onResolveMessage: (msgId: string) => void;
@@ -45,6 +46,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   notifications,
   messages,
   onMarkAllNotificationsRead,
+  onMarkNotificationRead,
   onDeleteNotification,
   onClearAllNotifications,
   onResolveMessage,
@@ -440,10 +442,15 @@ export const Navbar: React.FC<NavbarProps> = ({
                   filteredNotifications.map(n => (
                     <div
                       key={n.id}
-                      className={`p-3.5 rounded-2xl border transition space-y-1 ${
+                      onClick={() => {
+                        if (!n.isRead && onMarkNotificationRead) {
+                          onMarkNotificationRead(n.id);
+                        }
+                      }}
+                      className={`p-3.5 rounded-2xl border transition space-y-1 cursor-pointer ${
                         n.isRead
                           ? 'bg-slate-50/60 dark:bg-slate-800/40 border-slate-100 dark:border-slate-800/60 text-slate-500'
-                          : 'bg-violet-50/50 dark:bg-violet-950/20 border-violet-200 dark:border-violet-900/40 shadow-xs'
+                          : 'bg-violet-50/50 dark:bg-violet-950/20 border-violet-200 dark:border-violet-900/40 shadow-xs hover:border-violet-400'
                       }`}
                     >
                       <div className="flex items-center justify-between font-bold text-slate-900 dark:text-white">
@@ -453,12 +460,18 @@ export const Navbar: React.FC<NavbarProps> = ({
                           {n.type === 'autolock' && <AlertTriangle className="w-3.5 h-3.5 text-rose-600" />}
                           {n.type === 'system' && <Clock className="w-3.5 h-3.5 text-violet-500" />}
                           <span>{n.title}</span>
+                          {!n.isRead && (
+                            <span className="w-1.5 h-1.5 rounded-full bg-violet-600 inline-block"></span>
+                          )}
                         </span>
 
                         <div className="flex items-center gap-1.5">
                           <span className="text-[10px] text-slate-400 font-normal">{n.createdAt}</span>
                           <button
-                            onClick={() => onDeleteNotification(n.id)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onDeleteNotification(n.id);
+                            }}
                             className="p-1 rounded text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition"
                             title="Hapus notifikasi ini dari layar & database"
                           >

@@ -22,6 +22,7 @@ import {
   fetchNotifications,
   fetchMessages,
   markAllNotificationsAsRead,
+  markNotificationAsRead,
   updateMessageStatus,
   insertMessage,
   subscribeToNotifications,
@@ -77,14 +78,21 @@ export default function Home() {
   const [loginError, setLoginError] = useState('');
   const [isLoading, setIsLoading] = useState(true);
 
-  // Live Notifications State (Lonceng 🔔)
-  const [notifications, setNotifications] = useState<ExamNotification[]>([
+  // Storage Keys untuk persistensi status dibaca/dihapus di browser
+  const NOTIF_STORAGE_KEY = 'cbt_notif_read_ids';
+  const NOTIF_ALL_READ_KEY = 'cbt_notif_all_read';
+  const NOTIF_DELETED_KEY = 'cbt_notif_deleted_ids';
+  const MSG_RESOLVED_KEY = 'cbt_msg_resolved_ids';
+  const MSG_DELETED_KEY = 'cbt_msg_deleted_ids';
+
+  // Seed data default yang sudah aman (default dibaca agar tidak ada badge palsu saat refresh)
+  const initialSeedNotifications: ExamNotification[] = [
     {
       id: 'notif-seed-1',
       type: 'submission',
       title: 'Ujian IPA Selesai',
       message: 'Siswa AISYAH (Kelas VII.1) telah menyelesaikan ujian dengan skor 87%.',
-      isRead: false,
+      isRead: true,
       createdAt: 'Baru saja'
     },
     {
@@ -95,10 +103,9 @@ export default function Home() {
       isRead: true,
       createdAt: '08:00'
     }
-  ]);
+  ];
 
-  // Live Messages State (Amplop ✉️ - Opsi A: Kendala Siswa & Broadcast Pengawas)
-  const [messages, setMessages] = useState<ExamMessage[]>([
+  const initialSeedMessages: ExamMessage[] = [
     {
       id: 'msg-seed-1',
       senderName: 'AISYAH',
@@ -108,10 +115,16 @@ export default function Home() {
       questionNumber: 4,
       title: 'Kendala Gambar Soal',
       body: 'Pak/Bu Pengawas, gambar diagram sel pada soal no. 4 tidak muncul di layar saya.',
-      status: 'pending',
+      status: 'resolved',
       createdAt: '08:15'
     }
-  ]);
+  ];
+
+  // Live Notifications State (Lonceng 🔔)
+  const [notifications, setNotifications] = useState<ExamNotification[]>(initialSeedNotifications);
+
+  // Live Messages State (Amplop ✉️ - Opsi A: Kendala Siswa & Broadcast Pengawas)
+  const [messages, setMessages] = useState<ExamMessage[]>(initialSeedMessages);
 
   // Unique class list from students & subject
   const availableClasses = useMemo(() => {
@@ -140,7 +153,7 @@ export default function Home() {
     );
   }, [classStudents, students, studentName]);
 
-  // 1. Load data awal dari Supabase
+  // 1. Load data awal dari Supabase & sinkronkan dengan cache lokal
   useEffect(() => {
     async function loadData() {
       setIsLoading(true);
@@ -165,17 +178,46 @@ export default function Home() {
           setStudents(stdList);
         }
 
-        // Ambil notifikasi dari Supabase
-        const notifList = await fetchNotifications(sub.id);
-        if (notifList && notifList.length > 0) {
-          setNotifications(notifList);
+        // Baca cache localStorage
+        let readNotifIds: string[] = [];
+        let allNotifsRead = false;
+        let deletedNotifIds: string[] = [];
+        let resolvedMsgIds: string[] = [];
+        let deletedMsgIds: string[] = [];
+
+        if (typeof window !== 'undefined') {
+          try {
+            readNotifIds = JSON.parse(localStorage.getItem(NOTIF_STORAGE_KEY) || '[]');
+            allNotifsRead = localStorage.getItem(NOTIF_ALL_READ_KEY) === 'true';
+            deletedNotifIds = JSON.parse(localStorage.getItem(NOTIF_DELETED_KEY) || '[]');
+            resolvedMsgIds = JSON.parse(localStorage.getItem(MSG_RESOLVED_KEY) || '[]');
+            deletedMsgIds = JSON.parse(localStorage.getItem(MSG_DELETED_KEY) || '[]');
+          } catch (e) {
+            console.warn('Gagal membaca cache notifikasi:', e);
+          }
         }
 
-        // Ambil pesan kendala dari Supabase
+        // Ambil notifikasi dari Supabase & filter dengan status localStorage
+        const notifList = await fetchNotifications(sub.id);
+        const sourceNotifs = notifList && notifList.length > 0 ? notifList : initialSeedNotifications;
+        const filteredNotifs = sourceNotifs
+          .filter(n => !deletedNotifIds.includes(n.id))
+          .map(n => ({
+            ...n,
+            isRead: n.isRead || allNotifsRead || readNotifIds.includes(n.id)
+          }));
+        setNotifications(filteredNotifs);
+
+        // Ambil pesan kendala dari Supabase & filter dengan status localStorage
         const msgList = await fetchMessages(sub.id);
-        if (msgList && msgList.length > 0) {
-          setMessages(msgList);
-        }
+        const sourceMsgs = msgList && msgList.length > 0 ? msgList : initialSeedMessages;
+        const filteredMsgs = sourceMsgs
+          .filter(m => !deletedMsgIds.includes(m.id))
+          .map(m => ({
+            ...m,
+            status: (resolvedMsgIds.includes(m.id) ? 'resolved' : m.status) as 'pending' | 'resolved' | 'acknowledged'
+          }));
+        setMessages(filteredMsgs);
       } catch (err) {
         console.error('Failed to load initial data:', err);
       } finally {
@@ -346,9 +388,20 @@ export default function Home() {
     setIsCertificatesModalOpen(true);
   };
 
-  // Handlers Notifikasi & Pesan (Opsi A)
+  // Handlers Notifikasi & Pesan (Opsi A) dengan Sinkronisasi Ganda (Supabase + LocalStorage)
   const handleMarkAllNotificationsRead = async () => {
     setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem(NOTIF_ALL_READ_KEY, 'true');
+        const readNotifIds = JSON.parse(localStorage.getItem(NOTIF_STORAGE_KEY) || '[]');
+        const currentIds = notifications.map(n => n.id);
+        const merged = Array.from(new Set([...readNotifIds, ...currentIds]));
+        localStorage.setItem(NOTIF_STORAGE_KEY, JSON.stringify(merged));
+      } catch (e) {
+        console.warn('Storage sync error:', e);
+      }
+    }
     try {
       await markAllNotificationsAsRead(subject.id);
     } catch (err) {
@@ -356,10 +409,43 @@ export default function Home() {
     }
   };
 
+  const handleMarkSingleNotificationRead = async (notifId: string) => {
+    setNotifications(prev =>
+      prev.map(n => (n.id === notifId ? { ...n, isRead: true } : n))
+    );
+    if (typeof window !== 'undefined') {
+      try {
+        const readNotifIds = JSON.parse(localStorage.getItem(NOTIF_STORAGE_KEY) || '[]');
+        if (!readNotifIds.includes(notifId)) {
+          readNotifIds.push(notifId);
+          localStorage.setItem(NOTIF_STORAGE_KEY, JSON.stringify(readNotifIds));
+        }
+      } catch (e) {
+        console.warn('Storage sync error:', e);
+      }
+    }
+    try {
+      await markNotificationAsRead(notifId);
+    } catch (err) {
+      console.warn('Gagal markNotificationAsRead di Supabase:', err);
+    }
+  };
+
   const handleResolveMessage = async (msgId: string) => {
     setMessages(prev =>
       prev.map(m => (m.id === msgId ? { ...m, status: 'resolved' } : m))
     );
+    if (typeof window !== 'undefined') {
+      try {
+        const resolvedMsgIds = JSON.parse(localStorage.getItem(MSG_RESOLVED_KEY) || '[]');
+        if (!resolvedMsgIds.includes(msgId)) {
+          resolvedMsgIds.push(msgId);
+          localStorage.setItem(MSG_RESOLVED_KEY, JSON.stringify(resolvedMsgIds));
+        }
+      } catch (e) {
+        console.warn('Storage sync error:', e);
+      }
+    }
     try {
       await updateMessageStatus(msgId, 'resolved');
     } catch (err) {
@@ -389,6 +475,17 @@ export default function Home() {
 
   const handleDeleteNotification = async (notifId: string) => {
     setNotifications(prev => prev.filter(n => n.id !== notifId));
+    if (typeof window !== 'undefined') {
+      try {
+        const deletedNotifIds = JSON.parse(localStorage.getItem(NOTIF_DELETED_KEY) || '[]');
+        if (!deletedNotifIds.includes(notifId)) {
+          deletedNotifIds.push(notifId);
+          localStorage.setItem(NOTIF_DELETED_KEY, JSON.stringify(deletedNotifIds));
+        }
+      } catch (e) {
+        console.warn('Storage sync error:', e);
+      }
+    }
     try {
       await deleteNotificationFromSupabase(notifId);
     } catch (err) {
@@ -397,7 +494,18 @@ export default function Home() {
   };
 
   const handleClearAllNotifications = async () => {
+    const allIds = notifications.map(n => n.id);
     setNotifications([]);
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem(NOTIF_ALL_READ_KEY, 'true');
+        const deletedNotifIds = JSON.parse(localStorage.getItem(NOTIF_DELETED_KEY) || '[]');
+        const merged = Array.from(new Set([...deletedNotifIds, ...allIds]));
+        localStorage.setItem(NOTIF_DELETED_KEY, JSON.stringify(merged));
+      } catch (e) {
+        console.warn('Storage sync error:', e);
+      }
+    }
     try {
       await clearAllNotificationsFromSupabase(subject.id);
     } catch (err) {
@@ -407,6 +515,17 @@ export default function Home() {
 
   const handleDeleteMessage = async (msgId: string) => {
     setMessages(prev => prev.filter(m => m.id !== msgId));
+    if (typeof window !== 'undefined') {
+      try {
+        const deletedMsgIds = JSON.parse(localStorage.getItem(MSG_DELETED_KEY) || '[]');
+        if (!deletedMsgIds.includes(msgId)) {
+          deletedMsgIds.push(msgId);
+          localStorage.setItem(MSG_DELETED_KEY, JSON.stringify(deletedMsgIds));
+        }
+      } catch (e) {
+        console.warn('Storage sync error:', e);
+      }
+    }
     try {
       await deleteMessageFromSupabase(msgId);
     } catch (err) {
@@ -415,7 +534,17 @@ export default function Home() {
   };
 
   const handleClearAllMessages = async () => {
+    const allIds = messages.map(m => m.id);
     setMessages([]);
+    if (typeof window !== 'undefined') {
+      try {
+        const deletedMsgIds = JSON.parse(localStorage.getItem(MSG_DELETED_KEY) || '[]');
+        const merged = Array.from(new Set([...deletedMsgIds, ...allIds]));
+        localStorage.setItem(MSG_DELETED_KEY, JSON.stringify(merged));
+      } catch (e) {
+        console.warn('Storage sync error:', e);
+      }
+    }
     try {
       await clearAllMessagesFromSupabase(subject.id);
     } catch (err) {
@@ -629,6 +758,7 @@ export default function Home() {
           notifications={notifications}
           messages={messages}
           onMarkAllNotificationsRead={handleMarkAllNotificationsRead}
+          onMarkNotificationRead={handleMarkSingleNotificationRead}
           onDeleteNotification={handleDeleteNotification}
           onClearAllNotifications={handleClearAllNotifications}
           onResolveMessage={handleResolveMessage}

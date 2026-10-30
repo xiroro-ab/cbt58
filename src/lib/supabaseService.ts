@@ -340,7 +340,8 @@ export async function markAllNotificationsAsRead(subjectId?: string): Promise<bo
   try {
     let query = supabase.from('exam_notifications').update({ is_read: true });
     if (subjectId) {
-      query = query.eq('subject_id', subjectId);
+      // Update notifikasi mapel ini atau notifikasi umum sistem
+      query = query.or(`subject_id.eq.${subjectId},subject_id.is.null`);
     } else {
       query = query.neq('id', '00000000-0000-0000-0000-000000000000');
     }
@@ -352,6 +353,26 @@ export async function markAllNotificationsAsRead(subjectId?: string): Promise<bo
     return true;
   } catch (err) {
     console.error('Exception markAllNotificationsAsRead:', err);
+    return false;
+  }
+}
+
+/**
+ * Menandai satu notifikasi telah dibaca di Supabase
+ */
+export async function markNotificationAsRead(notifId: string): Promise<boolean> {
+  try {
+    const { error } = await supabase
+      .from('exam_notifications')
+      .update({ is_read: true })
+      .eq('id', notifId);
+    if (error) {
+      console.warn('Gagal markNotificationAsRead:', error.message);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error('Exception markNotificationAsRead:', err);
     return false;
   }
 }

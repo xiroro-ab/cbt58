@@ -1,9 +1,10 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
-import { Subject, Question, QuestionType, ExamResult } from '@/types/cbt';
+import { Subject, Question, QuestionType, ExamResult, Student } from '@/types/cbt';
 import { NavItem } from '../layout/Sidebar';
 import { useLanguage } from '@/context/LanguageContext';
+import { StudentManagement } from './StudentManagement';
 import {
   TrendingUp,
   Award,
@@ -39,9 +40,15 @@ interface TeacherDashboardProps {
   subject: Subject;
   questions: Question[];
   results: ExamResult[];
+  students?: Student[];
   onUpdateSubject: (updatedSubject: Subject) => void;
   onAddQuestion: (newQuestion: Question) => void;
   onDeleteQuestion: (questionId: string) => void;
+  onAddStudent?: (s: Student) => void;
+  onUpdateStudent?: (s: Student) => void;
+  onDeleteStudent?: (studentId: string) => void;
+  onBulkInsertStudents?: (studentsList: Student[]) => void;
+  onBulkDeleteStudents?: (studentIds: string[]) => void;
   isAddModalOpen: boolean;
   onCloseAddModal: () => void;
   onOpenAddModal: () => void;
@@ -55,9 +62,15 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   subject,
   questions,
   results,
+  students = [],
   onUpdateSubject,
   onAddQuestion,
   onDeleteQuestion,
+  onAddStudent = () => {},
+  onUpdateStudent = () => {},
+  onDeleteStudent = () => {},
+  onBulkInsertStudents = () => {},
+  onBulkDeleteStudents = () => {},
   isAddModalOpen,
   onCloseAddModal,
   onOpenAddModal,
@@ -891,78 +904,16 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
       {/* 5. TAMPILAN DAFTAR SISWA & PARTISIPASI                        */}
       {/* ============================================================== */}
       {currentNav === 'students' && (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-base font-bold text-slate-900 dark:text-white">{t.navStudents}</h3>
-              <p className="text-xs text-slate-400 dark:text-slate-500">Monitoring kehadiran dan status pengerjaan siswa</p>
-            </div>
-            <span className="text-xs px-3 py-1 rounded-full bg-violet-50 dark:bg-violet-950/40 text-violet-600 dark:text-violet-300 border border-violet-200 dark:border-violet-800 font-semibold">
-              Total Mengumpulkan: {results.length} Siswa
-            </span>
-          </div>
-
-          <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl shadow-xs overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-slate-50 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400 uppercase text-[11px]">
-                  <tr>
-                    <th className="py-3 px-4">Nama Siswa</th>
-                    <th className="py-3 px-4">Kelas</th>
-                    <th className="py-3 px-4">Nilai Akhir</th>
-                    <th className="py-3 px-4">Status Kelulusan</th>
-                    <th className="py-3 px-4">Waktu Selesai</th>
-                    <th className="py-3 px-4">Pelanggaran</th>
-                    <th className="py-3 px-4 text-center">Lembar Jawaban</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-700 dark:text-slate-200">
-                  {results.length === 0 ? (
-                    <tr>
-                      <td colSpan={7} className="py-8 text-center text-slate-400">
-                        Belum ada siswa yang menyelesaikan ujian.
-                      </td>
-                    </tr>
-                  ) : (
-                    results.map((r, i) => (
-                      <tr key={r.id || i} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40">
-                        <td className="py-3 px-4 font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                          <div className="w-6 h-6 rounded-full bg-violet-600 text-white font-bold text-[10px] flex items-center justify-center">
-                            {r.studentName.charAt(0)}
-                          </div>
-                          <span>{r.studentName}</span>
-                        </td>
-                        <td className="py-3 px-4">{r.className}</td>
-                        <td className="py-3 px-4 font-bold text-violet-600 dark:text-violet-400">{r.score}%</td>
-                        <td className="py-3 px-4">
-                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${r.score >= 75 ? 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300' : 'bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300'}`}>
-                            {r.score >= 75 ? t.passedStatus : t.remedialStatus}
-                          </span>
-                        </td>
-                        <td className="py-3 px-4 text-slate-400">{r.submittedAt}</td>
-                        <td className="py-3 px-4">
-                          {r.violationCount > 0 ? (
-                            <span className="text-rose-600 font-bold">{r.violationCount}x</span>
-                          ) : (
-                            <span className="text-emerald-600 font-semibold">Tertib (0)</span>
-                          )}
-                        </td>
-                        <td className="py-3 px-4 text-center">
-                          <button
-                            onClick={() => setSelectedResult(r)}
-                            className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold hover:bg-violet-600 hover:text-white transition"
-                          >
-                            Dossier
-                          </button>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
+        <StudentManagement
+          students={students}
+          results={results}
+          onAddStudent={onAddStudent}
+          onUpdateStudent={onUpdateStudent}
+          onDeleteStudent={onDeleteStudent}
+          onBulkInsertStudents={onBulkInsertStudents}
+          onBulkDeleteStudents={onBulkDeleteStudents}
+          onViewDossier={(r) => setSelectedResult(r)}
+        />
       )}
 
       {/* ============================================================== */}

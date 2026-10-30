@@ -190,7 +190,23 @@ VALUES (
 );
 
 -- ===============================================================
--- 8. TABEL NOTIFIKASI EVENT SISTEM (Lonceng 🔔)
+-- 8. TABEL DATA SISWA (Roster Siswa Peserta Ujian)
+-- ===============================================================
+CREATE TABLE IF NOT EXISTS students (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    nisn VARCHAR(30) UNIQUE NOT NULL,
+    name VARCHAR(150) NOT NULL,
+    gender VARCHAR(20) DEFAULT 'Laki-Laki',
+    class_name VARCHAR(50) NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE students ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Allow public all students" ON students FOR ALL USING (true);
+ALTER PUBLICATION supabase_realtime ADD TABLE students;
+
+-- ===============================================================
+-- 9. TABEL NOTIFIKASI EVENT SISTEM (Lonceng 🔔)
 -- Otomatis terisi saat siswa submit, tab switch violation, dsb.
 -- ===============================================================
 CREATE TABLE IF NOT EXISTS exam_notifications (

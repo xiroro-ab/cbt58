@@ -33,6 +33,7 @@ interface ExamScreenProps {
   subject: Subject;
   questions: Question[];
   studentName: string;
+  studentClass?: string;
   onFinishExam: (resultData: any) => void;
   onExit: () => void;
 }
@@ -41,6 +42,7 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
   subject,
   questions,
   studentName,
+  studentClass,
   onFinishExam,
   onExit
 }) => {
@@ -192,9 +194,10 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
 
     const evaluation = evaluateFullExam(questions, answers, subject.scoringRules);
 
+    const currentClass = studentClass || subject.className;
     const payload = {
       studentName,
-      className: subject.className,
+      className: currentClass,
       score: evaluation.finalScore,
       totalEarned: evaluation.totalEarned,
       totalMax: evaluation.totalMax,
@@ -215,7 +218,7 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
         studentName,
         type: 'submission',
         title: 'Siswa Menyelesaikan Ujian',
-        message: `Siswa ${studentName} (${subject.className}) telah menyelesaikan ujian dengan skor ${evaluation.finalScore}%.`
+        message: `Siswa ${studentName} (${currentClass}) telah menyelesaikan ujian dengan skor ${evaluation.finalScore}%.`
       });
     } catch (err) {
       console.warn('Gagal log notifikasi submission:', err);

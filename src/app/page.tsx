@@ -1,8 +1,9 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { initialSubject, sampleQuestions } from '@/lib/mockData';
-import { Subject, Question, ExamResult, ExamNotification, ExamMessage } from '@/types/cbt';
+import { initialStudents } from '@/lib/rosterStudents';
+import { Subject, Question, ExamResult, ExamNotification, ExamMessage, Student } from '@/types/cbt';
 import { Sidebar, NavItem } from '@/components/layout/Sidebar';
 import { Navbar } from '@/components/layout/Navbar';
 import { TeacherDashboard } from '@/components/teacher/TeacherDashboard';
@@ -28,7 +29,13 @@ import {
   deleteNotificationFromSupabase,
   clearAllNotificationsFromSupabase,
   deleteMessageFromSupabase,
-  clearAllMessagesFromSupabase
+  clearAllMessagesFromSupabase,
+  fetchStudents,
+  insertStudent,
+  bulkInsertStudents,
+  updateStudentInSupabase,
+  removeStudentFromSupabase,
+  bulkRemoveStudentsFromSupabase
 } from '@/lib/supabaseService';
 import { useTheme } from '@/context/ThemeContext';
 import { useLanguage } from '@/context/LanguageContext';
@@ -43,7 +50,9 @@ import {
   User,
   School,
   ArrowLeft,
-  Languages
+  Languages,
+  CheckCircle2,
+  IdCard
 } from 'lucide-react';
 
 export default function Home() {
@@ -61,7 +70,9 @@ export default function Home() {
   const [subject, setSubject] = useState<Subject>(initialSubject);
   const [questions, setQuestions] = useState<Question[]>(sampleQuestions);
   const [results, setResults] = useState<ExamResult[]>([]);
-  const [studentName, setStudentName] = useState('Ahmad Fauzan');
+  const [students, setStudents] = useState<Student[]>(initialStudents);
+  const [selectedStudentClass, setSelectedStudentClass] = useState<string>('VII.1');
+  const [studentName, setStudentName] = useState('AISYAH');
   const [inputToken, setInputToken] = useState('IPA2026');
   const [loginError, setLoginError] = useState('');
   const [isLoading, setIsLoading] = useState(true);
@@ -72,7 +83,7 @@ export default function Home() {
       id: 'notif-seed-1',
       type: 'submission',
       title: 'Ujian IPA Selesai',
-      message: 'Siswa Ahmad Fauzan (Kelas 8A) telah menyelesaikan ujian dengan skor 87%.',
+      message: 'Siswa AISYAH (Kelas VII.1) telah menyelesaikan ujian dengan skor 87%.',
       isRead: false,
       createdAt: 'Baru saja'
     },
@@ -90,10 +101,10 @@ export default function Home() {
   const [messages, setMessages] = useState<ExamMessage[]>([
     {
       id: 'msg-seed-1',
-      senderName: 'Siti Rahmawati',
+      senderName: 'AISYAH',
       senderRole: 'student',
       targetType: 'proctor',
-      studentClass: '8A',
+      studentClass: 'VII.1',
       questionNumber: 4,
       title: 'Kendala Gambar Soal',
       body: 'Pak/Bu Pengawas, gambar diagram sel pada soal no. 4 tidak muncul di layar saya.',
@@ -101,6 +112,33 @@ export default function Home() {
       createdAt: '08:15'
     }
   ]);
+
+  // Unique class list from students & subject
+  const availableClasses = useMemo(() => {
+    const set = new Set<string>();
+    students.forEach(s => {
+      if (s.className) set.add(s.className);
+    });
+    if (subject?.className) set.add(subject.className);
+    return Array.from(set).sort();
+  }, [students, subject?.className]);
+
+  // Filtered student list for student login autocomplete
+  const classStudents = useMemo(() => {
+    return students.filter(s => s.className === selectedStudentClass);
+  }, [students, selectedStudentClass]);
+
+  const matchedStudent = useMemo(() => {
+    if (!studentName.trim()) return null;
+    return (
+      classStudents.find(
+        s => s.name.toLowerCase().trim() === studentName.toLowerCase().trim()
+      ) ||
+      students.find(
+        s => s.name.toLowerCase().trim() === studentName.toLowerCase().trim()
+      )
+    );
+  }, [classStudents, students, studentName]);
 
   // 1. Load data awal dari Supabase
   useEffect(() => {
@@ -119,6 +157,12 @@ export default function Home() {
         const resList = await fetchExamResults(sub.id);
         if (resList && resList.length > 0) {
           setResults(resList);
+        }
+
+        // Ambil data roster siswa dari Supabase (fallback ke 301 initialStudents)
+        const stdList = await fetchStudents();
+        if (stdList && stdList.length > 0) {
+          setStudents(stdList);
         }
 
         // Ambil notifikasi dari Supabase
@@ -203,10 +247,61 @@ export default function Home() {
     }
   };
 
+  // Student Roster CRUD Handlers
+  const handleAddStudent = async (newStudent: Student) => {
+    setStudents(prev => [newStudent, ...prev]);
+    try {
+      await insertStudent(newStudent);
+    } catch (err) {
+      console.warn('Supabase insert student fallback:', err);
+    }
+  };
+
+  const handleUpdateStudent = async (updated: Student) => {
+    setStudents(prev => prev.map(s => (s.id === updated.id ? updated : s)));
+    try {
+      await updateStudentInSupabase(updated);
+    } catch (err) {
+      console.warn('Supabase update student fallback:', err);
+    }
+  };
+
+  const handleDeleteStudent = async (studentId: string) => {
+    setStudents(prev => prev.filter(s => s.id !== studentId));
+    try {
+      await removeStudentFromSupabase(studentId);
+    } catch (err) {
+      console.warn('Supabase delete student fallback:', err);
+    }
+  };
+
+  const handleBulkInsertStudents = async (newStudents: Student[]) => {
+    setStudents(prev => {
+      const incomingNisns = new Set(newStudents.map(s => s.nisn));
+      const filtered = prev.filter(s => !incomingNisns.has(s.nisn));
+      return [...newStudents, ...filtered];
+    });
+    try {
+      await bulkInsertStudents(newStudents);
+    } catch (err) {
+      console.warn('Supabase bulk insert students fallback:', err);
+    }
+  };
+
+  const handleBulkDeleteStudents = async (studentIds: string[]) => {
+    const idSet = new Set(studentIds);
+    setStudents(prev => prev.filter(s => !idSet.has(s.id)));
+    try {
+      await bulkRemoveStudentsFromSupabase(studentIds);
+    } catch (err) {
+      console.warn('Supabase bulk delete students fallback:', err);
+    }
+  };
+
   const handleStartExam = (e: React.FormEvent) => {
     e.preventDefault();
     if (!studentName.trim()) {
-      setLoginError(language === 'id' ? 'Harap masukkan nama lengkap siswa.' : 'Please enter student name.');
+      setLoginError(language === 'id' ? 'Harap pilih atau masukkan nama lengkap siswa.' : 'Please enter student name.');
       return;
     }
     if (inputToken.trim().toUpperCase() !== subject.token.toUpperCase()) {
@@ -226,9 +321,9 @@ export default function Home() {
       id: `res-${Date.now()}`,
       subjectId: subject.id,
       subjectTitle: subject.title,
-      studentId: `std-${Date.now()}`,
+      studentId: matchedStudent?.id || `std-${Date.now()}`,
       studentName: resultData.studentName,
-      className: resultData.className,
+      className: resultData.className || selectedStudentClass || subject.className,
       score: resultData.score,
       totalEarned: resultData.totalEarned,
       totalMax: resultData.totalMax,
@@ -337,6 +432,7 @@ export default function Home() {
         subject={subject}
         questions={questions}
         studentName={studentName}
+        studentClass={selectedStudentClass}
         onFinishExam={handleFinishExam}
         onExit={() => setViewMode('teacher')}
       />
@@ -388,39 +484,85 @@ export default function Home() {
               {t.studentLoginTitle}
             </h2>
             <p className="text-xs text-slate-500 dark:text-slate-400">
-              {subject.title} • {subject.className}
+              {subject.title} • {students.length} Siswa Terdaftar di Sistem
             </p>
           </div>
 
           <form onSubmit={handleStartExam} className="space-y-4 text-xs font-medium">
+            {/* Pilihan Kelas */}
             <div>
-              <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1.5 flex items-center gap-1.5">
-                <User className="w-3.5 h-3.5 text-violet-600" />
-                <span>{t.studentNameLabel}</span>
+              <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1.5 flex items-center justify-between">
+                <span className="flex items-center gap-1.5">
+                  <School className="w-3.5 h-3.5 text-violet-600" />
+                  <span>{t.studentClassLabel}</span>
+                </span>
+                <span className="text-[10px] text-slate-400">Pilih dari daftar</span>
+              </label>
+              <select
+                value={selectedStudentClass}
+                onChange={e => {
+                  setSelectedStudentClass(e.target.value);
+                  const firstStudentInClass = students.find(s => s.className === e.target.value);
+                  if (firstStudentInClass) setStudentName(firstStudentInClass.name);
+                }}
+                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-violet-500 transition"
+              >
+                {availableClasses.map(cls => {
+                  const count = students.filter(s => s.className === cls).length;
+                  return (
+                    <option key={cls} value={cls}>
+                      Kelas {cls} ({count} Siswa)
+                    </option>
+                  );
+                })}
+              </select>
+            </div>
+
+            {/* Nama Siswa dengan Autocomplete / Datalist Roster */}
+            <div>
+              <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1.5 flex items-center justify-between">
+                <span className="flex items-center gap-1.5">
+                  <User className="w-3.5 h-3.5 text-violet-600" />
+                  <span>{t.studentNameLabel}</span>
+                </span>
+                <span className="text-[10px] text-slate-400">Pilih / ketik nama</span>
               </label>
               <input
                 type="text"
                 required
+                list="roster-students-list"
                 value={studentName}
                 onChange={e => setStudentName(e.target.value)}
-                placeholder="Contoh: Ahmad Fauzan"
+                placeholder="Ketik atau pilih nama siswa..."
                 className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white placeholder-slate-400 text-xs focus:outline-none focus:ring-2 focus:ring-violet-500 transition"
               />
+              <datalist id="roster-students-list">
+                {classStudents.map(s => (
+                  <option key={s.id} value={s.name}>
+                    NISN: {s.nisn} ({s.gender === 'L' ? 'Laki-laki' : 'Perempuan'})
+                  </option>
+                ))}
+              </datalist>
+
+              {/* Status Verifikasi Roster Siswa */}
+              {matchedStudent ? (
+                <div className="mt-2 p-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 flex items-center gap-2 text-[11px] text-emerald-700 dark:text-emerald-300">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
+                  <div className="flex-1">
+                    <p className="font-bold">Terdaftar di Roster Resmi</p>
+                    <p className="text-[10px] text-emerald-600/80 dark:text-emerald-400/80">
+                      NISN: <span className="font-mono font-semibold">{matchedStudent.nisn}</span> • JK: {matchedStudent.gender === 'L' ? 'Laki-laki' : 'Perempuan'}
+                    </p>
+                  </div>
+                </div>
+              ) : studentName.trim() ? (
+                <div className="mt-2 p-2 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/60 text-[11px] text-amber-700 dark:text-amber-300">
+                  Nama belum cocok persis dengan roster Kelas {selectedStudentClass}. Pastikan memilih nama dari opsi datalist.
+                </div>
+              ) : null}
             </div>
 
-            <div>
-              <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1.5 flex items-center gap-1.5">
-                <School className="w-3.5 h-3.5 text-violet-600" />
-                <span>{t.studentClassLabel}</span>
-              </label>
-              <input
-                type="text"
-                disabled
-                value={subject.className}
-                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 text-xs font-semibold cursor-not-allowed"
-              />
-            </div>
-
+            {/* Token Ujian */}
             <div>
               <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1.5 flex items-center gap-1.5">
                 <KeyRound className="w-3.5 h-3.5 text-violet-600" />
@@ -502,9 +644,15 @@ export default function Home() {
             subject={subject}
             questions={questions}
             results={results}
+            students={students}
             onUpdateSubject={handleUpdateSubject}
             onAddQuestion={handleAddQuestion}
             onDeleteQuestion={handleDeleteQuestion}
+            onAddStudent={handleAddStudent}
+            onUpdateStudent={handleUpdateStudent}
+            onDeleteStudent={handleDeleteStudent}
+            onBulkInsertStudents={handleBulkInsertStudents}
+            onBulkDeleteStudents={handleBulkDeleteStudents}
             isAddModalOpen={isAddModalOpen}
             onCloseAddModal={() => setIsAddModalOpen(false)}
             onOpenAddModal={() => setIsAddModalOpen(true)}

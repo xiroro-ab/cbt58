@@ -1,6 +1,7 @@
 import { supabase } from './supabaseClient';
-import { Subject, Question, ExamResult, ScoringRules, ExamNotification, ExamMessage } from '@/types/cbt';
+import { Subject, Question, ExamResult, ScoringRules, ExamNotification, ExamMessage, Student } from '@/types/cbt';
 import { initialSubject, sampleQuestions } from './mockData';
+import { initialStudents } from './rosterStudents';
 
 /**
  * Mengambil data mata pelajaran aktif dari Supabase
@@ -602,6 +603,140 @@ export async function clearAllNotificationsFromSupabase(subjectId?: string): Pro
     return true;
   } catch (err) {
     console.error('Exception clearAllNotificationsFromSupabase:', err);
+    return false;
+  }
+}
+
+/**
+ * Mengambil daftar seluruh siswa dari Supabase (fallback ke initialStudents 301 siswa)
+ */
+export async function fetchStudents(): Promise<Student[]> {
+  try {
+    const { data, error } = await supabase
+      .from('students')
+      .select('*')
+      .order('name', { ascending: true });
+
+    if (error || !data || data.length === 0) {
+      return initialStudents;
+    }
+
+    return data.map(s => ({
+      id: s.id,
+      nisn: s.nisn,
+      name: s.name,
+      gender: s.gender || 'Laki-Laki',
+      className: s.class_name,
+      createdAt: s.created_at
+    }));
+  } catch (err) {
+    console.warn('Error fetchStudents from Supabase, using initialStudents:', err);
+    return initialStudents;
+  }
+}
+
+/**
+ * Menyimpan satu siswa baru ke Supabase
+ */
+export async function insertStudent(s: Student): Promise<boolean> {
+  try {
+    const { error } = await supabase.from('students').insert({
+      nisn: s.nisn,
+      name: s.name,
+      gender: s.gender,
+      class_name: s.className
+    });
+    if (error) {
+      console.warn('Gagal insertStudent ke Supabase:', error.message);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error('Exception insertStudent:', err);
+    return false;
+  }
+}
+
+/**
+ * Menyimpan banyak siswa sekaligus (Import Excel / CSV) ke Supabase
+ */
+export async function bulkInsertStudents(studentsList: Student[]): Promise<boolean> {
+  try {
+    const rows = studentsList.map(s => ({
+      nisn: s.nisn,
+      name: s.name,
+      gender: s.gender,
+      class_name: s.className
+    }));
+
+    const { error } = await supabase.from('students').upsert(rows, { onConflict: 'nisn' });
+    if (error) {
+      console.warn('Gagal bulkInsertStudents ke Supabase:', error.message);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error('Exception bulkInsertStudents:', err);
+    return false;
+  }
+}
+
+/**
+ * Memperbarui data siswa di Supabase
+ */
+export async function updateStudentInSupabase(s: Student): Promise<boolean> {
+  try {
+    const { error } = await supabase
+      .from('students')
+      .update({
+        nisn: s.nisn,
+        name: s.name,
+        gender: s.gender,
+        class_name: s.className
+      })
+      .eq('id', s.id);
+
+    if (error) {
+      console.warn('Gagal updateStudentInSupabase:', error.message);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error('Exception updateStudentInSupabase:', err);
+    return false;
+  }
+}
+
+/**
+ * Menghapus satu siswa dari Supabase
+ */
+export async function removeStudentFromSupabase(studentId: string): Promise<boolean> {
+  try {
+    const { error } = await supabase.from('students').delete().eq('id', studentId);
+    if (error) {
+      console.warn('Gagal removeStudentFromSupabase:', error.message);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error('Exception removeStudentFromSupabase:', err);
+    return false;
+  }
+}
+
+/**
+ * Menghapus banyak siswa sekaligus dari Supabase
+ */
+export async function bulkRemoveStudentsFromSupabase(studentIds: string[]): Promise<boolean> {
+  try {
+    const { error } = await supabase.from('students').delete().in('id', studentIds);
+    if (error) {
+      console.warn('Gagal bulkRemoveStudentsFromSupabase:', error.message);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error('Exception bulkRemoveStudentsFromSupabase:', err);
     return false;
   }
 }

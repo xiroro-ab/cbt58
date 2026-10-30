@@ -69,6 +69,15 @@ export interface ExamSession {
   status: 'ongoing' | 'completed' | 'blocked';
 }
 
+export interface Student {
+  id: string;
+  nisn: string;
+  name: string;
+  gender: string;
+  className: string;
+  createdAt?: string;
+}
+
 export interface QuestionScoreDetail {
   questionId: string;
   type: QuestionType;

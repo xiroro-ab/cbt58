@@ -199,6 +199,50 @@ export async function updateSubjectInSupabase(sub: Subject): Promise<boolean> {
 }
 
 /**
+ * Menambahkan mata pelajaran / paket jadwal ujian baru ke Supabase
+ */
+export async function insertSubject(sub: Subject): Promise<boolean> {
+  try {
+    const { error } = await supabase.from('subjects').insert({
+      id: sub.id,
+      title: sub.title,
+      class_target: sub.className,
+      duration_minutes: sub.durationMinutes,
+      violation_limit: sub.violationLimit,
+      token: sub.token,
+      is_active: sub.isActive,
+      scoring_rules: sub.scoringRules
+    });
+
+    if (error) {
+      console.warn('Gagal insert subject ke Supabase, fallback ke lokal:', error.message);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error('Exception insertSubject:', err);
+    return false;
+  }
+}
+
+/**
+ * Menghapus mata pelajaran / paket jadwal ujian dari Supabase
+ */
+export async function deleteSubject(subId: string): Promise<boolean> {
+  try {
+    const { error } = await supabase.from('subjects').delete().eq('id', subId);
+    if (error) {
+      console.warn('Gagal delete subject dari Supabase, fallback ke lokal:', error.message);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error('Exception deleteSubject:', err);
+    return false;
+  }
+}
+
+/**
  * Mengambil daftar hasil ujian siswa dari Supabase
  */
 export async function fetchExamResults(subjectId: string): Promise<ExamResult[]> {

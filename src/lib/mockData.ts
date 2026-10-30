@@ -53,6 +53,91 @@ export const sampleSubjects: Subject[] = [
       'Isian Singkat': 3,
       'Esai': 5
     }
+  },
+  {
+    id: 'sub-bin-01',
+    title: 'Asesmen Sumatif - Bahasa Indonesia',
+    className: 'VIII.1, VIII.2, VIII.3',
+    durationMinutes: 60,
+    violationLimit: 3,
+    token: 'BIN2026',
+    isActive: true,
+    scoringRules: {
+      'Pilihan Ganda': 1,
+      'Pilihan Ganda Kompleks': 2,
+      'Benar/Salah': 2,
+      'Menjodohkan': 2,
+      'Isian Singkat': 2,
+      'Esai': 4
+    }
+  },
+  {
+    id: 'sub-big-01',
+    title: 'Asesmen Sumatif - Bahasa Inggris',
+    className: 'IX.1, IX.2, IX.3',
+    durationMinutes: 60,
+    violationLimit: 3,
+    token: 'BIG2026',
+    isActive: true,
+    scoringRules: {
+      'Pilihan Ganda': 1,
+      'Pilihan Ganda Kompleks': 2,
+      'Benar/Salah': 2,
+      'Menjodohkan': 2,
+      'Isian Singkat': 2,
+      'Esai': 4
+    }
+  },
+  {
+    id: 'sub-ips-01',
+    title: 'Asesmen Sumatif - Ilmu Pengetahuan Sosial (IPS)',
+    className: 'VIII.1, VIII.2, VIII.3, VIII.4',
+    durationMinutes: 60,
+    violationLimit: 3,
+    token: 'IPS2026',
+    isActive: true,
+    scoringRules: {
+      'Pilihan Ganda': 1,
+      'Pilihan Ganda Kompleks': 2,
+      'Benar/Salah': 2,
+      'Menjodohkan': 2,
+      'Isian Singkat': 2,
+      'Esai': 4
+    }
+  },
+  {
+    id: 'sub-ppk-01',
+    title: 'Asesmen Sumatif - Pendidikan Pancasila (PPKn)',
+    className: 'VII.1, VII.2, VII.3',
+    durationMinutes: 45,
+    violationLimit: 3,
+    token: 'PPKN26',
+    isActive: true,
+    scoringRules: {
+      'Pilihan Ganda': 1,
+      'Pilihan Ganda Kompleks': 2,
+      'Benar/Salah': 2,
+      'Menjodohkan': 2,
+      'Isian Singkat': 2,
+      'Esai': 4
+    }
+  },
+  {
+    id: 'sub-pai-01',
+    title: 'Asesmen Sumatif - Pendidikan Agama Islam (PAI)',
+    className: 'VII.1, VII.2, VIII.1, IX.1',
+    durationMinutes: 45,
+    violationLimit: 3,
+    token: 'PAI2026',
+    isActive: true,
+    scoringRules: {
+      'Pilihan Ganda': 1,
+      'Pilihan Ganda Kompleks': 2,
+      'Benar/Salah': 2,
+      'Menjodohkan': 2,
+      'Isian Singkat': 2,
+      'Esai': 4
+    }
   }
 ];
 
@@ -222,5 +307,136 @@ export const sampleQuestions: Question[] = [
     options: [],
     answer: 'Input Device berfungsi memasukkan data/perintah ke komputer (contoh: Keyboard, Mouse, Mikrofon), sedangkan Output Device menyajikan hasil pemrosesan informasi kepada pengguna (contoh: Monitor, Printer, Speaker).',
     orderIndex: 6
+  },
+
+  // ==========================================
+  // SOAL MAPEL 3: MATEMATIKA (sub-mtk-01)
+  // ==========================================
+  {
+    id: 'q-mtk-1',
+    subjectId: 'sub-mtk-01',
+    type: 'Pilihan Ganda',
+    questionText: 'Hasil perhitungan dari (-12) + 20 × (-4) : (-2) adalah...',
+    options: [
+      { text: '28' },
+      { text: '24' },
+      { text: '-52' },
+      { text: '-28' }
+    ],
+    answer: 'A',
+    orderIndex: 1
+  },
+  {
+    id: 'q-mtk-2',
+    subjectId: 'sub-mtk-01',
+    type: 'Benar/Salah',
+    questionText: 'Perhatikan pernyataan tentang konsep aljabar dan bilangan berikut. Tentukan Benar atau Salah!',
+    options: [
+      { text: 'Pada bentuk aljabar 3x² - 5x + 7, koefisien dari x adalah -5.' },
+      { text: 'FPB dari bilangan 24 dan 36 adalah 18.' },
+      { text: 'Bilangan 2 adalah satu-satunya bilangan genap yang sekaligus merupakan bilangan prima.' },
+      { text: 'Hasil dari 5² × 5³ sama dengan 5⁶.' }
+    ],
+    answer: ['Benar', 'Salah', 'Benar', 'Salah'],
+    orderIndex: 2
+  },
+  {
+    id: 'q-mtk-3',
+    subjectId: 'sub-mtk-01',
+    type: 'Pilihan Ganda Kompleks',
+    questionText: 'Pilihlah bilangan di bawah ini yang merupakan bilangan prima ganjil kurang dari 20! (Pilihlah satu atau lebih)',
+    options: [
+      { text: '7' },
+      { text: '13' },
+      { text: '15' },
+      { text: '19' }
+    ],
+    answer: ['A', 'B', 'D'],
+    orderIndex: 3
+  },
+  {
+    id: 'q-mtk-4',
+    subjectId: 'sub-mtk-01',
+    type: 'Menjodohkan',
+    questionText: 'Pasangkanlah bangun datar di sebelah kiri dengan rumus keliling yang tepat di sebelah kanan!',
+    options: [
+      { q: { text: 'Persegi (sisi s)' }, a: { text: '4 × s' } },
+      { q: { text: 'Persegi Panjang (p, l)' }, a: { text: '2 × (p + l)' } },
+      { q: { text: 'Segitiga Sama Sisi (s)' }, a: { text: '3 × s' } },
+      { q: { text: 'Lingkaran (jari-jari r)' }, a: { text: '2 × π × r' } }
+    ],
+    answer: 'Otomatis',
+    orderIndex: 4
+  },
+  {
+    id: 'q-mtk-5',
+    subjectId: 'sub-mtk-01',
+    type: 'Isian Singkat',
+    questionText: 'Jika nilai persamaan 4x - 8 = 16, berapakah nilai dari x?',
+    options: [],
+    answer: ['6'],
+    orderIndex: 5
+  },
+
+  // ==========================================
+  // SOAL MAPEL 4: BAHASA INDONESIA (sub-bin-01)
+  // ==========================================
+  {
+    id: 'q-bin-1',
+    subjectId: 'sub-bin-01',
+    type: 'Pilihan Ganda',
+    questionText: 'Bagian teks laporan hasil observasi (LHO) yang berisi pembuka atau pengantar tentang hal yang akan dilaporkan disebut...',
+    options: [
+      { text: 'Deskripsi Bagian' },
+      { text: 'Pernyataan Umum (Definisi Umum)' },
+      { text: 'Deskripsi Manfaat' },
+      { text: 'Simpulan Penutup' }
+    ],
+    answer: 'B',
+    orderIndex: 1
+  },
+  {
+    id: 'q-bin-2',
+    subjectId: 'sub-bin-01',
+    type: 'Benar/Salah',
+    questionText: 'Perhatikan kaidah kebahasaan dan struktur teks berita berikut!',
+    options: [
+      { text: 'Unsur ADIKSIMBA (5W + 1H) merupakan komponen pokok dalam penulisan teks berita.' },
+      { text: 'Konjungsi temporal digunakan untuk menyatakan hubungan sebab-akibat langsung.' },
+      { text: 'Kepala berita (Lead) memuat informasi paling krusial dalam struktur piramida terbalik.' }
+    ],
+    answer: ['Benar', 'Salah', 'Benar'],
+    orderIndex: 2
+  },
+
+  // ==========================================
+  // SOAL MAPEL 5: ILMU PENGETAHUAN SOSIAL (sub-ips-01)
+  // ==========================================
+  {
+    id: 'q-ips-1',
+    subjectId: 'sub-ips-01',
+    type: 'Pilihan Ganda',
+    questionText: 'Secara astronomis, wilayah Indonesia terletak di antara...',
+    options: [
+      { text: '6° LU - 11° LS dan 95° BT - 141° BT' },
+      { text: '11° LU - 6° LS dan 90° BT - 140° BT' },
+      { text: '6° LU - 11° LS dan 90° BT - 135° BT' },
+      { text: '10° LU - 15° LS dan 95° BT - 145° BT' }
+    ],
+    answer: 'A',
+    orderIndex: 1
+  },
+  {
+    id: 'q-ips-2',
+    subjectId: 'sub-ips-01',
+    type: 'Benar/Salah',
+    questionText: 'Perhatikan pernyataan tentang interaksi antarruang dan dinamika kependudukan berikut!',
+    options: [
+      { text: 'Indonesia beriklim tropis karena dilalui oleh garis khatulistiwa (ekuator).' },
+      { text: 'Letak geologis Indonesia di antara tiga lempeng besar menyebabkan banyak gunung api aktif.' },
+      { text: 'Perpindahan penduduk dari desa ke kota dinamakan transmigrasi.' }
+    ],
+    answer: ['Benar', 'Benar', 'Salah'],
+    orderIndex: 2
   }
 ];

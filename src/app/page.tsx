@@ -21,6 +21,8 @@ import {
   saveExamResult,
   fetchExamResults,
   updateSubjectInSupabase,
+  insertSubject,
+  deleteSubject,
   subscribeToExamResults,
   fetchNotifications,
   fetchMessages,
@@ -328,6 +330,30 @@ export default function Home() {
       await updateSubjectInSupabase(updated);
     } catch (err) {
       console.warn('Update subject fallback to local:', err);
+    }
+  };
+
+  const handleAddSubject = async (newSub: Subject) => {
+    setSubjects(prev => [...prev, newSub]);
+    try {
+      await insertSubject(newSub);
+    } catch (err) {
+      console.warn('Supabase insert subject fallback:', err);
+    }
+  };
+
+  const handleDeleteSubject = async (subId: string) => {
+    setSubjects(prev => prev.filter(s => s.id !== subId));
+    if (subject.id === subId) {
+      const remaining = subjects.filter(s => s.id !== subId);
+      if (remaining.length > 0) {
+        setSubject(remaining[0]);
+      }
+    }
+    try {
+      await deleteSubject(subId);
+    } catch (err) {
+      console.warn('Supabase delete subject fallback:', err);
     }
   };
 
@@ -1055,6 +1081,8 @@ export default function Home() {
               }
             }}
             onUpdateSubject={handleUpdateSubject}
+            onAddSubject={handleAddSubject}
+            onDeleteSubject={handleDeleteSubject}
             onAddQuestion={handleAddQuestion}
             onDeleteQuestion={handleDeleteQuestion}
             onAddStudent={handleAddStudent}

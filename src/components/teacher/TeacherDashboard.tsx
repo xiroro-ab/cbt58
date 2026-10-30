@@ -1,10 +1,12 @@
 'use client';
 
-import React, { useState, useMemo, useEffect } from 'react';
-import { Subject, Question, QuestionType, ExamResult, Student, Teacher, ScoringRules } from '@/types/cbt';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
+import { Subject, Question, QuestionType, ExamResult, Student, Teacher, ScoringRules, ExamSession } from '@/types/cbt';
 import { NavItem } from '../layout/Sidebar';
 import { useLanguage } from '@/context/LanguageContext';
 import { StudentManagement } from './StudentManagement';
+import { evaluateFullExam, calculateSingleQuestionScore } from '@/lib/scoringEngine';
+import { sendProctorCommand, subscribeToLiveSessions } from '@/lib/liveMonitoringService';
 import {
   TrendingUp,
   Award,
@@ -15,6 +17,7 @@ import {
   MoreVertical,
   Edit2,
   Edit3,
+  Pencil,
   Trash2,
   PlusCircle,
   Plus,
@@ -47,7 +50,15 @@ import {
   Image as ImageIcon,
   Upload,
   X,
-  BarChart3
+  BarChart3,
+  Radio,
+  RotateCcw,
+  Ban,
+  Save,
+  Lock,
+  Unlock,
+  RefreshCw,
+  CheckSquare
 } from 'lucide-react';
 
 interface TeacherDashboardProps {
@@ -58,12 +69,16 @@ interface TeacherDashboardProps {
   students?: Student[];
   currentTeacher?: Teacher | null;
   allSubjects?: Subject[];
+  onSelectNav?: (nav: NavItem) => void;
   onSelectSubject?: (sub: Subject) => void;
   onUpdateSubject: (updatedSubject: Subject) => void;
   onAddSubject?: (newSub: Subject) => void;
   onDeleteSubject?: (subId: string) => void;
   onAddQuestion: (newQuestion: Question) => void;
+  onUpdateQuestion?: (updatedQuestion: Question) => void;
   onDeleteQuestion: (questionId: string) => void;
+  onUpdateResult?: (updatedResult: ExamResult) => void;
+  onDeleteResult?: (resultId: string, subjectId?: string) => void;
   onAddStudent?: (s: Student) => void;
   onUpdateStudent?: (s: Student) => void;
   onDeleteStudent?: (studentId: string) => void;
@@ -85,12 +100,16 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   students = [],
   currentTeacher,
   allSubjects,
+  onSelectNav,
   onSelectSubject,
   onUpdateSubject,
   onAddSubject,
   onDeleteSubject,
   onAddQuestion,
+  onUpdateQuestion,
   onDeleteQuestion,
+  onUpdateResult,
+  onDeleteResult,
   onAddStudent = () => {},
   onUpdateStudent = () => {},
   onDeleteStudent = () => {},
@@ -106,6 +125,71 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   const { language, t } = useLanguage();
   const [selectedResult, setSelectedResult] = useState<ExamResult | null>(null);
   const [selectedResultIds, setSelectedResultIds] = useState<string[]>([]);
+  const [manualEssayScores, setManualEssayScores] = useState<Record<string, number>>({});
+  const [essaySavedNotice, setEssaySavedNotice] = useState(false);
+  const [essayMaxNotice, setEssayMaxNotice] = useState<string | null>(null);
+
+  // DOSSIER COMPUTATIONS
+  const dossierSubject = useMemo(() => {
+    if (!selectedResult) return subject;
+    return (allSubjects || []).find(s => s.id === selectedResult.subjectId) || subject;
+  }, [selectedResult, allSubjects, subject]);
+
+  const dossierQuestions = useMemo(() => {
+    if (!selectedResult) return [];
+    if (questions.length > 0 && questions[0]?.subjectId === selectedResult.subjectId) {
+      return questions;
+    }
+    if (typeof window !== 'undefined') {
+      try {
+        const stored = localStorage.getItem(`cbt_questions_${selectedResult.subjectId}`);
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        }
+      } catch {}
+    }
+    return questions;
+  }, [selectedResult, questions]);
+
+  useEffect(() => {
+    if (selectedResult) {
+      setManualEssayScores(selectedResult.essayScores || {});
+      setEssayMaxNotice(null);
+      setEssaySavedNotice(false);
+    }
+  }, [selectedResult]);
+
+  const liveDossierEval = useMemo(() => {
+    if (!selectedResult) return null;
+    return evaluateFullExam(
+      dossierQuestions,
+      selectedResult.answers || [],
+      dossierSubject.scoringRules || {},
+      manualEssayScores
+    );
+  }, [selectedResult, dossierQuestions, dossierSubject.scoringRules, manualEssayScores]);
+
+  // ==========================================
+  // EDIT QUESTION STATE
+  // ==========================================
+  const [editingQuestion, setEditingQuestion] = useState<Question | null>(null);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+
+  // ==========================================
+  // LIVE MONITORING STATE
+  // ==========================================
+  const [liveSessions, setLiveSessions] = useState<ExamSession[]>([]);
+  const [monitoringFilterSubId, setMonitoringFilterSubId] = useState<string>('ALL');
+  const [monitoringActionToast, setMonitoringActionToast] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (currentNav !== 'monitoring') return;
+    const unsub = subscribeToLiveSessions((sessions) => {
+      setLiveSessions(sessions);
+    });
+    return () => unsub();
+  }, [currentNav]);
 
   // ==========================================
   // BANK SOAL STATE (KATALOG & DETAIL SOAL)
@@ -639,19 +723,40 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
     }
 
     const targetSubId = selectedBankSubjectId || subject.id;
-    const newQ: Question = {
-      id: `q-${Date.now()}`,
-      subjectId: targetSubId,
-      type: modalType,
-      questionText: modalText.trim(),
-      mediaUrl: modalMediaUrl.trim() || undefined,
-      options: finalOptions,
-      answer: finalAnswer,
-      orderIndex: bankSubjectQuestions.length + 1
-    };
 
-    onAddQuestion(newQ);
-    onCloseAddModal();
+    if (editingQuestion) {
+      const updatedQ: Question = {
+        ...editingQuestion,
+        type: modalType,
+        questionText: modalText.trim(),
+        mediaUrl: modalMediaUrl.trim() || undefined,
+        options: finalOptions,
+        answer: finalAnswer
+      };
+      if (onUpdateQuestion) {
+        onUpdateQuestion(updatedQ);
+      }
+      setIsEditModalOpen(false);
+      setEditingQuestion(null);
+    } else {
+      const newQ: Question = {
+        id: `q-${Date.now()}`,
+        subjectId: targetSubId,
+        type: modalType,
+        questionText: modalText.trim(),
+        mediaUrl: modalMediaUrl.trim() || undefined,
+        options: finalOptions,
+        answer: finalAnswer,
+        orderIndex: bankSubjectQuestions.length + 1
+      };
+      onAddQuestion(newQ);
+      onCloseAddModal();
+    }
+
+    resetQuestionForm();
+  };
+
+  const resetQuestionForm = () => {
     setModalText('');
     setModalMediaUrl('');
     setPgOptions([{ text: '' }, { text: '' }, { text: '' }, { text: '' }]);
@@ -669,6 +774,64 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
     ]);
     setShortAnswer('');
     setEssayKey('');
+  };
+
+  const handleOpenEditQuestion = (q: Question) => {
+    setEditingQuestion(q);
+    setModalType(q.type);
+    setModalText(q.questionText || '');
+    setModalMediaUrl(q.mediaUrl || '');
+
+    if (q.type === 'Pilihan Ganda') {
+      if (Array.isArray(q.options) && q.options.length > 0) {
+        setPgOptions((q.options as any[]).map(o => typeof o === 'string' ? { text: o } : { text: o.text || '', img: o.img || '' }));
+      }
+      setPgAnswer(typeof q.answer === 'string' ? q.answer : 'A');
+    } else if (q.type === 'Pilihan Ganda Kompleks') {
+      if (Array.isArray(q.options) && q.options.length > 0) {
+        setPgOptions((q.options as any[]).map(o => typeof o === 'string' ? { text: o } : { text: o.text || '', img: o.img || '' }));
+      }
+      setPgkAnswer(Array.isArray(q.answer) ? q.answer : ['A']);
+    } else if (q.type === 'Benar/Salah') {
+      if (Array.isArray(q.options) && q.options.length > 0) {
+        setBsMode('multiple');
+        const ansList = Array.isArray(q.answer) ? q.answer : [];
+        setBsStatements((q.options as any[]).map((o, idx) => ({
+          text: typeof o === 'string' ? o : o.text || '',
+          img: typeof o === 'object' ? o.img || '' : '',
+          answer: (ansList[idx] === 'Salah' ? 'Salah' : 'Benar') as 'Benar' | 'Salah'
+        })));
+      } else {
+        setBsMode('single');
+        setBsSingleAnswer(q.answer === 'Salah' ? 'Salah' : 'Benar');
+      }
+    } else if (q.type === 'Menjodohkan') {
+      if (Array.isArray(q.options) && q.options.length > 0) {
+        setMatchingPairs((q.options as any[]).map((p: any) => ({
+          qText: p.q?.text || '',
+          qImg: p.q?.img || '',
+          aText: p.a?.text || '',
+          aImg: p.a?.img || ''
+        })));
+      }
+    } else if (q.type === 'Isian Singkat') {
+      if (Array.isArray(q.answer)) {
+        setShortAnswer(q.answer.join(', '));
+      } else if (typeof q.answer === 'string') {
+        setShortAnswer(q.answer);
+      }
+    } else if (q.type === 'Esai') {
+      setEssayKey(typeof q.answer === 'string' ? q.answer : '');
+    }
+
+    setIsEditModalOpen(true);
+  };
+
+  const handleCloseQuestionModal = () => {
+    setIsEditModalOpen(false);
+    setEditingQuestion(null);
+    resetQuestionForm();
+    onCloseAddModal();
   };
 
   // 100% Real Metric Calculations
@@ -1788,13 +1951,22 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                               Bobot: {weight} Poin
                             </span>
                           </div>
-                          <button
-                            onClick={() => onDeleteQuestion(q.id)}
-                            className="text-slate-400 hover:text-rose-500 p-1.5 transition cursor-pointer rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/50"
-                            title={t.delete}
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={() => handleOpenEditQuestion(q)}
+                              className="text-slate-400 hover:text-violet-600 p-1.5 transition cursor-pointer rounded-lg hover:bg-violet-50 dark:hover:bg-violet-950/50"
+                              title="Edit Butir Soal"
+                            >
+                              <Pencil className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => onDeleteQuestion(q.id)}
+                              className="text-slate-400 hover:text-rose-500 p-1.5 transition cursor-pointer rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/50"
+                              title={t.delete}
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
                         </div>
 
                         <p className="text-slate-800 dark:text-slate-100 text-sm leading-relaxed whitespace-pre-wrap">
@@ -2556,6 +2728,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                           setSelectedBankSubjectId(subItem.id);
                           setBankView('questions');
                           if (onSelectSubject) onSelectSubject(subItem);
+                          if (onSelectNav) onSelectNav('questions');
                         }}
                         className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-violet-50 dark:bg-violet-950/60 hover:bg-violet-600 hover:text-white text-violet-700 dark:text-violet-300 text-xs font-semibold transition cursor-pointer border border-violet-200/60 dark:border-violet-800/60"
                       >
@@ -2595,6 +2768,345 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
           onViewDossier={(r) => setSelectedResult(r)}
         />
       )}
+
+      {/* ============================================================== */}
+      {/* 5B. TAMPILAN LIVE MONITORING UJIAN REALTIME                    */}
+      {/* ============================================================== */}
+      {currentNav === 'monitoring' && (() => {
+        const filteredSessions = liveSessions.filter(s => {
+          if (monitoringFilterSubId === 'ALL') return true;
+          return s.subjectId === monitoringFilterSubId;
+        });
+
+        const activeCount = filteredSessions.length;
+        const focusCount = filteredSessions.filter(s => s.status === 'ongoing' && s.isFocus).length;
+        const blurCount = filteredSessions.filter(s => s.status === 'ongoing' && !s.isFocus).length;
+        const blockedCount = filteredSessions.filter(s => s.status === 'blocked').length;
+
+        return (
+          <div className="space-y-6 animate-in fade-in">
+            {/* TOAST AKSI PENGAWAS */}
+            {monitoringActionToast && (
+              <div className="p-3.5 bg-violet-600 text-white font-bold text-xs rounded-2xl shadow-xl flex items-center justify-between animate-in slide-in-from-top-3">
+                <div className="flex items-center gap-2">
+                  <Check className="w-4 h-4" />
+                  <span>{monitoringActionToast}</span>
+                </div>
+                <button onClick={() => setMonitoringActionToast(null)} className="text-white hover:text-slate-200 ml-3">✕</button>
+              </div>
+            )}
+
+            {/* HEADER MONITORING & FILTER MAPEL */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-3xl p-6 shadow-xs">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping"></span>
+                  <span className="text-[10px] font-black uppercase tracking-widest text-emerald-600 dark:text-emerald-400">
+                    Live Proctor Stream Active
+                  </span>
+                </div>
+                <h3 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white flex items-center gap-2.5">
+                  <Radio className="w-6 h-6 text-amber-500 animate-pulse" />
+                  <span>Live Monitoring Ujian Realtime</span>
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 max-w-xl leading-relaxed">
+                  Pantau aktivitas pengerjaan, deteksi kecurangan (berpindah tab/layar terbelah), dan kendalikan sesi siswa secara langsung dari meja pengawas.
+                </p>
+              </div>
+
+              {/* FILTER MAPEL */}
+              <div className="flex items-center gap-2 self-start sm:self-center">
+                <Filter className="w-4 h-4 text-slate-400" />
+                <select
+                  value={monitoringFilterSubId}
+                  onChange={e => setMonitoringFilterSubId(e.target.value)}
+                  className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-800 dark:text-slate-100 cursor-pointer"
+                >
+                  <option value="ALL">Semua Paket Ujian</option>
+                  {accessibleSubjects.map(s => (
+                    <option key={s.id} value={s.id}>
+                      {formatSubjectTitle(s.title)} ({s.className})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* KARTU STATISTIK REALTIME */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+              <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-1">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Total Siswa Aktif</span>
+                <p className="text-3xl font-black text-slate-900 dark:text-white">{activeCount}</p>
+                <span className="text-[10px] text-slate-400">Sedang Ujian</span>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-emerald-50/60 dark:bg-emerald-950/30 border border-emerald-200/80 dark:border-emerald-800/60 shadow-xs space-y-1">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">Fokus Normal</span>
+                <p className="text-3xl font-black text-emerald-600 dark:text-emerald-400">{focusCount}</p>
+                <span className="text-[10px] text-emerald-600/80">Layar Penuh Aktif</span>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-amber-50/60 dark:bg-amber-950/30 border border-amber-200/80 dark:border-amber-800/60 shadow-xs space-y-1">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">Di Luar Fokus</span>
+                <p className="text-3xl font-black text-amber-600 dark:text-amber-400">{blurCount}</p>
+                <span className="text-[10px] text-amber-600/80">Pindah Tab / Minim</span>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-rose-50/60 dark:bg-rose-950/30 border border-rose-200/80 dark:border-rose-800/60 shadow-xs space-y-1">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-rose-600 dark:text-rose-400">Terkunci / Diskualifikasi</span>
+                <p className="text-3xl font-black text-rose-600 dark:text-rose-400">{blockedCount}</p>
+                <span className="text-[10px] text-rose-600/80">Butuh Aksi Guru</span>
+              </div>
+            </div>
+
+            {/* TABEL LIVE MONITORING */}
+            <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-3xl shadow-xs overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="border-b border-slate-200/80 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400 uppercase tracking-wider text-[10px] font-extrabold">
+                      <th className="p-4">Nama Siswa</th>
+                      <th className="p-4">Kelas</th>
+                      <th className="p-4">Mata Pelajaran</th>
+                      <th className="p-4 text-center">Status</th>
+                      <th className="p-4 text-center">Progres</th>
+                      <th className="p-4 text-center">Sisa Waktu</th>
+                      <th className="p-4 text-center">Pelanggaran</th>
+                      <th className="p-4 text-center">Aksi Pengawas</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium">
+                    {filteredSessions.length === 0 ? (
+                      <tr>
+                        <td colSpan={8} className="p-12 text-center space-y-3">
+                          <div className="w-16 h-16 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-400 flex items-center justify-center mx-auto">
+                            <Radio className="w-8 h-8 animate-pulse text-amber-500" />
+                          </div>
+                          <div className="space-y-1">
+                            <h4 className="font-bold text-sm text-slate-900 dark:text-white">
+                              Belum Ada Siswa yang Sedang Ujian
+                            </h4>
+                            <p className="text-xs text-slate-400 max-w-md mx-auto">
+                              Saat siswa login menggunakan token ujian, progres, waktu, dan status layar mereka akan muncul secara langsung di tabel ini.
+                            </p>
+                          </div>
+                        </td>
+                      </tr>
+                    ) : (
+                      filteredSessions.map((s) => {
+                        const isDisqualified = s.status === 'blocked';
+                        const isOut = !s.isFocus;
+
+                        const sSec = s.remainingSeconds || 0;
+                        const mins = Math.floor(sSec / 60).toString().padStart(2, '0');
+                        const secs = (sSec % 60).toString().padStart(2, '0');
+                        const timeStr = `${mins}:${secs}`;
+
+                        const totalQ = s.totalQuestions || 1;
+                        const answeredQ = s.progressCount || 0;
+                        const pct = Math.min(100, Math.round((answeredQ / totalQ) * 100));
+
+                        // SVG Circular Progress
+                        const radius = 16;
+                        const circumference = 2 * Math.PI * radius;
+                        const offset = circumference - (pct / 100) * circumference;
+                        const strokeColor = pct === 100 ? '#10b981' : '#8b5cf6';
+
+                        const subTitle = (allSubjects || []).find(sub => sub.id === s.subjectId)?.title || 'Ujian';
+
+                        return (
+                          <tr
+                            key={s.id}
+                            className={`transition-colors ${
+                              isDisqualified
+                                ? 'bg-rose-50/70 dark:bg-rose-950/40 text-rose-900 dark:text-rose-100'
+                                : isOut
+                                ? 'bg-amber-50/70 dark:bg-amber-950/40'
+                                : 'hover:bg-slate-50 dark:hover:bg-slate-800/40'
+                            }`}
+                          >
+                            {/* NAMA SISWA */}
+                            <td className="p-4 font-bold text-slate-900 dark:text-white whitespace-nowrap">
+                              <div className="flex items-center gap-2">
+                                <span className="w-7 h-7 rounded-lg bg-violet-100 dark:bg-violet-950/60 text-violet-700 dark:text-violet-300 font-bold flex items-center justify-center text-xs">
+                                  {s.studentName.charAt(0)}
+                                </span>
+                                <span>{s.studentName}</span>
+                              </div>
+                            </td>
+
+                            {/* KELAS */}
+                            <td className="p-4 text-slate-600 dark:text-slate-400 whitespace-nowrap">
+                              {s.className}
+                            </td>
+
+                            {/* MATA PELAJARAN */}
+                            <td className="p-4 text-slate-600 dark:text-slate-400 whitespace-nowrap">
+                              {formatSubjectTitle(subTitle)}
+                            </td>
+
+                            {/* STATUS */}
+                            <td className="p-4 text-center whitespace-nowrap">
+                              {isDisqualified ? (
+                                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-500 text-white font-black text-[10px] animate-pulse shadow-sm">
+                                  <Ban className="w-3.5 h-3.5" />
+                                  <span>DISKUALIFIKASI</span>
+                                </span>
+                              ) : isOut ? (
+                                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-400 text-slate-950 font-black text-[10px] animate-pulse shadow-sm">
+                                  <AlertTriangle className="w-3.5 h-3.5" />
+                                  <span>DI LUAR FOKUS</span>
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 font-bold text-[10px]">
+                                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                                  <span>Mengerjakan</span>
+                                </span>
+                              )}
+                            </td>
+
+                            {/* PROGRES */}
+                            <td className="p-4 text-center whitespace-nowrap">
+                              <div className="flex items-center justify-center gap-2">
+                                <div className="relative w-9 h-9 flex items-center justify-center flex-shrink-0">
+                                  <svg className="w-full h-full transform -rotate-90" viewBox="0 0 40 40">
+                                    <circle cx="20" cy="20" r={radius} fill="transparent" stroke="#e2e8f0" strokeWidth="4" className="dark:stroke-slate-700" />
+                                    <circle
+                                      cx="20"
+                                      cy="20"
+                                      r={radius}
+                                      fill="transparent"
+                                      stroke={strokeColor}
+                                      strokeWidth="4"
+                                      strokeDasharray={circumference}
+                                      strokeDashoffset={offset}
+                                      strokeLinecap="round"
+                                      className="transition-all duration-500"
+                                    />
+                                  </svg>
+                                  <span className="absolute text-[9px] font-black">{pct}%</span>
+                                </div>
+                                <span className="text-[11px] text-slate-400">
+                                  ({answeredQ}/{totalQ})
+                                </span>
+                              </div>
+                            </td>
+
+                            {/* SISA WAKTU */}
+                            <td className="p-4 text-center font-mono font-bold whitespace-nowrap">
+                              <span className={sSec < 300 ? 'text-rose-600 dark:text-rose-400 animate-pulse' : 'text-slate-700 dark:text-slate-300'}>
+                                {timeStr}
+                              </span>
+                            </td>
+
+                            {/* PELANGGARAN */}
+                            <td className="p-4 text-center whitespace-nowrap">
+                              <span
+                                className={`text-base font-black px-2.5 py-1 rounded-xl ${
+                                  s.violationCount > 0
+                                    ? 'bg-rose-100 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400'
+                                    : 'text-slate-400'
+                                }`}
+                              >
+                                {s.violationCount}x
+                              </span>
+                            </td>
+
+                            {/* AKSI KONTROL PENGAWAS */}
+                            <td className="p-4 text-center whitespace-nowrap">
+                              <div className="flex items-center justify-center gap-2">
+                                {/* TOMBOL BUKA KUNCI (RESET PELANGGARAN) */}
+                                <button
+                                  onClick={() => {
+                                    sendProctorCommand({
+                                      action: 'RESET_VIOLATION',
+                                      studentName: s.studentName,
+                                      subjectId: s.subjectId
+                                    });
+                                    setMonitoringActionToast(`Pelanggaran siswa ${s.studentName} berhasil di-reset menjadi 0 dan ujian telah dibuka kuncinya.`);
+                                  }}
+                                  className={`p-2 rounded-xl transition cursor-pointer flex items-center gap-1 text-xs font-bold ${
+                                    isDisqualified || s.violationCount > 0
+                                      ? 'bg-blue-600 hover:bg-blue-500 text-white shadow-md shadow-blue-600/20'
+                                      : 'bg-slate-100 dark:bg-slate-800 text-slate-400 hover:text-blue-600'
+                                  }`}
+                                  title="Reset Pelanggaran & Buka Kunci Siswa"
+                                >
+                                  <Unlock className="w-3.5 h-3.5" />
+                                  <span className="hidden md:inline">Buka Kunci</span>
+                                </button>
+
+                                {/* TOMBOL SIMPAN PAKSA (FORCE FINISH) */}
+                                <button
+                                  onClick={() => {
+                                    if (confirm(`Apakah Anda yakin ingin menyelesaikan paksa ujian siswa "${s.studentName}"? Jawaban yang tersimpan saat ini akan langsung direkam sebagai nilai akhir siswa.`)) {
+                                      sendProctorCommand({
+                                        action: 'FORCE_FINISH',
+                                        studentName: s.studentName,
+                                        subjectId: s.subjectId
+                                      });
+
+                                      // Buat hasil evaluasi dan simpan ke database
+                                      const matchedSub = (allSubjects || []).find(sub => sub.id === s.subjectId) || subject;
+                                      const evalRes = evaluateFullExam(questions, s.answers || [], matchedSub.scoringRules);
+                                      const forcedResult: ExamResult = {
+                                        id: `res-${Date.now()}`,
+                                        subjectId: s.subjectId,
+                                        subjectTitle: matchedSub.title,
+                                        studentId: s.studentId,
+                                        studentName: s.studentName,
+                                        className: s.className,
+                                        score: evalRes.finalScore,
+                                        totalEarned: evalRes.totalEarned,
+                                        totalMax: evalRes.totalMax,
+                                        answers: s.answers || [],
+                                        submittedAt: new Date().toLocaleString('id-ID'),
+                                        violationCount: s.violationCount,
+                                        details: evalRes.details
+                                      };
+                                      if (onUpdateResult) {
+                                        onUpdateResult(forcedResult);
+                                      }
+                                      setMonitoringActionToast(`Ujian siswa ${s.studentName} telah diselesaikan paksa dan nilainya tersimpan.`);
+                                    }
+                                  }}
+                                  className="p-2 rounded-xl bg-rose-50 dark:bg-rose-950/50 hover:bg-rose-600 hover:text-white text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-900 transition cursor-pointer flex items-center gap-1 text-xs font-bold"
+                                  title="Simpan Paksa & Hentikan Ujian Siswa"
+                                >
+                                  <Save className="w-3.5 h-3.5" />
+                                  <span className="hidden md:inline">Simpan Paksa</span>
+                                </button>
+
+                                {/* TOMBOL RESET SESI */}
+                                <button
+                                  onClick={() => {
+                                    if (confirm(`Apakah Anda yakin ingin mereset sesi ujian siswa "${s.studentName}"? Siswa akan dikeluarkan dari ujian agar dapat mengulang dari awal.`)) {
+                                      sendProctorCommand({
+                                        action: 'RESET_EXAM',
+                                        studentName: s.studentName,
+                                        subjectId: s.subjectId
+                                      });
+                                      setMonitoringActionToast(`Sesi ujian siswa ${s.studentName} berhasil dibersihkan.`);
+                                    }
+                                  }}
+                                  className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-500 hover:text-slate-900 dark:hover:text-slate-100 transition cursor-pointer"
+                                  title="Reset Sesi (Izinkan Masuk Ulang)"
+                                >
+                                  <RotateCcw className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* ============================================================== */}
       {/* 6. TAMPILAN SETTINGS / SUPABASE INTEGRASI                      */}
@@ -2663,18 +3175,20 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
       )}
 
       {/* ============================================================== */}
-      {/* 7. MODAL TAMBAH SOAL BARU                                       */}
+      {/* 7. MODAL TAMBAH & EDIT SOAL                                      */}
       {/* ============================================================== */}
-      {isAddModalOpen && (
+      {(isAddModalOpen || isEditModalOpen) && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6 space-y-5 shadow-2xl animate-in zoom-in-95">
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
               <div className="flex items-center gap-2.5">
                 <div className="w-9 h-9 rounded-xl bg-violet-100 dark:bg-violet-950/60 text-violet-600 dark:text-violet-400 flex items-center justify-center font-bold">
-                  <PlusCircle className="w-5 h-5" />
+                  {editingQuestion ? <Edit3 className="w-5 h-5" /> : <PlusCircle className="w-5 h-5" />}
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-slate-900 dark:text-white">{t.addQuestionTitle}</h3>
+                  <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                    {editingQuestion ? 'Edit Butir Soal' : t.addQuestionTitle}
+                  </h3>
                   <p className="text-xs text-slate-400">
                     Paket: <strong className="text-slate-700 dark:text-slate-300">{formatSubjectTitle(currentBankSubject.title)}</strong> (ID: {selectedBankSubjectId || subject.id})
                   </p>
@@ -2682,7 +3196,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
               </div>
               <button
                 type="button"
-                onClick={onCloseAddModal}
+                onClick={handleCloseQuestionModal}
                 className="p-1 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 cursor-pointer"
               >
                 ✕
@@ -3317,7 +3831,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
               <div className="flex justify-end gap-2 pt-4 border-t border-slate-100 dark:border-slate-800">
                 <button
                   type="button"
-                  onClick={onCloseAddModal}
+                  onClick={handleCloseQuestionModal}
                   className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold cursor-pointer"
                 >
                   {t.cancel}
@@ -3326,7 +3840,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                   type="submit"
                   className="px-5 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-semibold transition cursor-pointer shadow-md shadow-violet-600/20"
                 >
-                  {t.saveQuestionBtn}
+                  {editingQuestion ? 'Simpan Perubahan Soal' : t.saveQuestionBtn}
                 </button>
               </div>
             </form>
@@ -3335,59 +3849,303 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
       )}
 
       {/* ============================================================== */}
-      {/* 8. MODAL DETAIL NILAI SISWA (DOSSIER)                           */}
+      {/* 8. MODAL DETAIL NILAI SISWA (DOSSIER & PENILAIAN MANUAL ESAI)    */}
       {/* ============================================================== */}
       {selectedResult && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-2xl w-full max-h-[85vh] overflow-y-auto p-6 space-y-4 shadow-2xl animate-in zoom-in-95">
-            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
-              <div>
-                <h3 className="font-bold text-slate-900 dark:text-white text-base">{selectedResult.studentName}</h3>
-                <p className="text-xs text-slate-400 dark:text-slate-500">
-                  Kelas: {selectedResult.className} • Selesai: {selectedResult.submittedAt}
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-3xl w-full max-h-[90vh] overflow-y-auto p-5 sm:p-7 space-y-5 shadow-2xl animate-in zoom-in-95">
+            {/* DOSSIER HEADER */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-800 pb-4">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className="px-2.5 py-0.5 rounded-full bg-violet-50 dark:bg-violet-950/60 text-violet-700 dark:text-violet-300 font-bold text-[10px] border border-violet-200/60 dark:border-violet-800/60">
+                    Lembar Rekapan Ujian Siswa
+                  </span>
+                  {selectedResult.violationCount > 0 && (
+                    <span className="px-2.5 py-0.5 rounded-full bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 font-bold text-[10px] border border-rose-200 dark:border-rose-900">
+                      {selectedResult.violationCount}x Pelanggaran
+                    </span>
+                  )}
+                </div>
+                <h3 className="font-extrabold text-slate-900 dark:text-white text-lg sm:text-xl">
+                  {selectedResult.studentName}
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Kelas: <strong className="text-slate-700 dark:text-slate-300">{selectedResult.className}</strong> • Mapel: <strong className="text-slate-700 dark:text-slate-300">{formatSubjectTitle(selectedResult.subjectTitle || dossierSubject.title)}</strong> • Waktu Kumpul: <strong className="text-slate-700 dark:text-slate-300">{selectedResult.submittedAt}</strong>
                 </p>
               </div>
-              <div className="text-right">
-                <span className="text-xs text-slate-400">Skor Akhir</span>
-                <p className="text-3xl font-black text-violet-600 dark:text-violet-400">{selectedResult.score}%</p>
+
+              {/* KOTAK SKOR AKHIR */}
+              <div className="flex items-center sm:flex-col sm:items-end justify-between bg-violet-50 dark:bg-violet-950/50 border border-violet-200/80 dark:border-violet-800/80 p-3.5 rounded-2xl min-w-[140px]">
+                <span className="text-[11px] font-bold text-violet-600 dark:text-violet-300 uppercase tracking-wider">
+                  Skor Akhir
+                </span>
+                <p className="text-3xl font-black text-violet-700 dark:text-violet-300">
+                  {liveDossierEval ? liveDossierEval.finalScore : selectedResult.score}%
+                </p>
+                <span className="text-[10px] text-slate-500 font-medium">
+                  Poin: {liveDossierEval ? liveDossierEval.totalEarned : selectedResult.totalEarned} / {liveDossierEval ? liveDossierEval.totalMax : selectedResult.totalMax}
+                </span>
               </div>
             </div>
 
-            <div className="space-y-3 pt-2">
-              {(selectedResult.details || []).map((d, dIdx) => (
-                <div
-                  key={dIdx}
-                  className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/80 text-xs space-y-1.5"
-                >
-                  <div className="flex items-center justify-between font-semibold">
-                    <span className="text-violet-600 dark:text-violet-400">Soal #{dIdx + 1} ({d.type})</span>
-                    <span className={d.earnedPoints === d.maxPoints ? 'text-emerald-600 dark:text-emerald-400 font-bold' : d.earnedPoints > 0 ? 'text-amber-600 dark:text-amber-400 font-bold' : 'text-rose-600 dark:text-rose-400 font-bold'}>
-                      Poin: {d.earnedPoints} / {d.maxPoints}
-                    </span>
+            {/* NOTIFIKASI MAX POINTS WARNING */}
+            {essayMaxNotice && (
+              <div className="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 rounded-xl text-xs font-semibold flex items-center justify-between animate-in fade-in">
+                <span>{essayMaxNotice}</span>
+                <button onClick={() => setEssayMaxNotice(null)} className="text-rose-500 font-bold ml-2">✕</button>
+              </div>
+            )}
+
+            {/* NOTIFIKASI SUKSES SIMPAN NILAI */}
+            {essaySavedNotice && (
+              <div className="p-3 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 rounded-xl text-xs font-semibold flex items-center gap-2 animate-in fade-in">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                <span>Nilai uraian berhasil disimpan! Skor akhir siswa telah diperbarui ke sistem dan database.</span>
+              </div>
+            )}
+
+            {/* DAFTAR BUTIR SOAL & JAWABAN SISWA */}
+            <div className="space-y-4 pt-1">
+              <div className="flex items-center justify-between pb-1">
+                <h4 className="font-bold text-xs uppercase tracking-wider text-slate-500">
+                  Rincian Jawaban Siswa ({dossierQuestions.length} Butir Soal)
+                </h4>
+                <span className="text-[11px] text-slate-400">
+                  Periksa kunci & masukkan nilai esai secara manual
+                </span>
+              </div>
+
+              {dossierQuestions.map((q, qIdx) => {
+                const maxPoints = (dossierSubject.scoringRules as any)?.[q.type] || 1;
+                const studentAnswerItem = (selectedResult.answers || []).find(a => a.questionId === q.id);
+                const rawStudentAns = studentAnswerItem ? studentAnswerItem.answer : null;
+                const isEssay = q.type === 'Esai';
+
+                let earned = 0;
+                if (isEssay) {
+                  earned = Math.min(manualEssayScores[q.id] || 0, maxPoints);
+                } else {
+                  earned = calculateSingleQuestionScore(q, rawStudentAns, maxPoints);
+                }
+
+                const isFull = earned === maxPoints;
+                const isPartial = earned > 0 && earned < maxPoints;
+
+                return (
+                  <div
+                    key={q.id || qIdx}
+                    className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700/80 text-xs space-y-2.5"
+                  >
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <div className="flex items-center gap-2">
+                        <span className="font-extrabold text-violet-600 dark:text-violet-400 text-sm">
+                          Soal #{qIdx + 1}
+                        </span>
+                        <span className="px-2 py-0.5 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-semibold text-[10px]">
+                          {q.type}
+                        </span>
+                        <span className="px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 font-bold text-[10px] border border-slate-200 dark:border-slate-700">
+                          Bobot Maksimal: {maxPoints} Poin
+                        </span>
+                      </div>
+
+                      {/* BADGE POIN DIDAPAT */}
+                      <div>
+                        {isEssay ? (
+                          <span className="px-2.5 py-0.5 rounded-full bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 font-bold text-[11px] border border-amber-200 dark:border-amber-800">
+                            Diperoleh: {earned} / {maxPoints} Poin
+                          </span>
+                        ) : (
+                          <span
+                            className={`px-2.5 py-0.5 rounded-full font-bold text-[11px] border ${
+                              isFull
+                                ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
+                                : isPartial
+                                ? 'bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800'
+                                : 'bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-900'
+                            }`}
+                          >
+                            Poin: {earned} / {maxPoints}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* TEKS SOAL */}
+                    <p className="text-slate-800 dark:text-slate-200 font-medium leading-relaxed whitespace-pre-wrap">
+                      {q.questionText}
+                    </p>
+
+                    {/* MEDIA URL / GAMBAR SOAL JIKA ADA */}
+                    {q.mediaUrl && (
+                      <div className="pt-1">
+                        <img
+                          src={q.mediaUrl}
+                          alt="Media Soal"
+                          className="max-h-48 rounded-xl border border-slate-200 dark:border-slate-700 object-contain block bg-white dark:bg-slate-950 p-1"
+                        />
+                      </div>
+                    )}
+
+                    {/* REVIEW JAWABAN SISWA VS KUNCI GURU */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                      {/* JAWABAN SISWA */}
+                      <div className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-1">
+                        <span className="text-[10px] font-bold uppercase text-slate-400 block">
+                          Jawaban Siswa:
+                        </span>
+                        <div className="text-slate-800 dark:text-slate-100 font-semibold break-words">
+                          {rawStudentAns === null || rawStudentAns === undefined || rawStudentAns === ''
+                            ? <span className="text-rose-500 italic">(Tidak dijawab)</span>
+                            : typeof rawStudentAns === 'object'
+                            ? JSON.stringify(rawStudentAns)
+                            : String(rawStudentAns)}
+                        </div>
+                      </div>
+
+                      {/* KUNCI REFERENSI GURU */}
+                      <div className="p-3 rounded-xl bg-emerald-50/60 dark:bg-emerald-950/30 border border-emerald-200/80 dark:border-emerald-800/60 space-y-1">
+                        <span className="text-[10px] font-bold uppercase text-emerald-600 dark:text-emerald-400 block">
+                          {isEssay ? 'Kunci / Rubrik Referensi Guru:' : 'Kunci Jawaban Benar:'}
+                        </span>
+                        <div className="text-emerald-950 dark:text-emerald-200 font-semibold break-words">
+                          {q.answer === null || q.answer === undefined
+                            ? <span className="italic text-slate-400">(Belum ditentukan kunci)</span>
+                            : typeof q.answer === 'object'
+                            ? JSON.stringify(q.answer)
+                            : String(q.answer)}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* KHUSUS SOAL ESAI: INPUT PENILAIAN MANUAL GURU */}
+                    {isEssay && (
+                      <div className="p-3.5 rounded-xl bg-amber-50/80 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/80 mt-2 space-y-2">
+                        <div className="flex items-center gap-2 text-amber-800 dark:text-amber-300 font-bold text-xs">
+                          <Edit3 className="w-4 h-4 text-amber-600" />
+                          <span>Penilaian Manual Uraian (Wajib Guru Input Bobot yang Didapat Siswa):</span>
+                        </div>
+                        <p className="text-[11px] text-amber-700 dark:text-amber-400">
+                          Kunci jawaban di atas hanya sebagai referensi panduan. Masukkan nilai yang diperoleh siswa (tidak boleh lebih dari {maxPoints} Poin).
+                        </p>
+                        <div className="flex items-center gap-3 pt-1">
+                          <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                            Nilai Esai:
+                          </label>
+                          <input
+                            type="number"
+                            min={0}
+                            max={maxPoints}
+                            step="0.5"
+                            value={manualEssayScores[q.id] ?? ''}
+                            placeholder={`0 - ${maxPoints}`}
+                            onChange={(e) => {
+                              const raw = e.target.value;
+                              if (raw === '') {
+                                const next = { ...manualEssayScores };
+                                delete next[q.id];
+                                setManualEssayScores(next);
+                                return;
+                              }
+                              let val = parseFloat(raw);
+                              if (isNaN(val)) val = 0;
+                              if (val > maxPoints) {
+                                val = maxPoints;
+                                setEssayMaxNotice(`Nilai esai pada soal #${qIdx + 1} tidak boleh melebihi bobot maksimal (${maxPoints} Poin). Nilai otomatis disesuaikan menjadi ${maxPoints}.`);
+                              } else {
+                                setEssayMaxNotice(null);
+                              }
+                              if (val < 0) val = 0;
+                              setManualEssayScores(prev => ({ ...prev, [q.id]: val }));
+                            }}
+                            className="w-28 p-2 rounded-xl bg-white dark:bg-slate-900 border border-amber-300 dark:border-amber-700 text-sm font-black text-center text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+                          />
+                          <span className="text-xs font-semibold text-slate-500">
+                            / Maksimal {maxPoints} Poin
+                          </span>
+                        </div>
+                      </div>
+                    )}
                   </div>
-                  <div className="grid grid-cols-2 gap-2 text-slate-600 dark:text-slate-400 pt-1">
-                    <div>Jawaban Siswa: <strong className="text-slate-900 dark:text-slate-100">{JSON.stringify(d.studentAnswer)}</strong></div>
-                    <div>Kunci: <strong className="text-emerald-600 dark:text-emerald-400">{JSON.stringify(d.correctAnswer)}</strong></div>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
 
-            <div className="flex justify-between items-center pt-2">
-              <button
-                onClick={() => onOpenCertificates?.(selectedResult)}
-                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-xs font-semibold cursor-pointer"
-              >
-                <Award className="w-3.5 h-3.5" />
-                <span>Cetak Sertifikat Siswa Ini</span>
-              </button>
+            {/* DOSSIER FOOTER ACTIONS */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">
+              <div className="flex items-center gap-2 flex-wrap">
+                {/* TOMBOL SIMPAN NILAI URAIAN */}
+                <button
+                  onClick={() => {
+                    if (!selectedResult || !liveDossierEval) return;
+                    const updated: ExamResult = {
+                      ...selectedResult,
+                      score: liveDossierEval.finalScore,
+                      totalEarned: liveDossierEval.totalEarned,
+                      totalMax: liveDossierEval.totalMax,
+                      essayScores: manualEssayScores,
+                      details: liveDossierEval.details
+                    };
+                    setSelectedResult(updated);
+                    if (onUpdateResult) {
+                      onUpdateResult(updated);
+                    }
+                    setEssaySavedNotice(true);
+                    setTimeout(() => setEssaySavedNotice(false), 3500);
+                  }}
+                  className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-md shadow-emerald-600/20 transition cursor-pointer"
+                >
+                  <Save className="w-4 h-4" />
+                  <span>Simpan Nilai Uraian & Perbarui Skor</span>
+                </button>
 
-              <button
-                onClick={() => setSelectedResult(null)}
-                className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold cursor-pointer"
-              >
-                {t.close}
-              </button>
+                {/* TOMBOL CETAK SERTIFIKAT */}
+                <button
+                  onClick={() => onOpenCertificates?.(selectedResult)}
+                  className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-xs font-semibold cursor-pointer shadow-xs transition"
+                >
+                  <Award className="w-3.5 h-3.5" />
+                  <span>Cetak Sertifikat</span>
+                </button>
+
+                {/* TOMBOL CETAK BERKAS */}
+                <button
+                  onClick={() => window.print()}
+                  className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-semibold cursor-pointer transition"
+                >
+                  <Printer className="w-3.5 h-3.5" />
+                  <span>Cetak Dossier</span>
+                </button>
+              </div>
+
+              <div className="flex items-center gap-2">
+                {/* TOMBOL RESET UJIAN SISWA (UJIAN ULANG) */}
+                <button
+                  onClick={() => {
+                    if (!selectedResult) return;
+                    if (confirm(`Apakah Anda yakin ingin mereset ujian siswa "${selectedResult.studentName}"? Seluruh lembar jawaban dan nilai akan dihapus, sehingga siswa dapat login dan mengerjakan ulang ujian ini.`)) {
+                      if (onDeleteResult) {
+                        onDeleteResult(selectedResult.id, selectedResult.subjectId);
+                      }
+                      setSelectedResult(null);
+                    }
+                  }}
+                  className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-600 hover:text-white text-rose-600 dark:text-rose-400 text-xs font-bold border border-rose-200 dark:border-rose-900 transition cursor-pointer"
+                  title="Hapus nilai agar siswa dapat ujian kembali"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span>Reset Ujian (Izinkan Ulang)</span>
+                </button>
+
+                {/* TOMBOL TUTUP */}
+                <button
+                  onClick={() => setSelectedResult(null)}
+                  className="px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold cursor-pointer"
+                >
+                  {t.close}
+                </button>
+              </div>
             </div>
           </div>
         </div>

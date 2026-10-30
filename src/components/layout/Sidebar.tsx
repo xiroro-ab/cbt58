@@ -17,7 +17,8 @@ import {
   ChevronRight,
   Sparkles,
   LogOut,
-  Printer
+  Printer,
+  Radio
 } from 'lucide-react';
 
 export type NavItem =
@@ -25,6 +26,7 @@ export type NavItem =
   | 'exams'
   | 'questions'
   | 'students'
+  | 'monitoring'
   | 'results'
   | 'statistics'
   | 'documents'
@@ -186,6 +188,23 @@ export const Sidebar: React.FC<SidebarProps> = ({
             {t.managementGroup}
           </span>
           <div className="space-y-0.5">
+            <button
+              onClick={() => onSelectNav('monitoring')}
+              className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl font-medium transition cursor-pointer ${
+                currentNav === 'monitoring'
+                  ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 font-semibold'
+                  : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-slate-100'
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <Radio className="w-4 h-4 text-amber-500 animate-pulse" />
+                <span>Live Monitoring</span>
+              </div>
+              <span className="text-[9px] px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/60 text-amber-700 dark:text-amber-300 font-black tracking-wider animate-pulse">
+                LIVE
+              </span>
+            </button>
+
             <button
               onClick={() => onSelectNav('results')}
               className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl font-medium transition ${

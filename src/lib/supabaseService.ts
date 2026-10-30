@@ -171,6 +171,42 @@ export async function insertQuestion(q: Question): Promise<boolean> {
 }
 
 /**
+ * Memperbarui butir soal yang sudah ada di Supabase & fail-safe localStorage
+ */
+export async function updateQuestion(q: Question): Promise<boolean> {
+  if (typeof window !== 'undefined' && q.subjectId) {
+    try {
+      const stored = localStorage.getItem(`cbt_questions_${q.subjectId}`);
+      const list: Question[] = stored ? JSON.parse(stored) : [];
+      const updated = list.map(item => item.id === q.id ? q : item);
+      localStorage.setItem(`cbt_questions_${q.subjectId}`, JSON.stringify(updated));
+    } catch (e) {
+      console.warn('Gagal update backup soal di localStorage:', e);
+    }
+  }
+
+  try {
+    const { error } = await supabase.from('questions').update({
+      type: q.type,
+      question_text: q.questionText,
+      media_url: q.mediaUrl || null,
+      options: q.options,
+      answer: q.answer,
+      order_index: q.orderIndex
+    }).eq('id', q.id);
+
+    if (error) {
+      console.warn('Catatan updateQuestion ke Supabase (menggunakan backup lokal):', error.message);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error('Exception updateQuestion:', err);
+    return false;
+  }
+}
+
+/**
  * Menghapus soal dari Supabase & fail-safe localStorage
  */
 export async function removeQuestion(qId: string, subjectId?: string): Promise<boolean> {
@@ -220,6 +256,67 @@ export async function saveExamResult(result: ExamResult): Promise<boolean> {
     return true;
   } catch (err) {
     console.error('Exception saveExamResult:', err);
+    return false;
+  }
+}
+
+/**
+ * Memperbarui nilai dan koreksi uraian hasil ujian siswa di Supabase & localStorage
+ */
+export async function updateExamResult(result: ExamResult): Promise<boolean> {
+  if (typeof window !== 'undefined' && result.subjectId) {
+    try {
+      const stored = localStorage.getItem(`cbt_results_${result.subjectId}`);
+      if (stored) {
+        const list: ExamResult[] = JSON.parse(stored);
+        const updated = list.map(r => r.id === result.id ? result : r);
+        localStorage.setItem(`cbt_results_${result.subjectId}`, JSON.stringify(updated));
+      }
+    } catch {}
+  }
+
+  try {
+    const { error } = await supabase.from('exam_results').update({
+      score: result.score,
+      total_earned: result.totalEarned,
+      total_max: result.totalMax,
+      answers: result.answers
+    }).eq('id', result.id);
+
+    if (error) {
+      console.warn('Gagal update hasil ujian di Supabase:', error.message);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error('Exception updateExamResult:', err);
+    return false;
+  }
+}
+
+/**
+ * Menghapus/mereset hasil ujian siswa agar siswa dapat login dan mengerjakan ulang
+ */
+export async function deleteExamResult(resultId: string, subjectId?: string): Promise<boolean> {
+  if (typeof window !== 'undefined' && subjectId) {
+    try {
+      const stored = localStorage.getItem(`cbt_results_${subjectId}`);
+      if (stored) {
+        const list: ExamResult[] = JSON.parse(stored);
+        localStorage.setItem(`cbt_results_${subjectId}`, JSON.stringify(list.filter(r => r.id !== resultId)));
+      }
+    } catch {}
+  }
+
+  try {
+    const { error } = await supabase.from('exam_results').delete().eq('id', resultId);
+    if (error) {
+      console.warn('Gagal delete exam result di Supabase:', error.message);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error('Exception deleteExamResult:', err);
     return false;
   }
 }

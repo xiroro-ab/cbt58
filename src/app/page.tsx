@@ -17,8 +17,11 @@ import {
   fetchAllSubjects,
   fetchQuestionsBySubject,
   insertQuestion,
+  updateQuestion,
   removeQuestion,
   saveExamResult,
+  updateExamResult,
+  deleteExamResult,
   fetchExamResults,
   updateSubjectInSupabase,
   insertSubject,
@@ -441,6 +444,33 @@ export default function Home() {
     }
   };
 
+  const handleUpdateQuestion = async (updatedQ: Question) => {
+    setQuestions(prev => prev.map(q => q.id === updatedQ.id ? updatedQ : q));
+    try {
+      await updateQuestion(updatedQ);
+    } catch (err) {
+      console.warn('Supabase update question fallback to local state:', err);
+    }
+  };
+
+  const handleUpdateResult = async (updatedResult: ExamResult) => {
+    setResults(prev => prev.map(r => r.id === updatedResult.id ? updatedResult : r));
+    try {
+      await updateExamResult(updatedResult);
+    } catch (err) {
+      console.warn('Supabase update result fallback to local state:', err);
+    }
+  };
+
+  const handleDeleteResult = async (resultId: string, subjectId?: string) => {
+    setResults(prev => prev.filter(r => r.id !== resultId));
+    try {
+      await deleteExamResult(resultId, subjectId || subject?.id);
+    } catch (err) {
+      console.warn('Supabase delete result fallback to local state:', err);
+    }
+  };
+
   // Student Roster CRUD Handlers
   const handleAddStudent = async (newStudent: Student) => {
     setStudents(prev => [newStudent, ...prev]);
@@ -682,6 +712,34 @@ export default function Home() {
         language === 'id'
           ? `Token "${inputToken}" adalah untuk ujian ${matchedSub.title} (Rombel: ${matchedSub.className}). Kelas Anda (${selectedStudentClass}) tidak terdaftar untuk ujian ini.`
           : `Token "${inputToken}" is for ${matchedSub.title} (${matchedSub.className}). Your class (${selectedStudentClass}) is not scheduled for this exam.`
+      );
+      return;
+    }
+
+    // 3. Validasi Anti Re-Login (Cegah Siswa Mengerjakan Ulang Tanpa Izin Pengawas)
+    const normalizedName = studentName.toLowerCase().trim();
+    const alreadySubmittedInState = results.find(
+      r => r.subjectId === matchedSub.id && r.studentName.toLowerCase().trim() === normalizedName
+    );
+
+    let alreadySubmittedInStorage: ExamResult | null = null;
+    if (typeof window !== 'undefined') {
+      try {
+        const stored = localStorage.getItem(`cbt_results_${matchedSub.id}`);
+        if (stored) {
+          const list: ExamResult[] = JSON.parse(stored);
+          const found = list.find(r => r.studentName.toLowerCase().trim() === normalizedName);
+          if (found) alreadySubmittedInStorage = found;
+        }
+      } catch {}
+    }
+
+    const previousSubmission = alreadySubmittedInState || alreadySubmittedInStorage;
+    if (previousSubmission) {
+      setLoginError(
+        language === 'id'
+          ? `AKSES DITOLAK (ANTI-RELOGIN): Siswa "${studentName}" sudah pernah menyelesaikan dan mengumpulkan ujian "${matchedSub.title}" pada ${previousSubmission.submittedAt} (Skor: ${previousSubmission.score}%). Anda tidak diperbolehkan mengerjakan ulang kecuali lembar ujian Anda di-reset oleh Guru Pengawas.`
+          : `ACCESS DENIED: Student "${studentName}" has already completed and submitted "${matchedSub.title}" on ${previousSubmission.submittedAt}. Retakes are not allowed unless reset by your proctor.`
       );
       return;
     }
@@ -1179,6 +1237,7 @@ export default function Home() {
             students={students}
             currentTeacher={currentTeacher}
             allSubjects={subjects}
+            onSelectNav={setCurrentNav}
             onSelectSubject={async (selectedSub) => {
               setSubject(selectedSub);
               if (selectedSub.className) {
@@ -1202,7 +1261,10 @@ export default function Home() {
             onAddSubject={handleAddSubject}
             onDeleteSubject={handleDeleteSubject}
             onAddQuestion={handleAddQuestion}
+            onUpdateQuestion={handleUpdateQuestion}
             onDeleteQuestion={handleDeleteQuestion}
+            onUpdateResult={handleUpdateResult}
+            onDeleteResult={handleDeleteResult}
             onAddStudent={handleAddStudent}
             onUpdateStudent={handleUpdateStudent}
             onDeleteStudent={handleDeleteStudent}

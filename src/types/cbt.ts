@@ -67,6 +67,10 @@ export interface ExamSession {
   violationCount: number;
   answers: StudentAnswerItem[];
   status: 'ongoing' | 'completed' | 'blocked';
+  remainingSeconds?: number;
+  isFocus?: boolean;
+  totalQuestions?: number;
+  score?: number;
 }
 
 export interface Student {

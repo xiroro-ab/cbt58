@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Subject, Question, StudentAnswerItem, QuestionAnswer } from '@/types/cbt';
 import { QuestionRenderer } from './QuestionRenderer';
 import { evaluateFullExam } from '@/lib/scoringEngine';
@@ -12,6 +12,11 @@ import {
   subscribeToMessages
 } from '@/lib/supabaseService';
 import {
+  reportStudentSession,
+  removeStudentSession,
+  subscribeToStudentCommands
+} from '@/lib/liveMonitoringService';
+import {
   Clock,
   AlertTriangle,
   ChevronLeft,
@@ -20,13 +25,17 @@ import {
   HelpCircle,
   ShieldAlert,
   Award,
-  RotateCcw,
   Sun,
   Moon,
   LifeBuoy,
   Megaphone,
   CheckCircle2,
-  X
+  X,
+  Maximize2,
+  Ban,
+  Lock,
+  Unlock,
+  Check
 } from 'lucide-react';
 
 interface ExamScreenProps {
@@ -47,17 +56,24 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
   onExit
 }) => {
   const { theme, toggleTheme } = useTheme();
-  const { language, t } = useLanguage();
+  const { language } = useLanguage();
   const [currentIndex, setCurrentIndex] = useState(0);
   const [answers, setAnswers] = useState<StudentAnswerItem[]>(() =>
     questions.map(q => ({ questionId: q.id, answer: null, isDoubtful: false }))
   );
   const [secondsRemaining, setSecondsRemaining] = useState(subject.durationMinutes * 60);
   const [violationCount, setViolationCount] = useState(0);
+  const [isLocked, setIsLocked] = useState(false);
+  const [lastViolationReason, setLastViolationReason] = useState('');
   const [showWarningModal, setShowWarningModal] = useState(false);
+  const [warningCountdown, setWarningCountdown] = useState(5);
   const [showConfirmSubmit, setShowConfirmSubmit] = useState(false);
   const [isExamCompleted, setIsExamCompleted] = useState(false);
   const [completedResult, setCompletedResult] = useState<any>(null);
+  const [isFocus, setIsFocus] = useState(true);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [showFullscreenPrompt, setShowFullscreenPrompt] = useState(false);
+  const [unlockedNotice, setUnlockedNotice] = useState(false);
 
   // State Lapor Kendala Siswa (Opsi A)
   const [showReportModal, setShowReportModal] = useState(false);
@@ -69,12 +85,56 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
   // State Pengumuman Broadcast dari Pengawas
   const [broadcastNotice, setBroadcastNotice] = useState<string | null>(null);
 
+  const startTimeRef = useRef(Date.now());
   const violationCountRef = useRef(violationCount);
   violationCountRef.current = violationCount;
 
-  // 1. TIMER
+  const isLockedRef = useRef(isLocked);
+  isLockedRef.current = isLocked;
+
+  const isCompletedRef = useRef(isExamCompleted);
+  isCompletedRef.current = isExamCompleted;
+
+  const answersRef = useRef(answers);
+  answersRef.current = answers;
+
+  const secondsRemainingRef = useRef(secondsRemaining);
+  secondsRemainingRef.current = secondsRemaining;
+
+  const isFocusRef = useRef(isFocus);
+  isFocusRef.current = isFocus;
+
+  // REQUEST FULLSCREEN HELPER
+  const requestFullscreenMode = useCallback(() => {
+    try {
+      const el = document.documentElement as any;
+      if (el.requestFullscreen) {
+        el.requestFullscreen().then(() => setIsFullscreen(true)).catch(() => setShowFullscreenPrompt(true));
+      } else if (el.webkitRequestFullscreen) {
+        el.webkitRequestFullscreen();
+        setIsFullscreen(true);
+      } else if (el.msRequestFullscreen) {
+        el.msRequestFullscreen();
+        setIsFullscreen(true);
+      }
+    } catch {
+      setShowFullscreenPrompt(true);
+    }
+  }, []);
+
+  // AUTO FULLSCREEN ON START
   useEffect(() => {
-    if (isExamCompleted) return;
+    requestFullscreenMode();
+    const timer = setTimeout(() => {
+      const isFs = Boolean(document.fullscreenElement || (document as any).webkitFullscreenElement);
+      if (!isFs) setShowFullscreenPrompt(true);
+    }, 1200);
+    return () => clearTimeout(timer);
+  }, [requestFullscreenMode]);
+
+  // 1. TIMER COUNTDOWN
+  useEffect(() => {
+    if (isExamCompleted || isLocked) return;
     const interval = setInterval(() => {
       setSecondsRemaining(prev => {
         if (prev <= 1) {
@@ -86,45 +146,244 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
       });
     }, 1000);
     return () => clearInterval(interval);
-  }, [isExamCompleted]);
+  }, [isExamCompleted, isLocked]);
 
-  // 2. ANTI-CHEAT REALTIME MONITORING & SUPABASE EVENT LOGGING
+  // 2. LIVE MONITORING HEARTBEAT & BROADCAST TO PROCTOR (EVERY 2 SECONDS)
   useEffect(() => {
     if (isExamCompleted) return;
 
-    const handleVisibilityChange = async () => {
-      if (document.hidden) {
-        const nextCount = violationCountRef.current + 1;
-        setViolationCount(nextCount);
+    const sendHeartbeat = () => {
+      const answered = answersRef.current.filter(a => a.answer !== null && a.answer !== '').length;
+      reportStudentSession({
+        id: `session_${studentName}_${subject.id}`,
+        subjectId: subject.id,
+        studentId: studentName,
+        studentName,
+        className: studentClass || subject.className,
+        startTime: startTimeRef.current,
+        lastHeartbeat: Date.now(),
+        progressCount: answered,
+        totalQuestions: questions.length,
+        violationCount: violationCountRef.current,
+        answers: answersRef.current,
+        status: isLockedRef.current ? 'blocked' : 'ongoing',
+        isFocus: isFocusRef.current,
+        remainingSeconds: secondsRemainingRef.current
+      });
+    };
 
-        // Catat otomatis ke tabel exam_notifications di Supabase
-        try {
-          await insertNotification({
-            subjectId: subject.id,
-            studentName,
-            type: nextCount >= subject.violationLimit ? 'autolock' : 'violation',
-            title: nextCount >= subject.violationLimit ? 'Ujian Siswa Terkunci' : 'Peringatan Anti-Cheat',
-            message: `Siswa ${studentName} (${subject.className}) terdeteksi berpindah tab/aplikasi (Pelanggaran ke-${nextCount}).`
-          });
-        } catch (err) {
-          console.warn('Gagal log notifikasi pelanggaran:', err);
-        }
+    sendHeartbeat();
+    const interval = setInterval(sendHeartbeat, 2500);
 
-        if (nextCount >= subject.violationLimit) {
-          handleFinalSubmit('Ujian Dihentikan: Melebihi Batas Pelanggaran');
-        } else {
-          setShowWarningModal(true);
+    return () => {
+      clearInterval(interval);
+    };
+  }, [isExamCompleted, subject.id, subject.className, studentName, studentClass, questions.length]);
+
+  // 3. LISTEN TO PROCTOR COMMANDS (Buka Kunci, Paksa Selesai, Reset)
+  useEffect(() => {
+    if (isExamCompleted) return;
+
+    const unsubscribe = subscribeToStudentCommands(studentName, subject.id, (cmd) => {
+      if (cmd.action === 'RESET_VIOLATION') {
+        // Pengawas membuka kunci & me-reset pelanggaran
+        setViolationCount(0);
+        setIsLocked(false);
+        setShowWarningModal(false);
+        setUnlockedNotice(true);
+        setTimeout(() => setUnlockedNotice(false), 4000);
+        requestFullscreenMode();
+      } else if (cmd.action === 'FORCE_FINISH') {
+        // Pengawas menyelesaikan ujian secara paksa
+        handleFinalSubmit('Diselesaikan Paksa oleh Pengawas');
+      } else if (cmd.action === 'RESET_EXAM') {
+        // Pengawas mereset ujian siswa (bersihkan dan keluar)
+        removeStudentSession(studentName, subject.id);
+        onExit();
+      }
+    });
+
+    return () => unsubscribe();
+  }, [isExamCompleted, studentName, subject.id, onExit, requestFullscreenMode]);
+
+  // 4. ANTI-CHEAT ENGINE & VIOLATION HANDLER
+  const handleViolation = useCallback(async (reason: string) => {
+    if (isCompletedRef.current || isLockedRef.current) return;
+
+    const nextCount = violationCountRef.current + 1;
+    setViolationCount(nextCount);
+    setLastViolationReason(reason);
+
+    const limit = subject.violationLimit || 3;
+
+    // Catat notifikasi otomatis ke Supabase
+    try {
+      await insertNotification({
+        subjectId: subject.id,
+        studentName,
+        type: nextCount >= limit ? 'autolock' : 'violation',
+        title: nextCount >= limit ? 'Ujian Siswa Terkunci' : 'Peringatan Anti-Cheat',
+        message: `Siswa ${studentName} (${subject.className}): ${reason} (Pelanggaran ke-${nextCount} dari batas ${limit}).`
+      });
+    } catch {}
+
+    // Segera laporkan sesi dengan status terbaru
+    const answered = answersRef.current.filter(a => a.answer !== null && a.answer !== '').length;
+    reportStudentSession({
+      id: `session_${studentName}_${subject.id}`,
+      subjectId: subject.id,
+      studentId: studentName,
+      studentName,
+      className: studentClass || subject.className,
+      startTime: startTimeRef.current,
+      lastHeartbeat: Date.now(),
+      progressCount: answered,
+      totalQuestions: questions.length,
+      violationCount: nextCount,
+      answers: answersRef.current,
+      status: nextCount >= limit ? 'blocked' : 'ongoing',
+      isFocus: false,
+      remainingSeconds: secondsRemainingRef.current
+    });
+
+    if (nextCount >= limit) {
+      // BEKUKAN & KUNCI UJIAN (Layar Merah Mati)
+      setIsLocked(true);
+      setShowWarningModal(false);
+    } else {
+      // Tampilkan Modal Peringatan dengan Countdown 5 Detik
+      setShowWarningModal(true);
+      setWarningCountdown(5);
+    }
+  }, [subject.id, subject.className, subject.violationLimit, studentName, studentClass, questions.length]);
+
+  // COUNTDOWN EFFECT UNTUK MODAL PERINGATAN (5 DETIK SEPERTI INDEX.HTML)
+  useEffect(() => {
+    if (!showWarningModal || isLocked) return;
+
+    const timer = setInterval(() => {
+      setWarningCountdown(prev => {
+        if (prev <= 1) {
+          clearInterval(timer);
+          setShowWarningModal(false);
+          return 5;
         }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [showWarningModal, isLocked]);
+
+  // 5. EVENT LISTENERS ANTI-CHEAT (FULLSCREEN, VISIBILITY, BLUR, KEYBOARD, CONTEXTMENU, COPY/PASTE)
+  useEffect(() => {
+    if (isExamCompleted) return;
+
+    // A. Fullscreen Change
+    const handleFullscreenChange = () => {
+      const isFs = Boolean(document.fullscreenElement || (document as any).webkitFullscreenElement);
+      setIsFullscreen(isFs);
+      if (!isFs && !isCompletedRef.current && !isLockedRef.current) {
+        handleViolation('Keluar dari mode layar penuh (Fullscreen).');
       }
     };
 
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    // B. Visibility Change (Ganti tab / minimize browser)
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        setIsFocus(false);
+        handleViolation('Berpindah tab atau menyembunyikan browser.');
+      } else {
+        setIsFocus(true);
+      }
     };
-  }, [isExamCompleted, subject.violationLimit, subject.id, studentName]);
 
-  // 3. LISTEN FOR PROCTOR BROADCAST MESSAGES
+    // C. Blur & Focus Window (Google Assistant overlay / Split Screen / Notifikasi)
+    const handleBlur = () => {
+      setIsFocus(false);
+      if (!isCompletedRef.current && !isLockedRef.current) {
+        handleViolation('Layar ujian kehilangan fokus (Split Screen / Google Assistant / Notifikasi).');
+      }
+    };
+
+    const handleFocus = () => {
+      setIsFocus(true);
+    };
+
+    // D. Blokir Klik Kanan (Context Menu)
+    const handleContextMenu = (e: MouseEvent) => {
+      e.preventDefault();
+      handleViolation('Mencoba klik kanan pada lembar ujian.');
+    };
+
+    // E. Blokir Copy, Cut, Paste
+    const handleCopy = (e: ClipboardEvent) => {
+      e.preventDefault();
+      handleViolation('Mencoba menyalin (copy) konten soal.');
+    };
+
+    const handleCut = (e: ClipboardEvent) => {
+      e.preventDefault();
+      handleViolation('Mencoba memotong (cut) teks lembar ujian.');
+    };
+
+    const handlePaste = (e: ClipboardEvent) => {
+      e.preventDefault();
+      handleViolation('Mencoba menempelkan (paste) teks ke lembar jawaban.');
+    };
+
+    // F. Blokir Tombol Pintas Keyboard (F12, DevTools, Ctrl+C/V/U/P/S, Alt+Tab)
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const key = e.key.toLowerCase();
+
+      // F12 or Inspect Element
+      if (e.key === 'F12' || (e.ctrlKey && e.shiftKey && ['i', 'j', 'c'].includes(key))) {
+        e.preventDefault();
+        handleViolation('Mencoba membuka Developer Tools (F12 / Inspect).');
+        return;
+      }
+
+      // Ctrl + U (Source code), Ctrl + P (Print), Ctrl + S (Save)
+      if (e.ctrlKey && ['u', 'p', 's'].includes(key)) {
+        e.preventDefault();
+        handleViolation(`Mencoba menggunakan tombol pintas Ctrl+${key.toUpperCase()}.`);
+        return;
+      }
+
+      // Ctrl + C, Ctrl + V, Ctrl + X
+      if (e.ctrlKey && ['c', 'v', 'x'].includes(key)) {
+        e.preventDefault();
+        handleViolation(`Mencoba menggunakan tombol pintas salin/tempel (Ctrl+${key.toUpperCase()}).`);
+        return;
+      }
+    };
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('blur', handleBlur);
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('contextmenu', handleContextMenu);
+    document.addEventListener('copy', handleCopy);
+    document.addEventListener('cut', handleCut);
+    document.addEventListener('paste', handlePaste);
+    document.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+      document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('blur', handleBlur);
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('contextmenu', handleContextMenu);
+      document.removeEventListener('copy', handleCopy);
+      document.removeEventListener('cut', handleCut);
+      document.removeEventListener('paste', handlePaste);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isExamCompleted, handleViolation]);
+
+  // 6. LISTEN FOR PROCTOR BROADCAST MESSAGES
   useEffect(() => {
     if (isExamCompleted || !subject.id) return;
     const unsub = subscribeToMessages(msg => {
@@ -192,6 +451,7 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
     setShowConfirmSubmit(false);
     setShowWarningModal(false);
 
+    // Evaluasi lembar ujian lengkap
     const evaluation = evaluateFullExam(questions, answers, subject.scoringRules);
 
     const currentClass = studentClass || subject.className;
@@ -209,20 +469,30 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
 
     setCompletedResult(payload);
     setIsExamCompleted(true);
+    setIsLocked(false);
+
+    // Hapus sesi live monitoring
+    removeStudentSession(studentName, subject.id);
+
     onFinishExam(payload);
 
-    // Kirim notifikasi sistem otomatis ke database Supabase
+    // Catat notifikasi otomatis pengumpulan
     try {
       await insertNotification({
         subjectId: subject.id,
         studentName,
         type: 'submission',
         title: 'Siswa Menyelesaikan Ujian',
-        message: `Siswa ${studentName} (${currentClass}) telah menyelesaikan ujian dengan skor ${evaluation.finalScore}%.`
+        message: `Siswa ${studentName} (${currentClass}) telah menyelesaikan ujian dengan skor ${evaluation.finalScore}% (${reason}).`
       });
-    } catch (err) {
-      console.warn('Gagal log notifikasi submission:', err);
-    }
+    } catch {}
+
+    // Keluar dari mode fullscreen secara aman
+    try {
+      if (document.fullscreenElement && document.exitFullscreen) {
+        document.exitFullscreen().catch(() => {});
+      }
+    } catch {}
   };
 
   const formatTimer = (totalSec: number) => {
@@ -233,7 +503,9 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
 
   const answeredCount = answers.filter(a => a.answer !== null && a.answer !== '').length;
 
-  // JIKA SUDAH SELESAI UJIAN
+  // =========================================================================
+  // VIEW: JIKA SUDAH SELESAI UJIAN
+  // =========================================================================
   if (isExamCompleted && completedResult) {
     return (
       <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 flex flex-col items-center justify-center p-4">
@@ -269,7 +541,7 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
           <div className="pt-2">
             <button
               onClick={onExit}
-              className="w-full py-3 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-bold text-xs shadow-md shadow-violet-600/20 transition"
+              className="w-full py-3 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-bold text-xs shadow-md shadow-violet-600/20 transition cursor-pointer"
             >
               Kembali ke Halaman Utama
             </button>
@@ -279,8 +551,63 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
     );
   }
 
+  // =========================================================================
+  // VIEW: JIKA TERKUNCI / DISKUALIFIKASI (LAYAR MERAH MATI IDENTIK DENGAN INDEX.HTML)
+  // =========================================================================
+  if (isLocked) {
+    return (
+      <div className="min-h-screen bg-slate-950 text-white flex flex-col items-center justify-center p-4 select-none">
+        <div className="max-w-lg w-full bg-slate-900 border-2 border-rose-500/80 rounded-3xl p-6 sm:p-8 space-y-6 shadow-2xl text-center animate-in zoom-in-95">
+          <div className="w-20 h-20 rounded-full bg-rose-500/20 text-rose-500 mx-auto flex items-center justify-center border border-rose-500/50 animate-pulse">
+            <Ban className="w-10 h-10" />
+          </div>
+
+          <div className="space-y-2">
+            <h2 className="text-2xl sm:text-3xl font-black text-rose-400 tracking-wide">AKSES DIBLOKIR</h2>
+            <p className="text-slate-300 text-sm leading-relaxed">
+              Anda telah melampaui batas toleransi pelanggaran sistem ({subject.violationLimit} kali).<br />
+              <strong className="text-white">Akses pengerjaan ujian Anda telah dikunci oleh sistem.</strong>
+            </p>
+          </div>
+
+          <div className="bg-rose-950/40 border border-rose-500/40 p-4 rounded-2xl text-left text-xs space-y-2 text-slate-300">
+            <p className="font-bold text-rose-300 flex items-center gap-1.5">
+              <Lock className="w-4 h-4 text-rose-400" />
+              <span>Status Ujian Anda:</span>
+            </p>
+            <ul className="list-disc list-inside space-y-1 text-slate-300 pl-1">
+              <li>Seluruh jawaban sementara Anda telah diamankan di server.</li>
+              <li>Status nama Anda ditandai <span className="text-rose-400 font-bold">MERAH (DISKUALIFIKASI)</span> di layar pengawas.</li>
+              <li>Silakan melapor langsung kepada guru pengawas di ruangan.</li>
+              <li>Tunggu pengawas melakukan <strong>&quot;Buka Kunci&quot;</strong> atau <strong>&quot;Simpan Paksa&quot;</strong> dari komputer pengawas.</li>
+            </ul>
+          </div>
+
+          <div className="p-3 bg-slate-800/80 rounded-xl text-[11px] text-slate-400 border border-slate-700/80">
+            Terakhir terdeteksi: <strong className="text-rose-300">{lastViolationReason || 'Aktivitas di luar halaman ujian'}</strong>
+          </div>
+
+          <p className="text-[11px] text-slate-500">
+            Jangan tutup atau segarkan halaman ini sebelum ada instruksi resmi dari Pengawas Ruang.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // =========================================================================
+  // VIEW: WORKSPACE UJIAN AKTIF
+  // =========================================================================
   return (
-    <div className="min-h-screen bg-slate-100 dark:bg-slate-950 text-slate-800 dark:text-slate-100 flex flex-col font-sans transition-colors">
+    <div className="min-h-screen bg-slate-100 dark:bg-slate-950 text-slate-800 dark:text-slate-100 flex flex-col font-sans transition-colors select-none">
+      {/* BANNER NOTIFIKASI SUKSES BUKA KUNCI PENGAWAS */}
+      {unlockedNotice && (
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-emerald-600 text-white px-5 py-2.5 rounded-2xl shadow-xl flex items-center gap-2 text-xs font-bold animate-in slide-in-from-top-4">
+          <Unlock className="w-4 h-4" />
+          <span>Pengawas telah me-reset pelanggaran Anda. Silakan lanjutkan ujian dengan tertib!</span>
+        </div>
+      )}
+
       {/* 1. TOP EXAM HEADER */}
       <header className="sticky top-0 z-30 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-b border-slate-200/80 dark:border-slate-800/80 px-4 sm:px-8 py-3.5 flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -292,31 +619,43 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
               {subject.title}
             </h1>
             <p className="text-[11px] text-slate-400 dark:text-slate-500">
-              {studentName} • {subject.className}
+              {studentName} • {studentClass || subject.className}
             </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-2.5 sm:gap-3">
-          {/* Tombol Lapor Kendala ke Pengawas (Opsi A) */}
+        <div className="flex items-center gap-2 sm:gap-3">
+          {/* Tombol Fullscreen Manual jika belum */}
+          {!isFullscreen && (
+            <button
+              onClick={requestFullscreenMode}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-violet-300 dark:border-violet-800 bg-violet-50 dark:bg-violet-950/40 text-violet-700 dark:text-violet-300 hover:bg-violet-100 text-xs font-semibold transition cursor-pointer"
+              title="Aktifkan Mode Layar Penuh"
+            >
+              <Maximize2 className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Layar Penuh</span>
+            </button>
+          )}
+
+          {/* Tombol Lapor Kendala ke Pengawas */}
           <button
             onClick={() => setShowReportModal(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-amber-300 dark:border-amber-800/80 bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 hover:bg-amber-100 text-xs font-semibold transition"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-amber-300 dark:border-amber-800/80 bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 hover:bg-amber-100 text-xs font-semibold transition cursor-pointer"
             title="Laporkan masalah teknis atau pertanyaan soal ke pengawas"
           >
             <LifeBuoy className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
             <span className="hidden sm:inline">Lapor Kendala</span>
           </button>
 
-          {/* Toggle Theme Button */}
+          {/* Toggle Theme */}
           <button
             onClick={toggleTheme}
-            className="p-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:text-violet-600 transition"
+            className="p-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:text-violet-600 transition cursor-pointer"
           >
             {theme === 'dark' ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-indigo-600" />}
           </button>
 
-          {/* Timer */}
+          {/* Sisa Waktu Ujian */}
           <div
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border font-mono text-xs sm:text-sm font-bold ${
               secondsRemaining < 300
@@ -331,7 +670,7 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
           {/* Selesai Button */}
           <button
             onClick={() => setShowConfirmSubmit(true)}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-semibold text-xs sm:text-sm transition shadow-md shadow-violet-600/20"
+            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-semibold text-xs sm:text-sm transition shadow-md shadow-violet-600/20 cursor-pointer"
           >
             <Send className="w-3.5 h-3.5" />
             <span>Selesai Ujian</span>
@@ -339,7 +678,7 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
         </div>
       </header>
 
-      {/* PENGUMUMAN BROADCAST DARI PENGAWAS (JIKA ADA) */}
+      {/* PENGUMUMAN BROADCAST DARI PENGAWAS */}
       {broadcastNotice && (
         <div className="bg-amber-500 text-slate-950 px-4 py-2.5 text-xs font-bold flex items-center justify-between shadow-md">
           <div className="flex items-center gap-2 max-w-4xl mx-auto flex-1">
@@ -348,7 +687,7 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
           </div>
           <button
             onClick={() => setBroadcastNotice(null)}
-            className="p-1 hover:bg-amber-600 rounded-lg text-slate-950"
+            className="p-1 hover:bg-amber-600 rounded-lg text-slate-950 cursor-pointer"
             title="Tutup Pengumuman"
           >
             <X className="w-4 h-4" />
@@ -375,7 +714,7 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
               <button
                 type="button"
                 onClick={handleToggleDoubt}
-                className={`flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-semibold border transition ${
+                className={`flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-semibold border transition cursor-pointer ${
                   currentAnswerData.isDoubtful
                     ? 'bg-amber-100 dark:bg-amber-950/50 border-amber-400 text-amber-800 dark:text-amber-300'
                     : 'bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100'
@@ -390,23 +729,25 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
               {currentQuestion.questionText}
             </div>
 
-            {/* Media URL */}
+            {/* Media Gambar Stimulus Soal */}
             {currentQuestion.mediaUrl && (
               <div className="mt-4">
                 <img
                   src={currentQuestion.mediaUrl}
                   alt="Media Soal"
-                  className="max-h-64 rounded-2xl border border-slate-200 dark:border-slate-800 object-contain mx-auto"
+                  className="max-h-64 rounded-2xl border border-slate-200 dark:border-slate-800 object-contain mx-auto bg-slate-50 dark:bg-slate-950 p-1"
                 />
               </div>
             )}
 
             {/* Opsi Soal */}
-            <QuestionRenderer
-              question={currentQuestion}
-              currentAnswer={currentAnswerData.answer}
-              onAnswerChange={handleUpdateAnswer}
-            />
+            <div className="mt-6">
+              <QuestionRenderer
+                question={currentQuestion}
+                currentAnswer={currentAnswerData.answer}
+                onAnswerChange={handleUpdateAnswer}
+              />
+            </div>
           </div>
 
           {/* Tombol Navigasi Bawah */}
@@ -414,7 +755,7 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
             <button
               onClick={() => setCurrentIndex(prev => Math.max(0, prev - 1))}
               disabled={currentIndex === 0}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-40 text-slate-700 dark:text-slate-200 text-xs font-semibold transition"
+              className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-40 text-slate-700 dark:text-slate-200 text-xs font-semibold transition cursor-pointer"
             >
               <ChevronLeft className="w-4 h-4" />
               <span>Sebelumnya</span>
@@ -427,7 +768,7 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
             <button
               onClick={() => setCurrentIndex(prev => Math.min(questions.length - 1, prev + 1))}
               disabled={currentIndex === questions.length - 1}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-40 text-slate-700 dark:text-slate-200 text-xs font-semibold transition"
+              className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-40 text-slate-700 dark:text-slate-200 text-xs font-semibold transition cursor-pointer"
             >
               <span>Berikutnya</span>
               <ChevronRight className="w-4 h-4" />
@@ -437,9 +778,16 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
 
         {/* SIDEBAR NOMOR SOAL */}
         <aside className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-3xl p-5 shadow-xs space-y-4 h-fit">
-          <h3 className="font-bold text-xs uppercase tracking-wider text-slate-400 border-b border-slate-100 dark:border-slate-800 pb-2">
-            Navigasi Butir Soal
-          </h3>
+          <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2">
+            <h3 className="font-bold text-xs uppercase tracking-wider text-slate-400">
+              Daftar Soal
+            </h3>
+            {violationCount > 0 && (
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 font-bold border border-rose-200 dark:border-rose-900">
+                {violationCount} Pelanggaran
+              </span>
+            )}
+          </div>
 
           <div className="grid grid-cols-5 gap-2">
             {questions.map((q, idx) => {
@@ -464,7 +812,7 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
                 <button
                   key={q.id}
                   onClick={() => setCurrentIndex(idx)}
-                  className={`h-9 rounded-xl text-xs font-bold border transition ${btnClass}`}
+                  className={`h-9 rounded-xl text-xs font-bold border transition cursor-pointer ${btnClass}`}
                 >
                   {idx + 1}
                 </button>
@@ -489,6 +837,66 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
         </aside>
       </div>
 
+      {/* POPUP PROMPT LAYAR PENUH JIKA DIBLOKIR BROWSER */}
+      {showFullscreenPrompt && !isFullscreen && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 max-w-md w-full space-y-4 text-center shadow-2xl">
+            <div className="w-14 h-14 rounded-2xl bg-violet-100 dark:bg-violet-950/60 text-violet-600 dark:text-violet-400 mx-auto flex items-center justify-center">
+              <Maximize2 className="w-7 h-7" />
+            </div>
+            <h3 className="text-base font-bold text-slate-900 dark:text-white">Wajib Mode Layar Penuh</h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+              Untuk menjaga integritas dan ketertiban ujian, Anda diwajibkan mengaktifkan mode layar penuh (Fullscreen).
+            </p>
+            <button
+              onClick={() => {
+                requestFullscreenMode();
+                setShowFullscreenPrompt(false);
+              }}
+              className="w-full py-3 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-bold text-xs shadow-md transition cursor-pointer"
+            >
+              Aktifkan Layar Penuh Sekarang
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL PERINGATAN ANTI-CHEAT DENGAN COUNTDOWN 5 DETIK (SEPERTI INDEX.HTML) */}
+      {showWarningModal && !isLocked && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-900 border-2 border-amber-500 rounded-3xl p-6 sm:p-8 max-w-md w-full space-y-4 shadow-2xl text-center animate-in zoom-in-95">
+            <div className="w-16 h-16 rounded-2xl bg-amber-100 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 mx-auto flex items-center justify-center animate-pulse">
+              <ShieldAlert className="w-9 h-9" />
+            </div>
+            <h3 className="text-xl font-black text-amber-600 tracking-wide">PERINGATAN ANTI-CHEAT!</h3>
+            <p className="text-slate-700 dark:text-slate-300 text-sm leading-relaxed">
+              {lastViolationReason || 'Aktivitas di luar halaman ujian terdeteksi.'}
+            </p>
+            <div className="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 rounded-2xl">
+              <p className="text-xs font-semibold text-slate-600 dark:text-slate-400">Jumlah Pelanggaran Anda:</p>
+              <p className="text-2xl font-black text-rose-600 dark:text-rose-400 mt-0.5">
+                {violationCount} / {subject.violationLimit} Kali
+              </p>
+            </div>
+            <p className="text-xs text-slate-400">
+              Pelanggaran berulang akan otomatis <strong>mengunci lembar ujian</strong> dan dilaporkan ke layar monitor Pengawas.
+            </p>
+            <div className="text-xs font-bold text-violet-600 dark:text-violet-400 pt-1">
+              Peringatan ini akan ditutup dalam {warningCountdown} detik...
+            </div>
+            <button
+              onClick={() => {
+                setShowWarningModal(false);
+                requestFullscreenMode();
+              }}
+              className="w-full py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs transition cursor-pointer"
+            >
+              Saya Mengerti & Kembali ke Soal
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* MODAL LAPOR KENDALA SISWA KE PENGAWAS (OPSI A) */}
       {showReportModal && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
@@ -502,7 +910,7 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
               </div>
               <button
                 onClick={() => setShowReportModal(false)}
-                className="text-slate-400 hover:text-slate-600"
+                className="text-slate-400 hover:text-slate-600 cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -539,7 +947,7 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
                   <select
                     value={reportCategory}
                     onChange={e => setReportCategory(e.target.value)}
-                    className="w-full p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white font-medium"
+                    className="w-full p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white font-medium cursor-pointer"
                   >
                     <option value="Gambar / Media Soal Tidak Muncul">Gambar / Media Soal Tidak Muncul</option>
                     <option value="Teks Soal / Opsi Jawaban Terpotong">Teks Soal / Opsi Jawaban Terpotong</option>
@@ -566,14 +974,14 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
                   <button
                     type="button"
                     onClick={() => setShowReportModal(false)}
-                    className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold"
+                    className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold cursor-pointer"
                   >
                     Batal
                   </button>
                   <button
                     type="submit"
                     disabled={isSubmittingReport}
-                    className="px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold transition flex items-center gap-1.5"
+                    className="px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold transition flex items-center gap-1.5 cursor-pointer"
                   >
                     <Send className="w-3.5 h-3.5" />
                     <span>{isSubmittingReport ? 'Mengirim...' : 'Kirim Laporan'}</span>
@@ -585,58 +993,35 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
         </div>
       )}
 
-      {/* MODAL PERINGATAN ANTI-CHEAT */}
-      {showWarningModal && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-900 border-2 border-rose-500 rounded-3xl p-6 sm:p-8 max-w-md w-full space-y-4 shadow-2xl text-center animate-in zoom-in-95">
-            <div className="w-14 h-14 rounded-2xl bg-rose-100 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 mx-auto flex items-center justify-center">
-              <ShieldAlert className="w-8 h-8" />
-            </div>
-            <h3 className="text-lg font-bold text-rose-600">Peringatan Pelanggaran Anti-Cheat!</h3>
-            <p className="text-slate-700 dark:text-slate-300 text-sm leading-relaxed">
-              Anda terdeteksi meninggalkan halaman ujian. Pelanggaran:{' '}
-              <strong className="text-rose-600 font-bold">
-                {violationCount} / {subject.violationLimit} kali
-              </strong>
-              .
-            </p>
-            <p className="text-xs text-slate-400">
-              Pelanggaran telah tercatat otomatis di server pengawas. Jika mencapai batas maksimal, ujian akan dikunci.
-            </p>
-            <button
-              onClick={() => setShowWarningModal(false)}
-              className="w-full py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-semibold text-sm transition"
-            >
-              Saya Mengerti & Lanjutkan Ujian
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL KONFIRMASI SELESAI */}
+      {/* MODAL KONFIRMASI SELESAI UJIAN */}
       {showConfirmSubmit && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 max-w-md w-full space-y-4 shadow-2xl">
             <div className="flex items-center gap-3 text-violet-600">
               <AlertTriangle className="w-6 h-6" />
-              <h3 className="text-lg font-bold text-slate-900 dark:text-white">Kirim Jawaban Ujian?</h3>
+              <h3 className="text-lg font-bold text-slate-900 dark:text-white">Kirim Lembar Jawaban?</h3>
             </div>
             <p className="text-slate-600 dark:text-slate-300 text-sm leading-relaxed">
               Anda telah menjawab <strong>{answeredCount}</strong> dari{' '}
-              <strong>{questions.length}</strong> soal.
+              <strong>{questions.length}</strong> butir soal.
+              {answeredCount < questions.length && (
+                <span className="block mt-1 text-rose-500 font-semibold">
+                  Masih ada {questions.length - answeredCount} butir soal yang belum Anda jawab!
+                </span>
+              )}
             </p>
             <div className="flex gap-3 justify-end pt-2">
               <button
                 onClick={() => setShowConfirmSubmit(false)}
-                className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-semibold"
+                className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-semibold cursor-pointer"
               >
-                Kembali Periksa
+                Periksa Kembali
               </button>
               <button
                 onClick={() => handleFinalSubmit('Selesai Mandiri')}
-                className="px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-xs font-semibold"
+                className="px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-xs font-semibold cursor-pointer"
               >
-                Ya, Selesai
+                Ya, Kirim Sekarang
               </button>
             </div>
           </div>

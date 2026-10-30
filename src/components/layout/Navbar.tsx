@@ -3,7 +3,8 @@
 import React, { useState } from 'react';
 import { useTheme } from '@/context/ThemeContext';
 import { useLanguage } from '@/context/LanguageContext';
-import { ExamNotification, ExamMessage } from '@/types/cbt';
+import { ExamNotification, ExamMessage, Teacher } from '@/types/cbt';
+import { initialTeachers } from '@/lib/rosterTeachers';
 import {
   Sun,
   Moon,
@@ -22,7 +23,11 @@ import {
   LifeBuoy,
   Megaphone,
   Check,
-  Trash2
+  Trash2,
+  LogOut,
+  ChevronDown,
+  UserCheck,
+  ShieldCheck
 } from 'lucide-react';
 
 interface NavbarProps {
@@ -38,6 +43,10 @@ interface NavbarProps {
   onDeleteMessage: (msgId: string) => void;
   onClearAllMessages: () => void;
   onSendBroadcast: (broadcastText: string) => void;
+  currentTeacher?: Teacher | null;
+  teachers?: Teacher[];
+  onLogoutTeacher?: () => void;
+  onSwitchTeacher?: (teacher: Teacher) => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -52,7 +61,11 @@ export const Navbar: React.FC<NavbarProps> = ({
   onResolveMessage,
   onDeleteMessage,
   onClearAllMessages,
-  onSendBroadcast
+  onSendBroadcast,
+  currentTeacher,
+  teachers = initialTeachers,
+  onLogoutTeacher,
+  onSwitchTeacher
 }) => {
   const { theme, toggleTheme } = useTheme();
   const { language, toggleLanguage, t } = useLanguage();
@@ -61,6 +74,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   const [showNotifications, setShowNotifications] = useState(false);
   const [showMessages, setShowMessages] = useState(false);
   const [showTeachersModal, setShowTeachersModal] = useState(false);
+  const [showProfileMenu, setShowProfileMenu] = useState(false);
 
   // Filter Tab Notifikasi
   const [notifFilter, setNotifFilter] = useState<'all' | 'violation' | 'submission'>('all');
@@ -490,22 +504,92 @@ export const Navbar: React.FC<NavbarProps> = ({
           )}
         </div>
 
-        {/* User Avatar Stack (Clickable to view active 30 teachers) */}
-        <button
-          onClick={() => setShowTeachersModal(true)}
-          className="hidden md:flex items-center -space-x-2 pl-2 hover:opacity-90 transition cursor-pointer"
-          title="Klik untuk melihat daftar 30 Guru & Pengawas Aktif"
-        >
-          <div className="w-8 h-8 rounded-full border-2 border-white dark:border-slate-900 bg-indigo-500 text-white font-bold text-xs flex items-center justify-center">
-            A
+        {/* Profile Guru Aktif atau Avatar Stack 30 Guru */}
+        {currentTeacher ? (
+          <div className="relative">
+            <button
+              onClick={() => setShowProfileMenu(!showProfileMenu)}
+              className="hidden md:flex items-center gap-2.5 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-850 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
+            >
+              <div
+                className={`w-7 h-7 rounded-lg ${
+                  currentTeacher.avatarColor || 'bg-violet-600'
+                } text-white font-bold text-xs flex items-center justify-center shadow-xs`}
+              >
+                {currentTeacher.name.charAt(0)}
+              </div>
+              <div className="text-left text-xs leading-tight">
+                <p className="font-bold text-slate-900 dark:text-white truncate max-w-[130px]">
+                  {currentTeacher.name}
+                </p>
+                <p className="text-[10px] text-slate-400 truncate max-w-[130px]">
+                  {currentTeacher.subject}
+                </p>
+              </div>
+              <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+            </button>
+
+            {/* Profile Menu Dropdown */}
+            {showProfileMenu && (
+              <div className="absolute right-0 mt-2 w-64 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xl p-3 space-y-2 z-50 animate-in fade-in zoom-in-95 text-xs">
+                <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800 space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-slate-900 dark:text-white">{currentTeacher.name}</span>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-violet-100 dark:bg-violet-950 text-violet-700 dark:text-violet-300">
+                      {currentTeacher.role === 'admin'
+                        ? 'Admin'
+                        : currentTeacher.role === 'pengawas'
+                        ? 'Pengawas'
+                        : 'Guru'}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">NIP: {currentTeacher.nip}</p>
+                  <p className="text-[10px] text-slate-400">{currentTeacher.email}</p>
+                </div>
+
+                <button
+                  onClick={() => {
+                    setShowTeachersModal(true);
+                    setShowProfileMenu(false);
+                  }}
+                  className="w-full flex items-center gap-2 px-3 py-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold transition cursor-pointer"
+                >
+                  <Users className="w-4 h-4 text-violet-600 dark:text-violet-400" />
+                  <span>Daftar 30 Guru & Status</span>
+                </button>
+
+                {onLogoutTeacher && (
+                  <button
+                    onClick={() => {
+                      setShowProfileMenu(false);
+                      onLogoutTeacher();
+                    }}
+                    className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 font-semibold transition cursor-pointer border-t border-slate-100 dark:border-slate-800 pt-2"
+                  >
+                    <LogOut className="w-4 h-4" />
+                    <span>Ganti Akun / Logout</span>
+                  </button>
+                )}
+              </div>
+            )}
           </div>
-          <div className="w-8 h-8 rounded-full border-2 border-white dark:border-slate-900 bg-emerald-500 text-white font-bold text-xs flex items-center justify-center">
-            B
-          </div>
-          <div className="w-8 h-8 rounded-full border-2 border-white dark:border-slate-900 bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-bold text-[10px] flex items-center justify-center">
-            30+
-          </div>
-        </button>
+        ) : (
+          <button
+            onClick={() => setShowTeachersModal(true)}
+            className="hidden md:flex items-center -space-x-2 pl-2 hover:opacity-90 transition cursor-pointer"
+            title="Klik untuk melihat daftar 30 Guru & Pengawas Aktif"
+          >
+            <div className="w-8 h-8 rounded-full border-2 border-white dark:border-slate-900 bg-indigo-500 text-white font-bold text-xs flex items-center justify-center">
+              A
+            </div>
+            <div className="w-8 h-8 rounded-full border-2 border-white dark:border-slate-900 bg-emerald-500 text-white font-bold text-xs flex items-center justify-center">
+              B
+            </div>
+            <div className="w-8 h-8 rounded-full border-2 border-white dark:border-slate-900 bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-bold text-[10px] flex items-center justify-center">
+              30+
+            </div>
+          </button>
+        )}
 
         {/* Modal 30 Guru & Pengawas */}
         {showTeachersModal && (
@@ -518,53 +602,76 @@ export const Navbar: React.FC<NavbarProps> = ({
                   </div>
                   <div>
                     <h3 className="font-bold text-slate-900 dark:text-white text-sm">
-                      {t.teachersRosterTitle}
+                      Daftar 30 Guru & Pengawas CBT
                     </h3>
-                    <p className="text-xs text-slate-400">Total 30 Akun Guru Terkoneksi ke Supabase</p>
+                    <p className="text-xs text-slate-400">SMPN 58 Palembang • Terhubung ke Supabase Cloud</p>
                   </div>
                 </div>
                 <button
                   onClick={() => setShowTeachersModal(false)}
-                  className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
                 >
                   <X className="w-5 h-5" />
                 </button>
               </div>
 
               <div className="space-y-2 text-xs">
-                {teachersList.map((tea, idx) => (
+                {teachers.map((tea) => (
                   <div
-                    key={idx}
-                    className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 flex items-center justify-between"
+                    key={tea.id}
+                    className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 flex items-center justify-between gap-3"
                   >
                     <div className="flex items-center gap-2.5">
-                      <div className="w-7 h-7 rounded-full bg-violet-600 text-white font-bold text-[11px] flex items-center justify-center">
+                      <div
+                        className={`w-7 h-7 rounded-full ${
+                          tea.avatarColor || 'bg-violet-600'
+                        } text-white font-bold text-[11px] flex items-center justify-center flex-shrink-0`}
+                      >
                         {tea.name.charAt(0)}
                       </div>
                       <div>
                         <p className="font-bold text-slate-900 dark:text-white">{tea.name}</p>
-                        <p className="text-[11px] text-slate-400">{tea.subject}</p>
+                        <p className="text-[11px] text-slate-400">
+                          {tea.subject} • NIP: {tea.nip}
+                        </p>
                       </div>
                     </div>
-                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                      tea.status.includes('Mengawas')
-                        ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300'
-                        : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
-                    }`}>
-                      {tea.status}
-                    </span>
+
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                          tea.status?.includes('Mengawas')
+                            ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300'
+                            : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+                        }`}
+                      >
+                        {tea.status || 'Standby'}
+                      </span>
+
+                      {onSwitchTeacher && currentTeacher?.id !== tea.id && (
+                        <button
+                          onClick={() => {
+                            onSwitchTeacher(tea);
+                            setShowTeachersModal(false);
+                          }}
+                          className="px-2.5 py-1 rounded-lg bg-violet-50 dark:bg-violet-950/50 hover:bg-violet-600 hover:text-white text-violet-600 dark:text-violet-300 border border-violet-200 dark:border-violet-800 text-[10px] font-semibold transition cursor-pointer"
+                        >
+                          Pilih
+                        </button>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>
 
               <div className="p-3 bg-violet-50 dark:bg-violet-950/30 rounded-xl border border-violet-200/60 dark:border-violet-800/40 text-[11px] text-violet-700 dark:text-violet-300">
-                Semua guru dapat mengelola ujian masing-masing kelas secara simultan menggunakan Supabase Cloud.
+                Arsitektur Multi-Guru: Seluruh 30 guru dapat mengawasi dan mengelola ujian masing-masing kelas secara simultan tanpa konflik.
               </div>
 
               <div className="flex justify-end pt-2">
                 <button
                   onClick={() => setShowTeachersModal(false)}
-                  className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold text-xs"
+                  className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold text-xs cursor-pointer"
                 >
                   {t.close}
                 </button>

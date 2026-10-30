@@ -78,6 +78,22 @@ export interface Student {
   createdAt?: string;
 }
 
+export type TeacherRole = 'admin' | 'guru_mapel' | 'pengawas';
+
+export interface Teacher {
+  id: string;
+  nip: string;
+  name: string;
+  email: string;
+  subject: string;
+  classes: string[];
+  role: TeacherRole;
+  pin: string;
+  avatarColor?: string;
+  status?: 'Aktif Mengawas' | 'Standby' | 'Offline';
+  lastLogin?: string;
+}
+
 export interface QuestionScoreDetail {
   questionId: string;
   type: QuestionType;

@@ -3,10 +3,12 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { initialSubject, sampleQuestions } from '@/lib/mockData';
 import { initialStudents } from '@/lib/rosterStudents';
-import { Subject, Question, ExamResult, ExamNotification, ExamMessage, Student } from '@/types/cbt';
+import { initialTeachers } from '@/lib/rosterTeachers';
+import { Subject, Question, ExamResult, ExamNotification, ExamMessage, Student, Teacher } from '@/types/cbt';
 import { Sidebar, NavItem } from '@/components/layout/Sidebar';
 import { Navbar } from '@/components/layout/Navbar';
 import { TeacherDashboard } from '@/components/teacher/TeacherDashboard';
+import { TeacherLogin } from '@/components/teacher/TeacherLogin';
 import { ExamScreen } from '@/components/exam/ExamScreen';
 import { HelpModal } from '@/components/modals/HelpModal';
 import { CertificateModal } from '@/components/modals/CertificateModal';
@@ -36,7 +38,9 @@ import {
   bulkInsertStudents,
   updateStudentInSupabase,
   removeStudentFromSupabase,
-  bulkRemoveStudentsFromSupabase
+  bulkRemoveStudentsFromSupabase,
+  fetchTeachers,
+  updateTeacherStatusInSupabase
 } from '@/lib/supabaseService';
 import { useTheme } from '@/context/ThemeContext';
 import { useLanguage } from '@/context/LanguageContext';
@@ -60,7 +64,10 @@ export default function Home() {
   const { theme, toggleTheme } = useTheme();
   const { language, toggleLanguage, t } = useLanguage();
 
-  const [viewMode, setViewMode] = useState<'teacher' | 'student_login' | 'student_exam'>('teacher');
+  // Sesi 30 Guru & Pengawas CBT
+  const [teachers, setTeachers] = useState<Teacher[]>(initialTeachers);
+  const [currentTeacher, setCurrentTeacher] = useState<Teacher | null>(null);
+  const [viewMode, setViewMode] = useState<'teacher_login' | 'teacher' | 'student_login' | 'student_exam'>('teacher_login');
   const [currentNav, setCurrentNav] = useState<NavItem>('dashboard');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
@@ -218,6 +225,25 @@ export default function Home() {
             status: (resolvedMsgIds.includes(m.id) ? 'resolved' : m.status) as 'pending' | 'resolved' | 'acknowledged'
           }));
         setMessages(filteredMsgs);
+
+        // Ambil data 30 guru dari Supabase (fallback ke initialTeachers)
+        const tList = await fetchTeachers();
+        if (tList && tList.length > 0) {
+          setTeachers(tList);
+        }
+
+        // Cek sesi login guru yang tersimpan di browser
+        if (typeof window !== 'undefined') {
+          const savedTeacherId = localStorage.getItem('cbt_logged_teacher_id');
+          if (savedTeacherId) {
+            const listToSearch = tList && tList.length > 0 ? tList : initialTeachers;
+            const foundTeacher = listToSearch.find(t => t.id === savedTeacherId);
+            if (foundTeacher) {
+              setCurrentTeacher(foundTeacher);
+              setViewMode('teacher');
+            }
+          }
+        }
       } catch (err) {
         console.error('Failed to load initial data:', err);
       } finally {
@@ -338,6 +364,45 @@ export default function Home() {
     } catch (err) {
       console.warn('Supabase bulk delete students fallback:', err);
     }
+  };
+
+  // Teacher Login & Session Handlers (Skenario 30 Guru)
+  const handleTeacherLoginSuccess = async (teacher: Teacher) => {
+    setCurrentTeacher(teacher);
+    setViewMode('teacher');
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('cbt_logged_teacher_id', teacher.id);
+    }
+    // Sesuaikan judul mapel dengan mapel guru yang login
+    if (
+      teacher.subject &&
+      !teacher.subject.includes('Waka') &&
+      !teacher.subject.includes('Kepala Sekolah') &&
+      !teacher.subject.includes('BK')
+    ) {
+      setSubject(prev => ({
+        ...prev,
+        title: `Asesmen Sumatif - ${teacher.subject}`,
+        className: teacher.classes[0] || prev.className
+      }));
+    }
+    try {
+      await updateTeacherStatusInSupabase(teacher.id, 'Aktif Mengawas');
+    } catch (err) {
+      console.warn('Gagal update status guru:', err);
+    }
+  };
+
+  const handleTeacherLogout = () => {
+    setCurrentTeacher(null);
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('cbt_logged_teacher_id');
+    }
+    setViewMode('teacher_login');
+  };
+
+  const handleSwitchTeacher = (teacher: Teacher) => {
+    handleTeacherLoginSuccess(teacher);
   };
 
   const handleStartExam = (e: React.FormEvent) => {
@@ -553,6 +618,19 @@ export default function Home() {
   };
 
   // =========================================================================
+  // VIEW 0: LAYAR LOGIN GURU & PENGAWAS (SKENARIO 30 GURU SMPN 58)
+  // =========================================================================
+  if (viewMode === 'teacher_login') {
+    return (
+      <TeacherLogin
+        teachers={teachers}
+        onLoginSuccess={handleTeacherLoginSuccess}
+        onSwitchToStudentLogin={() => setViewMode('student_login')}
+      />
+    );
+  }
+
+  // =========================================================================
   // VIEW 1: LAYAR PENGERJAAN UJIAN SISWA (FULLSCREEN / ANTI-CHEAT)
   // =========================================================================
   if (viewMode === 'student_exam') {
@@ -563,7 +641,13 @@ export default function Home() {
         studentName={studentName}
         studentClass={selectedStudentClass}
         onFinishExam={handleFinishExam}
-        onExit={() => setViewMode('teacher')}
+        onExit={() => {
+          if (currentTeacher) {
+            setViewMode('teacher');
+          } else {
+            setViewMode('teacher_login');
+          }
+        }}
       />
     );
   }
@@ -577,11 +661,23 @@ export default function Home() {
         {/* Top Minimalist Controls */}
         <div className="absolute top-4 left-4 right-4 sm:top-6 sm:left-8 sm:right-8 flex items-center justify-between">
           <button
-            onClick={() => setViewMode('teacher')}
-            className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:text-violet-600 transition shadow-xs"
+            onClick={() => {
+              if (currentTeacher) {
+                setViewMode('teacher');
+              } else {
+                setViewMode('teacher_login');
+              }
+            }}
+            className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:text-violet-600 transition shadow-xs cursor-pointer"
           >
             <ArrowLeft className="w-3.5 h-3.5" />
-            <span>{t.backToTeacherBtn}</span>
+            <span>
+              {currentTeacher
+                ? t.backToTeacherBtn
+                : language === 'id'
+                ? 'Kembali ke Login Guru'
+                : 'Back to Teacher Login'}
+            </span>
           </button>
 
           <div className="flex items-center gap-2">
@@ -765,6 +861,10 @@ export default function Home() {
           onDeleteMessage={handleDeleteMessage}
           onClearAllMessages={handleClearAllMessages}
           onSendBroadcast={handleSendBroadcast}
+          currentTeacher={currentTeacher}
+          teachers={teachers}
+          onLogoutTeacher={handleTeacherLogout}
+          onSwitchTeacher={handleSwitchTeacher}
         />
 
         {/* DASHBOARD CONTENT BODY */}

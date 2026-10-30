@@ -293,3 +293,25 @@ VALUES
     'Waktu ujian tersisa 15 menit lagi. Harap periksa kembali nomor yang masih ragu-ragu.',
     'acknowledged'
 );
+
+-- ===============================================================
+-- 10. TABEL DAFTAR GURU & PENGAWAS (30 GURU SMPN 58)
+-- ===============================================================
+CREATE TABLE IF NOT EXISTS public.teachers (
+    id TEXT PRIMARY KEY,
+    nip VARCHAR(30) UNIQUE NOT NULL,
+    name VARCHAR(150) NOT NULL,
+    email VARCHAR(150) UNIQUE NOT NULL,
+    subject VARCHAR(150) NOT NULL,
+    classes TEXT[] DEFAULT '{}',
+    role VARCHAR(30) DEFAULT 'guru_mapel' CHECK (role IN ('admin', 'guru_mapel', 'pengawas')),
+    pin VARCHAR(20) DEFAULT '123456',
+    avatar_color VARCHAR(50) DEFAULT 'bg-violet-600',
+    status VARCHAR(50) DEFAULT 'Standby',
+    last_login TIMESTAMPTZ,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE public.teachers ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Allow anon all on teachers" ON public.teachers FOR ALL USING (true) WITH CHECK (true);
+ALTER PUBLICATION supabase_realtime ADD TABLE teachers;

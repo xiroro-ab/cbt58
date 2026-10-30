@@ -1,7 +1,8 @@
 import { supabase } from './supabaseClient';
-import { Subject, Question, ExamResult, ScoringRules, ExamNotification, ExamMessage, Student } from '@/types/cbt';
+import { Subject, Question, ExamResult, ScoringRules, ExamNotification, ExamMessage, Student, Teacher } from '@/types/cbt';
 import { initialSubject, sampleQuestions } from './mockData';
 import { initialStudents } from './rosterStudents';
+import { initialTeachers } from './rosterTeachers';
 
 /**
  * Mengambil data mata pelajaran aktif dari Supabase
@@ -758,6 +759,62 @@ export async function bulkRemoveStudentsFromSupabase(studentIds: string[]): Prom
     return true;
   } catch (err) {
     console.error('Exception bulkRemoveStudentsFromSupabase:', err);
+    return false;
+  }
+}
+
+/**
+ * Mengambil daftar 30 Guru & Pengawas dari Supabase (fallback ke initialTeachers)
+ */
+export async function fetchTeachers(): Promise<Teacher[]> {
+  try {
+    const { data, error } = await supabase
+      .from('teachers')
+      .select('*')
+      .order('name', { ascending: true });
+
+    if (error || !data || data.length === 0) {
+      return initialTeachers;
+    }
+
+    return data.map(t => ({
+      id: t.id,
+      nip: t.nip,
+      name: t.name,
+      email: t.email,
+      subject: t.subject,
+      classes: t.classes || [],
+      role: t.role || 'guru_mapel',
+      pin: t.pin || '123456',
+      avatarColor: t.avatar_color || 'bg-violet-600',
+      status: t.status || 'Standby',
+      lastLogin: t.last_login
+    }));
+  } catch (err) {
+    console.warn('Error fetchTeachers from Supabase, using initialTeachers:', err);
+    return initialTeachers;
+  }
+}
+
+/**
+ * Memperbarui status aktif mengawas guru di Supabase
+ */
+export async function updateTeacherStatusInSupabase(
+  teacherId: string,
+  status: 'Aktif Mengawas' | 'Standby' | 'Offline'
+): Promise<boolean> {
+  try {
+    const { error } = await supabase
+      .from('teachers')
+      .update({ status, last_login: new Date().toISOString() })
+      .eq('id', teacherId);
+    if (error) {
+      console.warn('Gagal updateTeacherStatusInSupabase:', error.message);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error('Exception updateTeacherStatusInSupabase:', err);
     return false;
   }
 }

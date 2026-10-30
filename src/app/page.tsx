@@ -82,7 +82,7 @@ export default function Home() {
 
   const [subjects, setSubjects] = useState<Subject[]>(sampleSubjects);
   const [subject, setSubject] = useState<Subject>(initialSubject);
-  const [questions, setQuestions] = useState<Question[]>(sampleQuestions);
+  const [questions, setQuestions] = useState<Question[]>([]);
   const [results, setResults] = useState<ExamResult[]>([]);
   const [students, setStudents] = useState<Student[]>(initialStudents);
   const [selectedStudentClass, setSelectedStudentClass] = useState<string>('VII.1');
@@ -476,12 +476,25 @@ export default function Home() {
       ? teacher.assignments[0]
       : null;
 
-    if (teacher.role === 'admin') {
-      const firstSub = subjects[0] || initialSubject;
-      setActiveAssignmentSubject(firstSub.title);
-      setSubject(firstSub);
-      if (firstSub.className) {
-        setSelectedStudentClass(firstSub.className.split(',')[0].trim());
+    if (teacher.role === 'admin' || teacher.role === 'pengawas') {
+      try {
+        const allSubs = await fetchAllSubjects();
+        const subsToUse = allSubs && allSubs.length > 0 ? allSubs : subjects;
+        setSubjects(subsToUse);
+        const firstSub = subsToUse[0] || initialSubject;
+        setActiveAssignmentSubject(firstSub.title);
+        setSubject(firstSub);
+        if (firstSub.className) {
+          setSelectedStudentClass(firstSub.className.split(',')[0].trim());
+        }
+        if (firstSub.id) {
+          const qList = await fetchQuestionsBySubject(firstSub.id);
+          setQuestions(qList || []);
+          const resList = await fetchExamResults(firstSub.id);
+          setResults(resList || []);
+        }
+      } catch (err) {
+        console.warn('Gagal memuat mapel untuk admin/pengawas:', err);
       }
     } else if (firstAsg) {
       setActiveAssignmentSubject(firstAsg.subject);
@@ -1062,6 +1075,20 @@ export default function Home() {
     );
   }
 
+  const teacherExamsCount = useMemo(() => {
+    if (!currentTeacher || currentTeacher.role === 'admin' || currentTeacher.role === 'pengawas') {
+      return subjects.length;
+    }
+    const assignedNames = currentTeacher.assignments?.map(a => a.subject.toLowerCase()) || [];
+    return subjects.filter(s => {
+      const sLower = s.title.toLowerCase();
+      return (
+        assignedNames.some(name => sLower.includes(name) || name.includes(sLower)) ||
+        (currentTeacher.subject && sLower.includes(currentTeacher.subject.toLowerCase()))
+      );
+    }).length;
+  }, [subjects, currentTeacher]);
+
   // =========================================================================
   // VIEW 3: PANEL GURU / DASHBOARD UTAMA SAAS (TABOR STUDY FORMAL THEME)
   // =========================================================================
@@ -1071,7 +1098,9 @@ export default function Home() {
       <Sidebar
         currentNav={currentNav}
         onSelectNav={setCurrentNav}
+        examsCount={teacherExamsCount}
         questionsCount={questions.length}
+        studentsCount={students.length}
         resultsCount={results.length}
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
@@ -1115,12 +1144,22 @@ export default function Home() {
             students={students}
             currentTeacher={currentTeacher}
             allSubjects={subjects}
-            onSelectSubject={(selectedSub) => {
+            onSelectSubject={async (selectedSub) => {
               setSubject(selectedSub);
               if (selectedSub.className) {
                 const firstCls = selectedSub.className.split(',')[0].trim();
                 if (firstCls && !firstCls.includes('Semua')) {
                   setSelectedStudentClass(firstCls);
+                }
+              }
+              if (selectedSub.id) {
+                try {
+                  const qList = await fetchQuestionsBySubject(selectedSub.id);
+                  setQuestions(qList || []);
+                  const resList = await fetchExamResults(selectedSub.id);
+                  setResults(resList || []);
+                } catch (err) {
+                  console.warn('Gagal memuat soal/hasil untuk mapel:', err);
                 }
               }
             }}

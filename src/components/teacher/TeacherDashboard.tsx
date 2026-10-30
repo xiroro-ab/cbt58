@@ -241,12 +241,12 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
       .trim();
   };
 
-  // Daftar mapel yang berhak diakses (Admin: SEMUA mapel; Guru Mapel: HANYA mapel miliknya atau yang baru dibuatnya)
+  // Daftar mapel yang berhak diakses (Admin & Pengawas: SEMUA mapel; Guru Mapel: HANYA mapel miliknya atau yang baru dibuatnya)
   const accessibleSubjects = useMemo(() => {
     const rawAll = allSubjects !== undefined ? allSubjects : (subject?.id ? [subject] : []);
     const all = rawAll.filter(s => s && s.id && !deletedSubjectIds.includes(s.id));
 
-    if (currentTeacher?.role === 'admin' || !currentTeacher) {
+    if (currentTeacher?.role === 'admin' || currentTeacher?.role === 'pengawas' || !currentTeacher) {
       return all;
     }
 
@@ -1490,14 +1490,14 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                     <span>Bank Soal & Katalog Mata Pelajaran</span>
                   </h3>
                   <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">
-                    {currentTeacher?.role === 'admin'
-                      ? `Akses Superadmin: Menampilkan seluruh mata pelajaran sekolah (${accessibleSubjects.length} Paket Soal)`
+                    {currentTeacher?.role === 'admin' || currentTeacher?.role === 'pengawas'
+                      ? `Akses ${currentTeacher?.role === 'admin' ? 'Superadmin' : 'Pengawas'}: Menampilkan seluruh mata pelajaran sekolah (${accessibleSubjects.length} Paket Soal)`
                       : `Mata pelajaran diampu oleh ${currentTeacher?.name || 'Guru'} (${accessibleSubjects.length} Paket Soal)`}
                   </p>
                 </div>
 
                 <div className="flex items-center gap-2">
-                  {currentTeacher?.role === 'admin' && (
+                  {(currentTeacher?.role === 'admin' || currentTeacher?.role === 'pengawas') && (
                     <button
                       onClick={() => setIsAddScheduleModalOpen(true)}
                       className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-semibold text-xs shadow-md shadow-violet-600/20 transition cursor-pointer"
@@ -1555,7 +1555,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                   <p className="text-xs text-slate-400 max-w-md mx-auto">
                     {accessibleSubjects.length === 0
                       ? 'Bank soal masih kosong. Silakan klik tombol "+ Tambah Paket Mapel" di atas untuk membuat jadwal dan paket soal baru.'
-                      : currentTeacher?.role !== 'admin'
+                      : currentTeacher?.role !== 'admin' && currentTeacher?.role !== 'pengawas'
                       ? 'Anda hanya memiliki akses pada mata pelajaran yang ditugaskan kepada akun Anda.'
                       : 'Cobalah gunakan filter mata pelajaran lain atau buat paket jadwal baru.'}
                   </p>

@@ -33,7 +33,9 @@ export type NavItem =
 interface SidebarProps {
   currentNav: NavItem;
   onSelectNav: (nav: NavItem) => void;
+  examsCount?: number;
   questionsCount: number;
+  studentsCount?: number;
   resultsCount: number;
   searchQuery: string;
   onSearchChange: (query: string) => void;
@@ -45,7 +47,9 @@ interface SidebarProps {
 export const Sidebar: React.FC<SidebarProps> = ({
   currentNav,
   onSelectNav,
+  examsCount = 0,
   questionsCount,
+  studentsCount = 0,
   resultsCount,
   searchQuery,
   onSearchChange,
@@ -133,6 +137,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 <FileCheck2 className="w-4 h-4" />
                 <span>{t.navExams}</span>
               </div>
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-bold">
+                {examsCount}
+              </span>
             </button>
 
             <button
@@ -164,6 +171,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 <Users className="w-4 h-4" />
                 <span>{t.navStudents}</span>
               </div>
+              {studentsCount > 0 && (
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-bold">
+                  {studentsCount}
+                </span>
+              )}
             </button>
           </div>
         </div>

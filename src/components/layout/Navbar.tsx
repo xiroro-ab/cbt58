@@ -511,24 +511,34 @@ export const Navbar: React.FC<NavbarProps> = ({
           )}
         </div>
 
-        {/* Icon Avatar Stack Guru Login Asli */}
+        {/* Profil Akun Guru / Pengawas yang Sedang Login */}
         <button
           onClick={() => setShowTeachersModal(true)}
-          className="hidden md:flex items-center -space-x-2 pl-2 hover:opacity-90 transition cursor-pointer"
-          title="Daftar 30 Guru & Pengawas CBT"
+          className="flex items-center gap-2 pl-2 pr-2.5 py-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
+          title="Profil Pengguna & Sesi CBT"
         >
-          <div className="w-8 h-8 rounded-full border-2 border-white dark:border-slate-900 bg-indigo-500 text-white font-bold text-xs flex items-center justify-center">
-            A
+          <div
+            className={`w-8 h-8 rounded-xl ${
+              currentTeacher?.avatarColor || 'bg-violet-600'
+            } text-white font-bold text-xs flex items-center justify-center shadow-xs flex-shrink-0`}
+          >
+            {currentTeacher?.name ? currentTeacher.name.charAt(0) : 'G'}
           </div>
-          <div className="w-8 h-8 rounded-full border-2 border-white dark:border-slate-900 bg-emerald-500 text-white font-bold text-xs flex items-center justify-center">
-            B
-          </div>
-          <div className="w-8 h-8 rounded-full border-2 border-white dark:border-slate-900 bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-bold text-[10px] flex items-center justify-center">
-            30+
+          <div className="hidden lg:flex flex-col text-left">
+            <span className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate max-w-[130px]">
+              {currentTeacher?.name || 'Guru CBT'}
+            </span>
+            <span className="text-[10px] text-slate-400 font-semibold truncate">
+              {currentTeacher?.role === 'admin'
+                ? 'Superadmin'
+                : currentTeacher?.role === 'pengawas'
+                ? 'Pengawas'
+                : 'Guru Mapel'}
+            </span>
           </div>
         </button>
 
-        {/* Modal 30 Guru & Pengawas */}
+        {/* Modal Profil Pengguna & Direktori Guru */}
         {showTeachersModal && (
           <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
             <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-lg w-full max-h-[85vh] overflow-y-auto p-6 space-y-4 shadow-2xl animate-in zoom-in-95">
@@ -539,7 +549,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   </div>
                   <div>
                     <h3 className="font-bold text-slate-900 dark:text-white text-sm">
-                      Daftar 30 Guru & Pengawas CBT
+                      Profil Pengguna & Sesi CBT
                     </h3>
                     <p className="text-xs text-slate-400">SMPN 58 Palembang • Terhubung ke Supabase Cloud</p>
                   </div>
@@ -552,29 +562,29 @@ export const Navbar: React.FC<NavbarProps> = ({
                 </button>
               </div>
 
-              {/* Status Akun Aktif & Tombol Logout */}
+              {/* Status Akun Aktif & Tombol Logout / Ganti Akun */}
               {currentTeacher && (
-                <div className="p-3.5 rounded-2xl bg-violet-50 dark:bg-violet-950/40 border border-violet-200/80 dark:border-violet-800/60 flex items-center justify-between gap-3 text-xs">
-                  <div className="flex items-center gap-2.5">
+                <div className="p-4 rounded-2xl bg-violet-50 dark:bg-violet-950/40 border border-violet-200/80 dark:border-violet-800/60 flex items-center justify-between gap-3 text-xs">
+                  <div className="flex items-center gap-3">
                     <div
-                      className={`w-8 h-8 rounded-xl ${
+                      className={`w-10 h-10 rounded-xl ${
                         currentTeacher.avatarColor || 'bg-violet-600'
-                      } text-white font-bold text-xs flex items-center justify-center shadow-xs flex-shrink-0`}
+                      } text-white font-bold text-sm flex items-center justify-center shadow-xs flex-shrink-0`}
                     >
                       {currentTeacher.name.charAt(0)}
                     </div>
                     <div>
                       <div className="flex items-center gap-1.5">
-                        <p className="font-bold text-slate-900 dark:text-white">{currentTeacher.name}</p>
-                        <span className="text-[10px] font-bold px-2 py-0.2 rounded-full bg-violet-200 dark:bg-violet-900 text-violet-800 dark:text-violet-200">
+                        <p className="font-bold text-slate-900 dark:text-white text-sm">{currentTeacher.name}</p>
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-violet-200 dark:bg-violet-900 text-violet-800 dark:text-violet-200">
                           {currentTeacher.role === 'admin'
                             ? 'Superadmin'
                             : currentTeacher.role === 'pengawas'
                             ? 'Pengawas'
-                            : 'Guru'}
+                            : 'Guru Mapel'}
                         </span>
                       </div>
-                      <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
                         NIP: {currentTeacher.nip} • {currentTeacher.subject}
                       </p>
                     </div>
@@ -586,7 +596,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                         setShowTeachersModal(false);
                         onLogoutTeacher();
                       }}
-                      className="px-3 py-1.5 rounded-xl bg-rose-50 dark:bg-rose-950/50 hover:bg-rose-100 dark:hover:bg-rose-900 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer flex-shrink-0"
+                      className="px-3.5 py-2 rounded-xl bg-rose-50 dark:bg-rose-950/50 hover:bg-rose-100 dark:hover:bg-rose-900 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer flex-shrink-0 shadow-xs"
                     >
                       <LogOut className="w-3.5 h-3.5" />
                       <span>Ganti Akun</span>
@@ -595,31 +605,49 @@ export const Navbar: React.FC<NavbarProps> = ({
                 </div>
               )}
 
-              <div className="space-y-2 text-xs">
-                {teachers.map((tea) => (
-                  <div
-                    key={tea.id}
-                    className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 flex items-center justify-between gap-3"
-                  >
-                    <div className="flex items-center gap-2.5">
-                      <div
-                        className={`w-7 h-7 rounded-full ${
-                          tea.avatarColor || 'bg-violet-600'
-                        } text-white font-bold text-[11px] flex items-center justify-center flex-shrink-0`}
-                      >
-                        {tea.name.charAt(0)}
-                      </div>
-                      <div>
-                        <p className="font-bold text-slate-900 dark:text-white">{tea.name}</p>
-                        <p className="text-[11px] text-slate-400">
-                          {tea.subject} • NIP: {tea.nip}
-                        </p>
-                      </div>
-                    </div>
+              {/* Petunjuk Autentikasi Resmi */}
+              <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700/60 text-[11px] text-slate-600 dark:text-slate-300">
+                🔒 <strong>Keamanan Akun:</strong> Untuk berganti peran sebagai <strong>Pengawas</strong> atau guru lainnya, silakan klik tombol <strong>"Ganti Akun"</strong> di atas, lalu masuk menggunakan NIP dan PIN resmi akun tersebut.
+              </div>
 
-                    <div className="flex items-center gap-2">
+              {/* Direktori Informasi Guru & Pengawas */}
+              <div className="space-y-1.5 pt-1">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
+                  Direktori Pengawas & Guru SMPN 58 ({teachers.length})
+                </span>
+                <div className="space-y-2 max-h-[35vh] overflow-y-auto pr-1">
+                  {teachers.map((tea) => (
+                    <div
+                      key={tea.id}
+                      className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 flex items-center justify-between gap-3 text-xs"
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <div
+                          className={`w-7 h-7 rounded-full ${
+                            tea.avatarColor || 'bg-violet-600'
+                          } text-white font-bold text-[11px] flex items-center justify-center flex-shrink-0`}
+                        >
+                          {tea.name.charAt(0)}
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-1.5">
+                            <p className="font-bold text-slate-900 dark:text-white">{tea.name}</p>
+                            <span className="text-[9px] font-bold px-1.5 py-0.2 rounded-md bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300">
+                              {tea.role === 'admin'
+                                ? 'Superadmin'
+                                : tea.role === 'pengawas'
+                                ? 'Pengawas'
+                                : 'Guru'}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-slate-400">
+                            {tea.subject} • NIP: {tea.nip}
+                          </p>
+                        </div>
+                      </div>
+
                       <span
-                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full flex-shrink-0 ${
                           tea.status?.includes('Mengawas')
                             ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300'
                             : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
@@ -627,25 +655,9 @@ export const Navbar: React.FC<NavbarProps> = ({
                       >
                         {tea.status || 'Standby'}
                       </span>
-
-                      {onSwitchTeacher && currentTeacher?.id !== tea.id && (
-                        <button
-                          onClick={() => {
-                            onSwitchTeacher(tea);
-                            setShowTeachersModal(false);
-                          }}
-                          className="px-2.5 py-1 rounded-lg bg-violet-50 dark:bg-violet-950/50 hover:bg-violet-600 hover:text-white text-violet-600 dark:text-violet-300 border border-violet-200 dark:border-violet-800 text-[10px] font-semibold transition cursor-pointer"
-                        >
-                          Pilih
-                        </button>
-                      )}
                     </div>
-                  </div>
-                ))}
-              </div>
-
-              <div className="p-3 bg-violet-50 dark:bg-violet-950/30 rounded-xl border border-violet-200/60 dark:border-violet-800/40 text-[11px] text-violet-700 dark:text-violet-300">
-                Arsitektur Multi-Guru: Seluruh 30 guru dapat mengawasi dan mengelola ujian masing-masing kelas secara simultan tanpa konflik.
+                  ))}
+                </div>
               </div>
 
               <div className="flex justify-end pt-2">

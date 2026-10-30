@@ -5,16 +5,127 @@ const SESSIONS_STORAGE_KEY = 'cbt_live_sessions';
 const COMMAND_STORAGE_KEY = 'cbt_teacher_command';
 const CHANNEL_NAME = 'cbt_live_monitoring_channel';
 
-// Helper BroadcastChannel
-function getBroadcastChannel(): BroadcastChannel | null {
-  if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+export type ProctorActionType = 'FORCE_FINISH' | 'RESET_VIOLATION' | 'RESET_EXAM';
+
+export interface ProctorCommand {
+  action: ProctorActionType;
+  studentName: string;
+  subjectId: string;
+  timestamp: number;
+}
+
+// Set of listeners for live sessions updates (Teacher View)
+const liveSessionListeners = new Set<(sessions: ExamSession[]) => void>();
+
+// Set of listeners for proctor commands (Student View)
+const studentCommandListeners = new Set<(cmd: ProctorCommand) => void>();
+
+// Singleton BroadcastChannel untuk sinkronisasi antar-tab dalam browser yang sama
+let sharedBc: BroadcastChannel | null = null;
+function getSharedBroadcastChannel(): BroadcastChannel | null {
+  if (typeof window === 'undefined') return null;
+  if (!('BroadcastChannel' in window)) return null;
+  if (!sharedBc) {
     try {
-      return new BroadcastChannel(CHANNEL_NAME);
+      sharedBc = new BroadcastChannel(CHANNEL_NAME);
+      sharedBc.addEventListener('message', (event: MessageEvent) => {
+        if (event.data?.type === 'SESSION_UPDATE' || event.data?.type === 'SESSION_REMOVED') {
+          const sessions = getStoredSessions();
+          liveSessionListeners.forEach(fn => {
+            try { fn(sessions); } catch {}
+          });
+        } else if (event.data?.type === 'PROCTOR_COMMAND' && event.data.command) {
+          studentCommandListeners.forEach(fn => {
+            try { fn(event.data.command); } catch {}
+          });
+        }
+      });
     } catch {
-      return null;
+      sharedBc = null;
     }
   }
-  return null;
+  return sharedBc;
+}
+
+// Singleton Supabase Realtime Channel untuk sinkronisasi lintas perangkat (HP siswa <-> Laptop pengawas)
+let sharedSupaChannel: any = null;
+function initSupabaseChannel() {
+  if (!isSupabaseConfigured || typeof window === 'undefined') return null;
+  if (!sharedSupaChannel) {
+    try {
+      sharedSupaChannel = supabase.channel('cbt_live_room', {
+        config: { broadcast: { self: true } }
+      });
+
+      // Pasang listeners broadcast sebelum memanggil .subscribe()
+      sharedSupaChannel
+        .on('broadcast', { event: 'session_heartbeat' }, (payload: any) => {
+          const session: ExamSession = payload.payload;
+          if (session) {
+            const current = getStoredSessions();
+            const updated = [
+              session,
+              ...current.filter(s => !(s.studentName.toLowerCase().trim() === session.studentName.toLowerCase().trim() && s.subjectId === session.subjectId))
+            ];
+            localStorage.setItem(SESSIONS_STORAGE_KEY, JSON.stringify(updated));
+            liveSessionListeners.forEach(fn => {
+              try { fn(updated); } catch {}
+            });
+          }
+        })
+        .on('broadcast', { event: 'session_removed' }, (payload: any) => {
+          const { studentName, subjectId } = payload.payload || {};
+          if (studentName) {
+            const current = getStoredSessions();
+            const filtered = current.filter(
+              s => !(s.studentName.toLowerCase().trim() === studentName.toLowerCase().trim() && s.subjectId === subjectId)
+            );
+            localStorage.setItem(SESSIONS_STORAGE_KEY, JSON.stringify(filtered));
+            liveSessionListeners.forEach(fn => {
+              try { fn(filtered); } catch {}
+            });
+          }
+        })
+        .on('broadcast', { event: 'proctor_command' }, (payload: any) => {
+          const cmd: ProctorCommand = payload.payload;
+          if (cmd) {
+            studentCommandListeners.forEach(fn => {
+              try { fn(cmd); } catch {}
+            });
+          }
+        })
+        .subscribe((status: string) => {
+          if (status === 'SUBSCRIBED') {
+            // Channel aktif terhubung
+          }
+        });
+    } catch (e) {
+      console.warn('Gagal inisialisasi Realtime Channel Supabase:', e);
+    }
+  }
+  return sharedSupaChannel;
+}
+
+// Inisialisasi awal channel di environment browser
+if (typeof window !== 'undefined') {
+  getSharedBroadcastChannel();
+  initSupabaseChannel();
+
+  window.addEventListener('storage', (e: StorageEvent) => {
+    if (e.key === SESSIONS_STORAGE_KEY) {
+      const sessions = getStoredSessions();
+      liveSessionListeners.forEach(fn => {
+        try { fn(sessions); } catch {}
+      });
+    } else if (e.key === COMMAND_STORAGE_KEY && e.newValue) {
+      try {
+        const cmd: ProctorCommand = JSON.parse(e.newValue);
+        studentCommandListeners.forEach(fn => {
+          try { fn(cmd); } catch {}
+        });
+      } catch {}
+    }
+  });
 }
 
 /**
@@ -27,8 +138,8 @@ export function getStoredSessions(): ExamSession[] {
     if (!raw) return [];
     const list: ExamSession[] = JSON.parse(raw);
     const now = Date.now();
-    // Bersihkan sesi usang (tidak ada heartbeat > 60 detik)
-    const active = list.filter(s => (now - s.lastHeartbeat) < 60000);
+    // Bersihkan sesi usang (tidak ada heartbeat > 120 detik)
+    const active = list.filter(s => (now - s.lastHeartbeat) < 120000);
     if (active.length !== list.length) {
       localStorage.setItem(SESSIONS_STORAGE_KEY, JSON.stringify(active));
     }
@@ -44,29 +155,37 @@ export function getStoredSessions(): ExamSession[] {
 export function reportStudentSession(session: ExamSession) {
   if (typeof window === 'undefined') return;
 
+  // 1. Simpan ke localStorage lokal
+  let updated: ExamSession[] = [];
   try {
     const current = getStoredSessions();
-    const updated = [
+    updated = [
       session,
-      ...current.filter(s => !(s.studentName === session.studentName && s.subjectId === session.subjectId))
+      ...current.filter(s => !(s.studentName.toLowerCase().trim() === session.studentName.toLowerCase().trim() && s.subjectId === session.subjectId))
     ];
     localStorage.setItem(SESSIONS_STORAGE_KEY, JSON.stringify(updated));
-
-    // Siarkan via BroadcastChannel untuk sinkronisasi seketika antar-tab browser
-    const bc = getBroadcastChannel();
-    if (bc) {
-      bc.postMessage({ type: 'SESSION_UPDATE', session });
-      bc.close();
-    }
   } catch (e) {
     console.warn('Gagal simpan sesi live lokal:', e);
   }
 
-  // Jika Supabase aktif, kirim siaran Realtime channel
-  if (isSupabaseConfigured) {
+  // Notifikasi listeners di tab aktif seketika
+  liveSessionListeners.forEach(fn => {
+    try { fn(updated); } catch {}
+  });
+
+  // 2. Siarkan via BroadcastChannel lokal (antar-tab browser sama)
+  const bc = getSharedBroadcastChannel();
+  if (bc) {
     try {
-      const channel = supabase.channel('cbt_live_room');
-      channel.send({
+      bc.postMessage({ type: 'SESSION_UPDATE', session });
+    } catch {}
+  }
+
+  // 3. Siarkan via Supabase Realtime untuk dilihat komputer pengawas di jaringan lain
+  const supa = initSupabaseChannel();
+  if (supa) {
+    try {
+      supa.send({
         type: 'broadcast',
         event: 'session_heartbeat',
         payload: session
@@ -82,24 +201,30 @@ export function removeStudentSession(studentName: string, subjectId: string) {
   if (typeof window === 'undefined') return;
   try {
     const current = getStoredSessions();
-    const filtered = current.filter(s => !(s.studentName === studentName && s.subjectId === subjectId));
+    const filtered = current.filter(
+      s => !(s.studentName.toLowerCase().trim() === studentName.toLowerCase().trim() && s.subjectId === subjectId)
+    );
     localStorage.setItem(SESSIONS_STORAGE_KEY, JSON.stringify(filtered));
 
-    const bc = getBroadcastChannel();
+    // Notifikasi listeners lokal
+    liveSessionListeners.forEach(fn => {
+      try { fn(filtered); } catch {}
+    });
+
+    const bc = getSharedBroadcastChannel();
     if (bc) {
       bc.postMessage({ type: 'SESSION_REMOVED', studentName, subjectId });
-      bc.close();
+    }
+
+    const supa = initSupabaseChannel();
+    if (supa) {
+      supa.send({
+        type: 'broadcast',
+        event: 'session_removed',
+        payload: { studentName, subjectId }
+      });
     }
   } catch {}
-}
-
-export type ProctorActionType = 'FORCE_FINISH' | 'RESET_VIOLATION' | 'RESET_EXAM';
-
-export interface ProctorCommand {
-  action: ProctorActionType;
-  studentName: string;
-  subjectId: string;
-  timestamp: number;
 }
 
 /**
@@ -119,19 +244,18 @@ export function sendProctorCommand(cmd: { action: ProctorActionType; studentName
   } catch {}
 
   // 2. Siarkan via BroadcastChannel
-  try {
-    const bc = getBroadcastChannel();
-    if (bc) {
+  const bc = getSharedBroadcastChannel();
+  if (bc) {
+    try {
       bc.postMessage({ type: 'PROCTOR_COMMAND', command: payload });
-      bc.close();
-    }
-  } catch {}
+    } catch {}
+  }
 
   // 3. Update sesi lokal seketika
   if (cmd.action === 'RESET_VIOLATION') {
     const current = getStoredSessions();
     const updated = current.map(s => {
-      if (s.studentName === cmd.studentName && s.subjectId === cmd.subjectId) {
+      if (s.studentName.toLowerCase().trim() === cmd.studentName.toLowerCase().trim() && s.subjectId === cmd.subjectId) {
         return {
           ...s,
           violationCount: 0,
@@ -143,15 +267,18 @@ export function sendProctorCommand(cmd: { action: ProctorActionType; studentName
       return s;
     });
     localStorage.setItem(SESSIONS_STORAGE_KEY, JSON.stringify(updated));
+    liveSessionListeners.forEach(fn => {
+      try { fn(updated); } catch {}
+    });
   } else if (cmd.action === 'FORCE_FINISH' || cmd.action === 'RESET_EXAM') {
     removeStudentSession(cmd.studentName, cmd.subjectId);
   }
 
-  // 4. Siarkan via Supabase Realtime jika terkonfigurasi
-  if (isSupabaseConfigured) {
+  // 4. Siarkan via Supabase Realtime
+  const supa = initSupabaseChannel();
+  if (supa) {
     try {
-      const channel = supabase.channel('cbt_live_room');
-      channel.send({
+      supa.send({
         type: 'broadcast',
         event: 'proctor_command',
         payload
@@ -170,64 +297,22 @@ export function subscribeToStudentCommands(
 ): () => void {
   if (typeof window === 'undefined') return () => {};
 
-  // Listener A: BroadcastChannel
-  let bc: BroadcastChannel | null = null;
-  if ('BroadcastChannel' in window) {
-    try {
-      bc = new BroadcastChannel(CHANNEL_NAME);
-      bc.onmessage = (event) => {
-        if (event.data?.type === 'PROCTOR_COMMAND') {
-          const cmd: ProctorCommand = event.data.command;
-          if (
-            cmd.studentName.toLowerCase().trim() === studentName.toLowerCase().trim() &&
-            cmd.subjectId === subjectId
-          ) {
-            onCommand(cmd);
-          }
-        }
-      };
-    } catch {}
-  }
+  const cleanName = studentName.toLowerCase().trim();
 
-  // Listener B: Storage Event (Lintas window/tab)
-  const handleStorage = (event: StorageEvent) => {
-    if (event.key === COMMAND_STORAGE_KEY && event.newValue) {
-      try {
-        const cmd: ProctorCommand = JSON.parse(event.newValue);
-        if (
-          cmd.studentName.toLowerCase().trim() === studentName.toLowerCase().trim() &&
-          cmd.subjectId === subjectId
-        ) {
-          onCommand(cmd);
-        }
-      } catch {}
+  const commandHandler = (cmd: ProctorCommand) => {
+    if (!cmd) return;
+    if (
+      cmd.studentName.toLowerCase().trim() === cleanName &&
+      cmd.subjectId === subjectId
+    ) {
+      onCommand(cmd);
     }
   };
-  window.addEventListener('storage', handleStorage);
 
-  // Listener C: Supabase Broadcast
-  let supaChannel: any = null;
-  if (isSupabaseConfigured) {
-    try {
-      supaChannel = supabase.channel(`student_cmd_${subjectId}`)
-        .on('broadcast', { event: 'proctor_command' }, (payload: any) => {
-          const cmd: ProctorCommand = payload.payload;
-          if (
-            cmd &&
-            cmd.studentName.toLowerCase().trim() === studentName.toLowerCase().trim() &&
-            cmd.subjectId === subjectId
-          ) {
-            onCommand(cmd);
-          }
-        })
-        .subscribe();
-    } catch {}
-  }
+  studentCommandListeners.add(commandHandler);
 
   return () => {
-    if (bc) bc.close();
-    window.removeEventListener('storage', handleStorage);
-    if (supaChannel) supabase.removeChannel(supaChannel);
+    studentCommandListeners.delete(commandHandler);
   };
 }
 
@@ -239,38 +324,19 @@ export function subscribeToLiveSessions(
 ): () => void {
   if (typeof window === 'undefined') return () => {};
 
-  const broadcastAll = () => {
+  // Daftarkan listener
+  liveSessionListeners.add(onUpdate);
+
+  // Panggil pertama kali dari sesi yang tersimpan
+  onUpdate(getStoredSessions());
+
+  // Interval polling tiap 2 detik untuk menyegarkan sisa waktu dan memfilter sesi timeout
+  const intervalId = setInterval(() => {
     onUpdate(getStoredSessions());
-  };
-
-  // Panggil pertama kali
-  broadcastAll();
-
-  // Polling interval tiap 3 detik untuk refresh sisa waktu & membersihkan sesi usang
-  const intervalId = setInterval(broadcastAll, 3000);
-
-  // Listener A: BroadcastChannel
-  let bc: BroadcastChannel | null = null;
-  if ('BroadcastChannel' in window) {
-    try {
-      bc = new BroadcastChannel(CHANNEL_NAME);
-      bc.onmessage = () => {
-        broadcastAll();
-      };
-    } catch {}
-  }
-
-  // Listener B: Storage Event
-  const handleStorage = (e: StorageEvent) => {
-    if (e.key === SESSIONS_STORAGE_KEY) {
-      broadcastAll();
-    }
-  };
-  window.addEventListener('storage', handleStorage);
+  }, 2000);
 
   return () => {
+    liveSessionListeners.delete(onUpdate);
     clearInterval(intervalId);
-    if (bc) bc.close();
-    window.removeEventListener('storage', handleStorage);
   };
 }

@@ -5,6 +5,7 @@ import { initialSubject, sampleSubjects, sampleQuestions } from '@/lib/mockData'
 import { initialStudents } from '@/lib/rosterStudents';
 import { initialTeachers } from '@/lib/rosterTeachers';
 import { Subject, Question, ExamResult, ExamNotification, ExamMessage, Student, Teacher } from '@/types/cbt';
+import { shuffleQuestionsGroupedByType } from '@/lib/questionRandomizer';
 import { Sidebar, NavItem } from '@/components/layout/Sidebar';
 import { Navbar } from '@/components/layout/Navbar';
 import { TeacherDashboard } from '@/components/teacher/TeacherDashboard';
@@ -170,15 +171,18 @@ export default function Home() {
   // Live Messages State (Amplop ✉️ - Opsi A: Kendala Siswa & Broadcast Pengawas)
   const [messages, setMessages] = useState<ExamMessage[]>(initialSeedMessages);
 
-  // Unique class list from students & subject
+  // Unique class list strictly from student roster
   const availableClasses = useMemo(() => {
     const set = new Set<string>();
     students.forEach(s => {
-      if (s.className) set.add(s.className);
+      if (s.className && s.className.trim()) {
+        set.add(s.className.trim());
+      }
     });
-    if (subject?.className) set.add(subject.className);
-    return Array.from(set).sort();
-  }, [students, subject?.className]);
+    return Array.from(set).sort((a, b) =>
+      a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' })
+    );
+  }, [students]);
 
   // Filtered student list for student login autocomplete
   const classStudents = useMemo(() => {
@@ -293,7 +297,13 @@ export default function Home() {
           setTeachers(tList);
         }
 
-        // Cek sesi login guru yang tersimpan di browser
+        // Cek parameter URL untuk membuka ruang ujian siswa secara langsung (?mode=student)
+        if (typeof window !== 'undefined') {
+          const urlParams = new URLSearchParams(window.location.search);
+          if (urlParams.get('mode') === 'student' || urlParams.get('view') === 'student') {
+            setViewMode('student_login');
+          }
+        }
         if (typeof window !== 'undefined') {
           const savedTeacherId = localStorage.getItem('cbt_logged_teacher_id');
           if (savedTeacherId) {
@@ -761,9 +771,12 @@ export default function Home() {
       return;
     }
 
+    // Acak butir soal secara proporsional per kelompok tipe soal
+    const randomizedQuestions = shuffleQuestionsGroupedByType(loadedQuestions);
+
     // Pasang otomatis mata pelajaran & butir soal yang terdeteksi
     setSubject(matchedSub);
-    setQuestions(loadedQuestions);
+    setQuestions(randomizedQuestions);
     setLoginError('');
     setViewMode('student_exam');
   };
@@ -1098,10 +1111,9 @@ export default function Home() {
                 value={selectedStudentClass}
                 onChange={e => {
                   setSelectedStudentClass(e.target.value);
-                  const firstStudentInClass = students.find(s => s.className === e.target.value);
-                  if (firstStudentInClass) setStudentName(firstStudentInClass.name);
+                  setStudentName('');
                 }}
-                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-violet-500 transition"
+                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-violet-500 transition cursor-pointer"
               >
                 {availableClasses.map(cls => {
                   const count = students.filter(s => s.className === cls).length;
@@ -1114,34 +1126,36 @@ export default function Home() {
               </select>
             </div>
 
-            {/* Nama Siswa dengan Autocomplete / Datalist Roster */}
+            {/* Nama Siswa dengan Dropdown Pilihan Roster Kelas */}
             <div>
               <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1.5 flex items-center justify-between">
                 <span className="flex items-center gap-1.5">
                   <User className="w-3.5 h-3.5 text-violet-600" />
                   <span>{t.studentNameLabel}</span>
                 </span>
-                <span className="text-[10px] text-slate-400">Pilih / ketik nama</span>
+                <span className="text-[10px] text-slate-400 font-normal">
+                  {classStudents.length} Siswa Terdaftar
+                </span>
               </label>
-              <input
-                type="text"
+              <select
                 required
-                list="roster-students-list"
                 value={studentName}
                 onChange={e => setStudentName(e.target.value)}
-                placeholder="Ketik atau pilih nama siswa..."
-                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white placeholder-slate-400 text-xs focus:outline-none focus:ring-2 focus:ring-violet-500 transition"
-              />
-              <datalist id="roster-students-list">
-                {classStudents.map(s => (
-                  <option key={s.id} value={s.name}>
-                    NISN: {s.nisn} ({s.gender === 'L' ? 'Laki-laki' : 'Perempuan'})
-                  </option>
-                ))}
-              </datalist>
+                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-violet-500 transition cursor-pointer"
+              >
+                <option value="">-- Klik untuk Pilih Nama Siswa ({selectedStudentClass}) --</option>
+                {classStudents
+                  .slice()
+                  .sort((a, b) => a.name.localeCompare(b.name))
+                  .map(s => (
+                    <option key={s.id} value={s.name}>
+                      {s.name} (NISN: {s.nisn})
+                    </option>
+                  ))}
+              </select>
 
               {/* Status Verifikasi Roster Siswa */}
-              {matchedStudent ? (
+              {matchedStudent && (
                 <div className="mt-2 p-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 flex items-center gap-2 text-[11px] text-emerald-700 dark:text-emerald-300">
                   <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
                   <div className="flex-1">
@@ -1151,11 +1165,7 @@ export default function Home() {
                     </p>
                   </div>
                 </div>
-              ) : studentName.trim() ? (
-                <div className="mt-2 p-2 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/60 text-[11px] text-amber-700 dark:text-amber-300">
-                  Nama belum cocok persis dengan roster Kelas {selectedStudentClass}. Pastikan memilih nama dari opsi datalist.
-                </div>
-              ) : null}
+              )}
             </div>
 
             {/* Token Ujian */}

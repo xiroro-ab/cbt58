@@ -181,7 +181,24 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   // ==========================================
   const [liveSessions, setLiveSessions] = useState<ExamSession[]>([]);
   const [monitoringFilterSubId, setMonitoringFilterSubId] = useState<string>('ALL');
+  const [monitoringFilterClass, setMonitoringFilterClass] = useState<string>('ALL');
   const [monitoringActionToast, setMonitoringActionToast] = useState<string | null>(null);
+
+  // Daftar kelas unik untuk filter rombel pada Live Monitoring
+  const monitoringClasses = useMemo(() => {
+    const set = new Set<string>();
+    if (students && students.length > 0) {
+      students.forEach(s => {
+        if (s.className && s.className.trim()) set.add(s.className.trim());
+      });
+    }
+    liveSessions.forEach(s => {
+      if (s.className && s.className.trim()) set.add(s.className.trim());
+    });
+    return Array.from(set).sort((a, b) =>
+      a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' })
+    );
+  }, [students, liveSessions]);
 
   useEffect(() => {
     if (currentNav !== 'monitoring') return;
@@ -2774,8 +2791,9 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
       {/* ============================================================== */}
       {currentNav === 'monitoring' && (() => {
         const filteredSessions = liveSessions.filter(s => {
-          if (monitoringFilterSubId === 'ALL') return true;
-          return s.subjectId === monitoringFilterSubId;
+          if (monitoringFilterSubId !== 'ALL' && s.subjectId !== monitoringFilterSubId) return false;
+          if (monitoringFilterClass !== 'ALL' && s.className !== monitoringFilterClass) return false;
+          return true;
         });
 
         const activeCount = filteredSessions.length;
@@ -2796,7 +2814,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
               </div>
             )}
 
-            {/* HEADER MONITORING & FILTER MAPEL */}
+            {/* HEADER MONITORING & FILTER MAPEL / KELAS */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-3xl p-6 shadow-xs">
               <div className="space-y-1">
                 <div className="flex items-center gap-2">
@@ -2814,21 +2832,39 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                 </p>
               </div>
 
-              {/* FILTER MAPEL */}
-              <div className="flex items-center gap-2 self-start sm:self-center">
-                <Filter className="w-4 h-4 text-slate-400" />
-                <select
-                  value={monitoringFilterSubId}
-                  onChange={e => setMonitoringFilterSubId(e.target.value)}
-                  className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-800 dark:text-slate-100 cursor-pointer"
-                >
-                  <option value="ALL">Semua Paket Ujian</option>
-                  {accessibleSubjects.map(s => (
-                    <option key={s.id} value={s.id}>
-                      {formatSubjectTitle(s.title)} ({s.className})
-                    </option>
-                  ))}
-                </select>
+              {/* FILTER MAPEL & KELAS */}
+              <div className="flex flex-wrap items-center gap-2.5 self-start sm:self-center">
+                <div className="flex items-center gap-1.5">
+                  <Filter className="w-4 h-4 text-slate-400" />
+                  <select
+                    value={monitoringFilterSubId}
+                    onChange={e => setMonitoringFilterSubId(e.target.value)}
+                    className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-800 dark:text-slate-100 cursor-pointer"
+                  >
+                    <option value="ALL">Semua Paket Ujian</option>
+                    {accessibleSubjects.map(s => (
+                      <option key={s.id} value={s.id}>
+                        {formatSubjectTitle(s.title)} ({s.className})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="flex items-center gap-1.5">
+                  <Users className="w-4 h-4 text-slate-400" />
+                  <select
+                    value={monitoringFilterClass}
+                    onChange={e => setMonitoringFilterClass(e.target.value)}
+                    className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-800 dark:text-slate-100 cursor-pointer"
+                  >
+                    <option value="ALL">Semua Kelas / Rombel</option>
+                    {monitoringClasses.map(cls => (
+                      <option key={cls} value={cls}>
+                        Kelas {cls}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
             </div>
 

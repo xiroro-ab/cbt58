@@ -147,7 +147,31 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   const [editSubToken, setEditSubToken] = useState('');
   const [editSubViolationLimit, setEditSubViolationLimit] = useState<number | string>(3);
   const [editSubScoringRules, setEditSubScoringRules] = useState<Record<string, number | string>>({});
-  const [createdSubjectIds, setCreatedSubjectIds] = useState<string[]>([]);
+  const [createdSubjectIds, setCreatedSubjectIds] = useState<string[]>(() => {
+    if (typeof window !== 'undefined' && currentTeacher?.id) {
+      try {
+        const stored = localStorage.getItem(`cbt_teacher_${currentTeacher.id}_created_subjects`);
+        return stored ? JSON.parse(stored) : [];
+      } catch {
+        return [];
+      }
+    }
+    return [];
+  });
+
+  // Sinkronkan daftar mapel buatan guru saat berganti akun login guru
+  useEffect(() => {
+    if (typeof window !== 'undefined' && currentTeacher?.id) {
+      try {
+        const stored = localStorage.getItem(`cbt_teacher_${currentTeacher.id}_created_subjects`);
+        setCreatedSubjectIds(stored ? JSON.parse(stored) : []);
+      } catch {
+        setCreatedSubjectIds([]);
+      }
+    } else {
+      setCreatedSubjectIds([]);
+    }
+  }, [currentTeacher?.id]);
 
   // Form State untuk Tambah Soal
   const [modalType, setModalType] = useState<QuestionType>('Pilihan Ganda');
@@ -451,6 +475,15 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
     e.preventDefault();
     if (!scheduleToEdit || !editSubTitle.trim() || !editSubToken.trim()) return;
 
+    const cleanToken = editSubToken.trim().toUpperCase();
+    const isTokenTaken = (allSubjects || []).some(
+      s => s.id !== scheduleToEdit.id && s.token.trim().toUpperCase() === cleanToken && s.isActive
+    );
+    if (isTokenTaken) {
+      alert(`Token "${cleanToken}" sudah digunakan oleh jadwal ujian lain yang sedang aktif! Silakan ganti atau acak token lain agar tidak tabrakan.`);
+      return;
+    }
+
     const parsedScoringRules: ScoringRules = Object.fromEntries(
       Object.entries(editSubScoringRules).map(([k, v]) => [k, Number(v) || 1])
     ) as ScoringRules;
@@ -460,7 +493,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
       title: editSubTitle.trim(),
       className: editSubClass.trim() || 'Semua Kelas',
       durationMinutes: Number(editSubDuration) || 60,
-      token: editSubToken.trim().toUpperCase(),
+      token: cleanToken,
       violationLimit: Number(editSubViolationLimit) || 3,
       scoringRules: parsedScoringRules
     };
@@ -475,6 +508,15 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
     e.preventDefault();
     if (!newSubTitle.trim() || !newSubToken.trim()) return;
 
+    const cleanToken = newSubToken.trim().toUpperCase();
+    const isTokenTaken = (allSubjects || []).some(
+      s => s.token.trim().toUpperCase() === cleanToken && s.isActive
+    );
+    if (isTokenTaken) {
+      alert(`Token "${cleanToken}" sudah digunakan oleh jadwal ujian lain yang sedang aktif! Silakan klik tombol 🎲 Acak untuk menghasilkan token unik.`);
+      return;
+    }
+
     const newId = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `sub-${Date.now()}`;
     const parsedScoringRules: ScoringRules = Object.fromEntries(
       Object.entries(newSubScoringRules).map(([k, v]) => [k, Number(v) || 1])
@@ -485,13 +527,19 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
       title: newSubTitle.trim(),
       className: newSubClass.trim() || 'Semua Kelas',
       durationMinutes: Number(newSubDuration) || 60,
-      token: newSubToken.trim().toUpperCase(),
+      token: cleanToken,
       violationLimit: Number(newSubViolationLimit) || 3,
       isActive: true,
       scoringRules: parsedScoringRules
     };
 
-    setCreatedSubjectIds(prev => [...prev, newId]);
+    setCreatedSubjectIds(prev => {
+      const next = [...prev, newId];
+      if (typeof window !== 'undefined' && currentTeacher?.id) {
+        localStorage.setItem(`cbt_teacher_${currentTeacher.id}_created_subjects`, JSON.stringify(next));
+      }
+      return next;
+    });
     setDeletedSubjectIds(prev => prev.filter(id => id !== newId));
     setBankCategoryFilter('ALL');
     setSelectedBankSubjectId(newId);
@@ -514,6 +562,13 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
     if (!subjectToDelete) return;
     const deletedId = subjectToDelete.id;
     setDeletedSubjectIds(prev => [...prev, deletedId]);
+    setCreatedSubjectIds(prev => {
+      const next = prev.filter(id => id !== deletedId);
+      if (typeof window !== 'undefined' && currentTeacher?.id) {
+        localStorage.setItem(`cbt_teacher_${currentTeacher.id}_created_subjects`, JSON.stringify(next));
+      }
+      return next;
+    });
     if (onDeleteSubject) {
       onDeleteSubject(deletedId);
     }

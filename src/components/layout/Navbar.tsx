@@ -141,37 +141,6 @@ export const Navbar: React.FC<NavbarProps> = ({
 
       {/* 2. ACTIONS & USER BAR */}
       <div className="flex items-center gap-2.5">
-        {/* Switcher Mapel & Rombel (Khusus Admin atau Guru yang Mengajar > 1 Mapel Berbeda) */}
-        {((currentTeacher?.role === 'admin' && allSubjects && allSubjects.length > 0) ||
-          (currentTeacher?.assignments && currentTeacher.assignments.length > 1)) &&
-          onSelectAssignment && (
-            <div className="hidden xl:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-violet-50 dark:bg-violet-950/40 border border-violet-200 dark:border-violet-800 text-xs">
-              <Layers className="w-3.5 h-3.5 text-violet-600 dark:text-violet-400 flex-shrink-0" />
-              <div className="flex flex-col text-left">
-                <span className="text-[9px] uppercase tracking-wider text-slate-400 font-bold">
-                  {currentTeacher?.role === 'admin' ? 'Akses Superadmin Mapel:' : 'Mapel & Rombel Diajar:'}
-                </span>
-                <select
-                  value={activeAssignmentSubject || (currentTeacher?.role === 'admin' ? allSubjects?.[0]?.title : currentTeacher.subject)}
-                  onChange={(e) => onSelectAssignment(e.target.value)}
-                  className="bg-transparent font-bold text-violet-700 dark:text-violet-300 focus:outline-none cursor-pointer text-xs pr-1"
-                >
-                  {currentTeacher?.role === 'admin'
-                    ? allSubjects?.map((s, i) => (
-                        <option key={i} value={s.title} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
-                          {s.title} • Token: {s.token}
-                        </option>
-                      ))
-                    : currentTeacher?.assignments?.map((asg, i) => (
-                        <option key={i} value={asg.subject} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
-                          {asg.subject} (Kelas {asg.classes.join(', ')})
-                        </option>
-                      ))}
-                </select>
-              </div>
-            </div>
-          )}
-
         {/* Toggle Language ID / EN */}
         <button
           onClick={toggleLanguage}
@@ -542,161 +511,22 @@ export const Navbar: React.FC<NavbarProps> = ({
           )}
         </div>
 
-        {/* Profile Guru Aktif atau Avatar Stack 30 Guru */}
-        {currentTeacher ? (
-          <div className="relative">
-            <button
-              onClick={() => setShowProfileMenu(!showProfileMenu)}
-              className="hidden md:flex items-center gap-2.5 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-850 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
-            >
-              <div
-                className={`w-7 h-7 rounded-lg ${
-                  currentTeacher.avatarColor || 'bg-violet-600'
-                } text-white font-bold text-xs flex items-center justify-center shadow-xs`}
-              >
-                {currentTeacher.name.charAt(0)}
-              </div>
-              <div className="text-left text-xs leading-tight">
-                <p className="font-bold text-slate-900 dark:text-white truncate max-w-[130px]">
-                  {currentTeacher.name}
-                </p>
-                <p className="text-[10px] text-slate-400 truncate max-w-[130px]">
-                  {currentTeacher.subject}
-                </p>
-              </div>
-              <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
-            </button>
-
-            {/* Profile Menu Dropdown */}
-            {showProfileMenu && (
-              <div className="absolute right-0 mt-2 w-64 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xl p-3 space-y-2 z-50 animate-in fade-in zoom-in-95 text-xs">
-                <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800 space-y-1">
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold text-slate-900 dark:text-white">{currentTeacher.name}</span>
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-violet-100 dark:bg-violet-950 text-violet-700 dark:text-violet-300">
-                      {currentTeacher.role === 'admin'
-                        ? 'Admin'
-                        : currentTeacher.role === 'pengawas'
-                        ? 'Pengawas'
-                        : 'Guru'}
-                    </span>
-                  </div>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400">NIP: {currentTeacher.nip}</p>
-                  <p className="text-[10px] text-slate-400">{currentTeacher.email}</p>
-                </div>
-
-                {/* Penugasan Mapel & Rombel (Khusus Admin atau Multi-Mapel) */}
-                {currentTeacher.role === 'admin' && allSubjects && allSubjects.length > 0 ? (
-                  <div className="pt-2 border-t border-slate-100 dark:border-slate-800 space-y-1.5">
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
-                      <Layers className="w-3 h-3 text-violet-600" />
-                      <span>Semua Mapel (Superadmin):</span>
-                    </p>
-                    {allSubjects.map((sub, idx) => {
-                      const isCurrentActive = (activeAssignmentSubject || allSubjects[0]?.title) === sub.title;
-                      return (
-                        <button
-                          key={idx}
-                          type="button"
-                          onClick={() => {
-                            if (onSelectAssignment) onSelectAssignment(sub.title);
-                            setShowProfileMenu(false);
-                          }}
-                          className={`w-full text-left p-2 rounded-xl transition flex items-center justify-between cursor-pointer border ${
-                            isCurrentActive
-                              ? 'bg-violet-50 dark:bg-violet-950/60 border-violet-200 dark:border-violet-800 text-violet-700 dark:text-violet-300 font-bold'
-                              : 'hover:bg-slate-50 dark:hover:bg-slate-800 border-transparent text-slate-600 dark:text-slate-400'
-                          }`}
-                        >
-                          <div>
-                            <p className="text-xs">{sub.title}</p>
-                            <p className="text-[10px] text-slate-400 font-normal">
-                              Token: <span className="font-mono font-bold">{sub.token}</span> • Kelas: {sub.className}
-                            </p>
-                          </div>
-                          {isCurrentActive && <Check className="w-3.5 h-3.5 text-violet-600" />}
-                        </button>
-                      );
-                    })}
-                  </div>
-                ) : currentTeacher.assignments && currentTeacher.assignments.length > 1 ? (
-                  <div className="pt-2 border-t border-slate-100 dark:border-slate-800 space-y-1.5">
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
-                      <Layers className="w-3 h-3 text-violet-600" />
-                      <span>Mapel & Rombel Diajar:</span>
-                    </p>
-                    {currentTeacher.assignments.map((asg, idx) => {
-                      const isCurrentActive = (activeAssignmentSubject || currentTeacher.subject) === asg.subject;
-                      return (
-                        <button
-                          key={idx}
-                          type="button"
-                          onClick={() => {
-                            if (onSelectAssignment) onSelectAssignment(asg.subject);
-                            setShowProfileMenu(false);
-                          }}
-                          className={`w-full text-left p-2 rounded-xl transition flex items-center justify-between cursor-pointer border ${
-                            isCurrentActive
-                              ? 'bg-violet-50 dark:bg-violet-950/60 border-violet-200 dark:border-violet-800 text-violet-700 dark:text-violet-300 font-bold'
-                              : 'hover:bg-slate-50 dark:hover:bg-slate-800 border-transparent text-slate-600 dark:text-slate-400'
-                          }`}
-                        >
-                          <div>
-                            <p className="text-xs">{asg.subject}</p>
-                            <p className="text-[10px] text-slate-400 font-normal">
-                              Kelas: {asg.classes.join(', ')}
-                            </p>
-                          </div>
-                          {isCurrentActive && <Check className="w-3.5 h-3.5 text-violet-600" />}
-                        </button>
-                      );
-                    })}
-                  </div>
-                ) : null}
-
-                <button
-                  onClick={() => {
-                    setShowTeachersModal(true);
-                    setShowProfileMenu(false);
-                  }}
-                  className="w-full flex items-center gap-2 px-3 py-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold transition cursor-pointer"
-                >
-                  <Users className="w-4 h-4 text-violet-600 dark:text-violet-400" />
-                  <span>Daftar 30 Guru & Status</span>
-                </button>
-
-                {onLogoutTeacher && (
-                  <button
-                    onClick={() => {
-                      setShowProfileMenu(false);
-                      onLogoutTeacher();
-                    }}
-                    className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 font-semibold transition cursor-pointer border-t border-slate-100 dark:border-slate-800 pt-2"
-                  >
-                    <LogOut className="w-4 h-4" />
-                    <span>Ganti Akun / Logout</span>
-                  </button>
-                )}
-              </div>
-            )}
+        {/* Icon Avatar Stack Guru Login Asli */}
+        <button
+          onClick={() => setShowTeachersModal(true)}
+          className="hidden md:flex items-center -space-x-2 pl-2 hover:opacity-90 transition cursor-pointer"
+          title="Daftar 30 Guru & Pengawas CBT"
+        >
+          <div className="w-8 h-8 rounded-full border-2 border-white dark:border-slate-900 bg-indigo-500 text-white font-bold text-xs flex items-center justify-center">
+            A
           </div>
-        ) : (
-          <button
-            onClick={() => setShowTeachersModal(true)}
-            className="hidden md:flex items-center -space-x-2 pl-2 hover:opacity-90 transition cursor-pointer"
-            title="Klik untuk melihat daftar 30 Guru & Pengawas Aktif"
-          >
-            <div className="w-8 h-8 rounded-full border-2 border-white dark:border-slate-900 bg-indigo-500 text-white font-bold text-xs flex items-center justify-center">
-              A
-            </div>
-            <div className="w-8 h-8 rounded-full border-2 border-white dark:border-slate-900 bg-emerald-500 text-white font-bold text-xs flex items-center justify-center">
-              B
-            </div>
-            <div className="w-8 h-8 rounded-full border-2 border-white dark:border-slate-900 bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-bold text-[10px] flex items-center justify-center">
-              30+
-            </div>
-          </button>
-        )}
+          <div className="w-8 h-8 rounded-full border-2 border-white dark:border-slate-900 bg-emerald-500 text-white font-bold text-xs flex items-center justify-center">
+            B
+          </div>
+          <div className="w-8 h-8 rounded-full border-2 border-white dark:border-slate-900 bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-bold text-[10px] flex items-center justify-center">
+            30+
+          </div>
+        </button>
 
         {/* Modal 30 Guru & Pengawas */}
         {showTeachersModal && (
@@ -721,6 +551,49 @@ export const Navbar: React.FC<NavbarProps> = ({
                   <X className="w-5 h-5" />
                 </button>
               </div>
+
+              {/* Status Akun Aktif & Tombol Logout */}
+              {currentTeacher && (
+                <div className="p-3.5 rounded-2xl bg-violet-50 dark:bg-violet-950/40 border border-violet-200/80 dark:border-violet-800/60 flex items-center justify-between gap-3 text-xs">
+                  <div className="flex items-center gap-2.5">
+                    <div
+                      className={`w-8 h-8 rounded-xl ${
+                        currentTeacher.avatarColor || 'bg-violet-600'
+                      } text-white font-bold text-xs flex items-center justify-center shadow-xs flex-shrink-0`}
+                    >
+                      {currentTeacher.name.charAt(0)}
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-1.5">
+                        <p className="font-bold text-slate-900 dark:text-white">{currentTeacher.name}</p>
+                        <span className="text-[10px] font-bold px-2 py-0.2 rounded-full bg-violet-200 dark:bg-violet-900 text-violet-800 dark:text-violet-200">
+                          {currentTeacher.role === 'admin'
+                            ? 'Superadmin'
+                            : currentTeacher.role === 'pengawas'
+                            ? 'Pengawas'
+                            : 'Guru'}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                        NIP: {currentTeacher.nip} • {currentTeacher.subject}
+                      </p>
+                    </div>
+                  </div>
+
+                  {onLogoutTeacher && (
+                    <button
+                      onClick={() => {
+                        setShowTeachersModal(false);
+                        onLogoutTeacher();
+                      }}
+                      className="px-3 py-1.5 rounded-xl bg-rose-50 dark:bg-rose-950/50 hover:bg-rose-100 dark:hover:bg-rose-900 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer flex-shrink-0"
+                    >
+                      <LogOut className="w-3.5 h-3.5" />
+                      <span>Ganti Akun</span>
+                    </button>
+                  )}
+                </div>
+              )}
 
               <div className="space-y-2 text-xs">
                 {teachers.map((tea) => (

@@ -1043,6 +1043,17 @@ export default function Home() {
             questions={questions}
             results={results}
             students={students}
+            currentTeacher={currentTeacher}
+            allSubjects={subjects}
+            onSelectSubject={(selectedSub) => {
+              setSubject(selectedSub);
+              if (selectedSub.className) {
+                const firstCls = selectedSub.className.split(',')[0].trim();
+                if (firstCls && !firstCls.includes('Semua')) {
+                  setSelectedStudentClass(firstCls);
+                }
+              }
+            }}
             onUpdateSubject={handleUpdateSubject}
             onAddQuestion={handleAddQuestion}
             onDeleteQuestion={handleDeleteQuestion}

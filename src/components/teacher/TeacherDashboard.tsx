@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
-import { Subject, Question, QuestionType, ExamResult, Student } from '@/types/cbt';
+import React, { useState, useMemo, useEffect } from 'react';
+import { Subject, Question, QuestionType, ExamResult, Student, Teacher } from '@/types/cbt';
 import { NavItem } from '../layout/Sidebar';
 import { useLanguage } from '@/context/LanguageContext';
 import { StudentManagement } from './StudentManagement';
@@ -32,7 +32,8 @@ import {
   Play,
   FileText,
   Printer,
-  Download
+  Download,
+  Layers
 } from 'lucide-react';
 
 interface TeacherDashboardProps {
@@ -41,6 +42,9 @@ interface TeacherDashboardProps {
   questions: Question[];
   results: ExamResult[];
   students?: Student[];
+  currentTeacher?: Teacher | null;
+  allSubjects?: Subject[];
+  onSelectSubject?: (sub: Subject) => void;
   onUpdateSubject: (updatedSubject: Subject) => void;
   onAddQuestion: (newQuestion: Question) => void;
   onDeleteQuestion: (questionId: string) => void;
@@ -63,6 +67,9 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   questions,
   results,
   students = [],
+  currentTeacher,
+  allSubjects,
+  onSelectSubject,
   onUpdateSubject,
   onAddQuestion,
   onDeleteQuestion,
@@ -122,10 +129,63 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
     );
   }, [results, searchQuery]);
 
+  // 1. Daftar tab mapel yang berhak diakses (Admin: semua mapel; Guru: HANYA mapel miliknya)
+  const availableMapelTabs = useMemo(() => {
+    if (currentTeacher?.role === 'admin') {
+      return (allSubjects || [subject]).map(s => ({
+        id: s.id,
+        title: s.title.replace('Asesmen Sumatif - ', '').replace('Asesmen Sumatif Tengah Semester - ', ''),
+        token: s.token,
+        rawSubject: s
+      }));
+    }
+    // Guru Mapel dengan multi-assignment:
+    if (currentTeacher?.assignments && currentTeacher.assignments.length > 0) {
+      return currentTeacher.assignments.map(asg => {
+        const matched = (allSubjects || [subject]).find(s =>
+          s.title.toLowerCase().includes(asg.subject.toLowerCase()) ||
+          asg.subject.toLowerCase().includes(s.title.toLowerCase())
+        );
+        return {
+          id: matched ? matched.id : `sub-${asg.subject.toLowerCase().replace(/[^a-z0-9]/g, '-')}`,
+          title: asg.subject,
+          token: matched?.token || 'AKTIF',
+          rawSubject: matched
+        };
+      });
+    }
+    // Guru dengan 1 mapel:
+    return [{
+      id: subject.id,
+      title: currentTeacher?.subject || subject.title.replace('Asesmen Sumatif - ', ''),
+      token: subject.token,
+      rawSubject: subject
+    }];
+  }, [currentTeacher, allSubjects, subject]);
+
+  const [selectedMapelFilter, setSelectedMapelFilter] = useState<string>(() => {
+    if (currentTeacher?.role === 'admin') return 'ALL';
+    return availableMapelTabs[0]?.id || subject.id;
+  });
+
+  useEffect(() => {
+    if (currentTeacher?.role !== 'admin' && availableMapelTabs.length > 0) {
+      if (!availableMapelTabs.some(t => t.id === selectedMapelFilter)) {
+        setSelectedMapelFilter(availableMapelTabs[0].id);
+      }
+    }
+  }, [currentTeacher, availableMapelTabs]);
+
   const activeQuestions = useMemo(() => {
-    // Isolasi Bank Soal: Hanya tampilkan soal yang sesuai dengan ID Mapel yang sedang aktif
-    return questions.filter(q => !q.subjectId || q.subjectId === subject.id);
-  }, [questions, subject.id]);
+    // Admin memilih "Semua Mapel": tampilkan semua soal dari semua guru
+    if (currentTeacher?.role === 'admin' && selectedMapelFilter === 'ALL') {
+      return questions;
+    }
+    // Filter per ID mapel yang sedang aktif dipilih di tab
+    return questions.filter(
+      q => q.subjectId === selectedMapelFilter || (!q.subjectId && selectedMapelFilter === subject.id)
+    );
+  }, [questions, currentTeacher, selectedMapelFilter, subject.id]);
 
   const filteredQuestions = useMemo(() => {
     if (!searchQuery.trim()) return activeQuestions;
@@ -167,9 +227,10 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
       finalAnswer = essayKey;
     }
 
+    const targetSubId = selectedMapelFilter !== 'ALL' ? selectedMapelFilter : subject.id;
     const newQ: Question = {
       id: `q-${Date.now()}`,
-      subjectId: subject.id,
+      subjectId: targetSubId,
       type: modalType,
       questionText: modalText,
       mediaUrl: modalMediaUrl || undefined,
@@ -693,21 +754,71 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
       {/* ============================================================== */}
       {currentNav === 'questions' && (
         <div className="space-y-4">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
               <h3 className="text-base font-bold text-slate-900 dark:text-white">{t.navQuestions}</h3>
               <p className="text-xs text-slate-400 dark:text-slate-500">
-                {subject.title} • {activeQuestions.length} Soal Terdaftar
+                {currentTeacher?.role === 'admin' && selectedMapelFilter === 'ALL'
+                  ? `Seluruh Bank Soal Semua Mapel • ${questions.length} Butir Soal Terdaftar`
+                  : `${availableMapelTabs.find(t => t.id === selectedMapelFilter)?.title || subject.title} • ${activeQuestions.length} Butir Soal Terdaftar`}
               </p>
             </div>
             <button
               onClick={onOpenAddModal}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-semibold text-xs shadow-md shadow-violet-600/20 transition"
+              className="flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-semibold text-xs shadow-md shadow-violet-600/20 transition cursor-pointer flex-shrink-0"
             >
               <PlusCircle className="w-4 h-4" />
               <span>{t.addQuestionBtn}</span>
             </button>
           </div>
+
+          {/* DAFTAR PILIHAN MAPEL UJIAN (ALAMI, BERSIH & FORMAL) */}
+          {(currentTeacher?.role === 'admin' || availableMapelTabs.length > 1) && (
+            <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none pt-1">
+              {currentTeacher?.role === 'admin' && (
+                <button
+                  onClick={() => setSelectedMapelFilter('ALL')}
+                  className={`px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer whitespace-nowrap border ${
+                    selectedMapelFilter === 'ALL'
+                      ? 'bg-violet-600 border-violet-600 text-white shadow-sm shadow-violet-600/25'
+                      : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                  }`}
+                >
+                  <Layers className="w-3.5 h-3.5" />
+                  <span>Semua Mapel ({questions.length})</span>
+                </button>
+              )}
+
+              {availableMapelTabs.map(tab => {
+                const isSelected = selectedMapelFilter === tab.id;
+                const count = questions.filter(q => q.subjectId === tab.id).length;
+                return (
+                  <button
+                    key={tab.id}
+                    onClick={() => {
+                      setSelectedMapelFilter(tab.id);
+                      if (tab.rawSubject && onSelectSubject) {
+                        onSelectSubject(tab.rawSubject);
+                      }
+                    }}
+                    className={`px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer whitespace-nowrap border ${
+                      isSelected
+                        ? 'bg-violet-600 border-violet-600 text-white shadow-sm shadow-violet-600/25'
+                        : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                    }`}
+                  >
+                    <BookOpen className="w-3.5 h-3.5" />
+                    <span>{tab.title}</span>
+                    <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
+                      isSelected ? 'bg-white/20 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'
+                    }`}>
+                      {count}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
 
           <div className="space-y-3">
             {filteredQuestions.map((q, idx) => (
@@ -716,11 +827,17 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                 className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-3"
               >
                 <div className="flex items-start justify-between">
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <span className="font-bold text-violet-600 dark:text-violet-400 text-sm">#{idx + 1}</span>
                     <span className="text-xs px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold border border-slate-200 dark:border-slate-700">
                       {q.type}
                     </span>
+                    {/* Badge Nama Mapel */}
+                    {allSubjects && (
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-violet-50 dark:bg-violet-950/60 text-violet-700 dark:text-violet-300 font-bold border border-violet-200/60 dark:border-violet-800/60">
+                        {allSubjects.find(s => s.id === q.subjectId)?.title.replace('Asesmen Sumatif - ', '').replace('Asesmen Sumatif Tengah Semester - ', '') || subject.title.replace('Asesmen Sumatif - ', '')}
+                      </span>
+                    )}
                   </div>
                   <button
                     onClick={() => onDeleteQuestion(q.id)}

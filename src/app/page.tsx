@@ -858,6 +858,21 @@ export default function Home() {
     }
   };
 
+  // Hitung jumlah paket ujian riil yang berhak diakses guru / pengawas
+  const teacherExamsCount = useMemo(() => {
+    if (!currentTeacher || currentTeacher.role === 'admin' || currentTeacher.role === 'pengawas') {
+      return subjects.length;
+    }
+    const assignedNames = currentTeacher.assignments?.map(a => a.subject.toLowerCase()) || [];
+    return subjects.filter(s => {
+      const sLower = s.title.toLowerCase();
+      return (
+        assignedNames.some(name => sLower.includes(name) || name.includes(sLower)) ||
+        (currentTeacher.subject && sLower.includes(currentTeacher.subject.toLowerCase()))
+      );
+    }).length;
+  }, [subjects, currentTeacher]);
+
   // =========================================================================
   // VIEW 0: LAYAR LOGIN GURU & PENGAWAS (PORTAL RESMI & PENDAFTARAN AKUN GURU)
   // =========================================================================
@@ -1074,20 +1089,6 @@ export default function Home() {
       </div>
     );
   }
-
-  const teacherExamsCount = useMemo(() => {
-    if (!currentTeacher || currentTeacher.role === 'admin' || currentTeacher.role === 'pengawas') {
-      return subjects.length;
-    }
-    const assignedNames = currentTeacher.assignments?.map(a => a.subject.toLowerCase()) || [];
-    return subjects.filter(s => {
-      const sLower = s.title.toLowerCase();
-      return (
-        assignedNames.some(name => sLower.includes(name) || name.includes(sLower)) ||
-        (currentTeacher.subject && sLower.includes(currentTeacher.subject.toLowerCase()))
-      );
-    }).length;
-  }, [subjects, currentTeacher]);
 
   // =========================================================================
   // VIEW 3: PANEL GURU / DASHBOARD UTAMA SAAS (TABOR STUDY FORMAL THEME)

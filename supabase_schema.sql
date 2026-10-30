@@ -295,7 +295,7 @@ VALUES
 );
 
 -- ===============================================================
--- 10. TABEL DAFTAR GURU & PENGAWAS (30 GURU SMPN 58)
+-- 10. TABEL DAFTAR GURU & PENGAWAS (DENGAN SUPERADMIN & PENUGASAN MULTI-MAPEL)
 -- ===============================================================
 CREATE TABLE IF NOT EXISTS public.teachers (
     id TEXT PRIMARY KEY,
@@ -304,6 +304,7 @@ CREATE TABLE IF NOT EXISTS public.teachers (
     email VARCHAR(150) UNIQUE NOT NULL,
     subject VARCHAR(150) NOT NULL,
     classes TEXT[] DEFAULT '{}',
+    assignments JSONB DEFAULT '[]'::jsonb,
     role VARCHAR(30) DEFAULT 'guru_mapel' CHECK (role IN ('admin', 'guru_mapel', 'pengawas')),
     pin VARCHAR(20) DEFAULT '123456',
     avatar_color VARCHAR(50) DEFAULT 'bg-violet-600',
@@ -312,6 +313,54 @@ CREATE TABLE IF NOT EXISTS public.teachers (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Kebijakan RLS (Public All Access untuk Aplikasi CBT)
+ALTER TABLE public.subjects ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow public all subjects" ON public.subjects;
+CREATE POLICY "Allow public all subjects" ON public.subjects FOR ALL USING (true) WITH CHECK (true);
+
+ALTER TABLE public.questions ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow public all questions" ON public.questions;
+CREATE POLICY "Allow public all questions" ON public.questions FOR ALL USING (true) WITH CHECK (true);
+
+ALTER TABLE public.exam_results ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow public all results" ON public.exam_results;
+CREATE POLICY "Allow public all results" ON public.exam_results FOR ALL USING (true) WITH CHECK (true);
+
 ALTER TABLE public.teachers ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow anon all on teachers" ON public.teachers;
 CREATE POLICY "Allow anon all on teachers" ON public.teachers FOR ALL USING (true) WITH CHECK (true);
-ALTER PUBLICATION supabase_realtime ADD TABLE teachers;
+
+-- 11. AKUN KHUSUS SUPERADMIN & PENGAWAS UTAMA (LANGSUNG AKTIF)
+INSERT INTO public.teachers (id, nip, name, email, subject, classes, assignments, role, pin, avatar_color, status)
+VALUES
+(
+    'admin-super',
+    'admin',
+    'Administrator CBT & Proktor Utama',
+    'admin@smpn58.sch.id',
+    'Semua Mata Pelajaran',
+    ARRAY['Semua Kelas'],
+    '[]'::jsonb,
+    'admin',
+    'admin123',
+    'bg-violet-900',
+    'Aktif Mengawas'
+),
+(
+    'pengawas-utama',
+    'pengawas',
+    'Pengawas Ruang / Laboratorium CBT',
+    'pengawas@smpn58.sch.id',
+    'Pengawasan Ujian Terpadu',
+    ARRAY['Semua Kelas'],
+    '[]'::jsonb,
+    'pengawas',
+    'pengawas123',
+    'bg-amber-700',
+    'Aktif Mengawas'
+)
+ON CONFLICT (nip) DO UPDATE SET
+    role = EXCLUDED.role,
+    pin = EXCLUDED.pin,
+    name = EXCLUDED.name,
+    status = EXCLUDED.status;

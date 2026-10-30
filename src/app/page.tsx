@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { initialSubject, sampleQuestions } from '@/lib/mockData';
+import { initialSubject, sampleSubjects, sampleQuestions } from '@/lib/mockData';
 import { initialStudents } from '@/lib/rosterStudents';
 import { initialTeachers } from '@/lib/rosterTeachers';
 import { Subject, Question, ExamResult, ExamNotification, ExamMessage, Student, Teacher } from '@/types/cbt';
@@ -14,6 +14,7 @@ import { HelpModal } from '@/components/modals/HelpModal';
 import { CertificateModal } from '@/components/modals/CertificateModal';
 import {
   fetchActiveSubject,
+  fetchAllSubjects,
   fetchQuestionsBySubject,
   insertQuestion,
   removeQuestion,
@@ -77,6 +78,7 @@ export default function Home() {
   const [certificateTargetResult, setCertificateTargetResult] = useState<ExamResult | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
 
+  const [subjects, setSubjects] = useState<Subject[]>(sampleSubjects);
   const [subject, setSubject] = useState<Subject>(initialSubject);
   const [questions, setQuestions] = useState<Question[]>(sampleQuestions);
   const [results, setResults] = useState<ExamResult[]>([]);
@@ -167,16 +169,23 @@ export default function Home() {
     async function loadData() {
       setIsLoading(true);
       try {
-        const sub = await fetchActiveSubject();
-        setSubject(sub);
-        if (sub.token) setInputToken(sub.token);
+        const allSubs = await fetchAllSubjects();
+        let activeSub: Subject;
+        if (allSubs && allSubs.length > 0) {
+          setSubjects(allSubs);
+          activeSub = allSubs.find(s => s.isActive) || allSubs[0];
+        } else {
+          activeSub = await fetchActiveSubject();
+        }
+        setSubject(activeSub);
+        if (activeSub.token) setInputToken(activeSub.token);
 
-        const qList = await fetchQuestionsBySubject(sub.id);
+        const qList = await fetchQuestionsBySubject(activeSub.id);
         if (qList && qList.length > 0) {
           setQuestions(qList);
         }
 
-        const resList = await fetchExamResults(sub.id);
+        const resList = await fetchExamResults(activeSub.id);
         if (resList && resList.length > 0) {
           setResults(resList);
         }
@@ -207,7 +216,7 @@ export default function Home() {
         }
 
         // Ambil notifikasi dari Supabase & filter dengan status localStorage
-        const notifList = await fetchNotifications(sub.id);
+        const notifList = await fetchNotifications(activeSub.id);
         const sourceNotifs = notifList && notifList.length > 0 ? notifList : initialSeedNotifications;
         const filteredNotifs = sourceNotifs
           .filter(n => !deletedNotifIds.includes(n.id))
@@ -218,7 +227,7 @@ export default function Home() {
         setNotifications(filteredNotifs);
 
         // Ambil pesan kendala dari Supabase & filter dengan status localStorage
-        const msgList = await fetchMessages(sub.id);
+        const msgList = await fetchMessages(activeSub.id);
         const sourceMsgs = msgList && msgList.length > 0 ? msgList : initialSeedMessages;
         const filteredMsgs = sourceMsgs
           .filter(m => !deletedMsgIds.includes(m.id))
@@ -314,6 +323,7 @@ export default function Home() {
 
   const handleUpdateSubject = async (updated: Subject) => {
     setSubject(updated);
+    setSubjects(prev => prev.map(s => (s.id === updated.id ? updated : s)));
     try {
       await updateSubjectInSupabase(updated);
     } catch (err) {
@@ -402,13 +412,29 @@ export default function Home() {
       ? teacher.assignments[0]
       : null;
 
-    if (firstAsg) {
+    if (teacher.role === 'admin') {
+      const firstSub = subjects[0] || initialSubject;
+      setActiveAssignmentSubject(firstSub.title);
+      setSubject(firstSub);
+      if (firstSub.className) {
+        setSelectedStudentClass(firstSub.className.split(',')[0].trim());
+      }
+    } else if (firstAsg) {
       setActiveAssignmentSubject(firstAsg.subject);
-      setSubject(prev => ({
-        ...prev,
-        title: `Asesmen Sumatif - ${firstAsg.subject}`,
-        className: firstAsg.classes.join(', ')
-      }));
+      const match = subjects.find(s => s.title.toLowerCase().includes(firstAsg.subject.toLowerCase()));
+      if (match) {
+        setSubject({
+          ...match,
+          className: firstAsg.classes.join(', ')
+        });
+      } else {
+        setSubject(prev => ({
+          ...prev,
+          id: `sub-${firstAsg.subject.toLowerCase().replace(/[^a-z0-9]/g, '-')}`,
+          title: `Asesmen Sumatif - ${firstAsg.subject}`,
+          className: firstAsg.classes.join(', ')
+        }));
+      }
       if (firstAsg.classes.length > 0) {
         setSelectedStudentClass(firstAsg.classes[0]);
       }
@@ -419,11 +445,19 @@ export default function Home() {
       !teacher.subject.includes('BK')
     ) {
       setActiveAssignmentSubject(teacher.subject);
-      setSubject(prev => ({
-        ...prev,
-        title: `Asesmen Sumatif - ${teacher.subject}`,
-        className: teacher.classes.join(', ') || prev.className
-      }));
+      const match = subjects.find(s => s.title.toLowerCase().includes(teacher.subject.toLowerCase()));
+      if (match) {
+        setSubject({
+          ...match,
+          className: teacher.classes.join(', ') || match.className
+        });
+      } else {
+        setSubject(prev => ({
+          ...prev,
+          title: `Asesmen Sumatif - ${teacher.subject}`,
+          className: teacher.classes.join(', ') || prev.className
+        }));
+      }
       if (teacher.classes.length > 0) {
         setSelectedStudentClass(teacher.classes[0]);
       }
@@ -441,10 +475,35 @@ export default function Home() {
   const handleSelectAssignment = (subjectName: string) => {
     setActiveAssignmentSubject(subjectName);
     if (!currentTeacher) return;
+
+    // 1. Cari kecocokan di daftar subjects lengkap (khusus Superadmin atau mapel umum)
+    const foundInSubjects = subjects.find(
+      s =>
+        s.title.toLowerCase().includes(subjectName.toLowerCase()) ||
+        subjectName.toLowerCase().includes(s.title.toLowerCase())
+    );
+
+    // 2. Cari kecocokan di assignments guru
     const asg = currentTeacher.assignments?.find(a => a.subject === subjectName);
+
+    if (foundInSubjects) {
+      setSubject({
+        ...foundInSubjects,
+        className: asg ? asg.classes.join(', ') : foundInSubjects.className
+      });
+      if (asg && asg.classes.length > 0) {
+        setSelectedStudentClass(asg.classes[0]);
+      } else if (foundInSubjects.className) {
+        const firstCls = foundInSubjects.className.split(',')[0].trim();
+        setSelectedStudentClass(firstCls);
+      }
+      return;
+    }
+
     if (asg) {
       setSubject(prev => ({
         ...prev,
+        id: `sub-${asg.subject.toLowerCase().replace(/[^a-z0-9]/g, '-')}`,
         title: `Asesmen Sumatif - ${asg.subject}`,
         className: asg.classes.join(', ')
       }));
@@ -492,14 +551,38 @@ export default function Home() {
       setLoginError(language === 'id' ? 'Harap pilih atau masukkan nama lengkap siswa.' : 'Please enter student name.');
       return;
     }
-    if (inputToken.trim().toUpperCase() !== subject.token.toUpperCase()) {
+
+    const cleanToken = inputToken.trim().toUpperCase();
+    // 1. Auto-deteksi mata pelajaran berdasarkan token yang dimasukkan siswa
+    const matchedSub = subjects.find(
+      s => s.token.trim().toUpperCase() === cleanToken && s.isActive
+    );
+
+    if (!matchedSub) {
       setLoginError(
         language === 'id'
-          ? 'Token ujian salah! Silakan tanyakan token kepada guru pengawas.'
-          : 'Invalid exam token! Please ask your proctor.'
+          ? `Token "${inputToken}" tidak ditemukan atau belum aktif! Silakan tanyakan token resmi kepada guru pengawas.`
+          : `Exam token "${inputToken}" not found or inactive! Please ask your proctor.`
       );
       return;
     }
+
+    // 2. Validasi apakah rombel kelas siswa berhak mengikuti ujian mapel ini
+    if (
+      matchedSub.className &&
+      !matchedSub.className.includes('Semua') &&
+      !matchedSub.className.includes(selectedStudentClass)
+    ) {
+      setLoginError(
+        language === 'id'
+          ? `Token "${inputToken}" adalah untuk ujian ${matchedSub.title} (Rombel: ${matchedSub.className}). Kelas Anda (${selectedStudentClass}) tidak terdaftar untuk ujian ini.`
+          : `Token "${inputToken}" is for ${matchedSub.title} (${matchedSub.className}). Your class (${selectedStudentClass}) is not scheduled for this exam.`
+      );
+      return;
+    }
+
+    // Pasang otomatis mata pelajaran yang terdeteksi
+    setSubject(matchedSub);
     setLoginError('');
     setViewMode('student_exam');
   };
@@ -945,6 +1028,7 @@ export default function Home() {
           onSendBroadcast={handleSendBroadcast}
           currentTeacher={currentTeacher}
           teachers={teachers}
+          allSubjects={subjects}
           activeAssignmentSubject={activeAssignmentSubject || currentTeacher?.subject}
           onSelectAssignment={handleSelectAssignment}
           onLogoutTeacher={handleTeacherLogout}

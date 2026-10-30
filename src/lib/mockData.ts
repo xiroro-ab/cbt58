@@ -2,8 +2,8 @@ import { Subject, Question } from '@/types/cbt';
 
 export const initialSubject: Subject = {
   id: 'sub-001',
-  title: 'Asesmen Sumatif Tengah Semester - IPA Terpadu',
-  className: 'IX-A',
+  title: 'Asesmen Sumatif - Ilmu Pengetahuan Alam (IPA)',
+  className: 'VII.1, VII.2, VII.3',
   durationMinutes: 45,
   violationLimit: 3,
   token: 'IPA2026',
@@ -18,7 +18,48 @@ export const initialSubject: Subject = {
   }
 };
 
+export const sampleSubjects: Subject[] = [
+  initialSubject,
+  {
+    id: 'sub-inf-01',
+    title: 'Asesmen Sumatif - Informatika & TIK',
+    className: 'IX.1, IX.2, IX.3, IX.4',
+    durationMinutes: 60,
+    violationLimit: 3,
+    token: 'TIK2026',
+    isActive: true,
+    scoringRules: {
+      'Pilihan Ganda': 1,
+      'Pilihan Ganda Kompleks': 2,
+      'Benar/Salah': 2,
+      'Menjodohkan': 2,
+      'Isian Singkat': 2,
+      'Esai': 4
+    }
+  },
+  {
+    id: 'sub-mtk-01',
+    title: 'Asesmen Sumatif - Matematika',
+    className: 'VII.1, VII.2, VII.3, IX.1',
+    durationMinutes: 60,
+    violationLimit: 3,
+    token: 'MTK2026',
+    isActive: true,
+    scoringRules: {
+      'Pilihan Ganda': 2,
+      'Pilihan Ganda Kompleks': 3,
+      'Benar/Salah': 2,
+      'Menjodohkan': 2,
+      'Isian Singkat': 3,
+      'Esai': 5
+    }
+  }
+];
+
 export const sampleQuestions: Question[] = [
+  // ==========================================
+  // SOAL MAPEL 1: ILMU PENGETAHUAN ALAM (IPA)
+  // ==========================================
   // 1. Pilihan Ganda
   {
     id: 'q-1',
@@ -102,6 +143,84 @@ export const sampleQuestions: Question[] = [
     questionText: 'Jelaskan mengapa fotosintesis pada tumbuhan sangat penting bagi kelangsungan hidup seluruh makhluk hidup di bumi!',
     options: [],
     answer: 'Menghasilkan oksigen untuk respirasi makhluk hidup dan menghasilkan glukosa/energi sebagai produsen primer rantai makanan.',
+    orderIndex: 6
+  },
+
+  // ==========================================
+  // SOAL MAPEL 2: INFORMATIKA & TIK (sub-inf-01)
+  // ==========================================
+  {
+    id: 'q-inf-1',
+    subjectId: 'sub-inf-01',
+    type: 'Pilihan Ganda',
+    questionText: 'Komponen perangkat keras (hardware) komputer yang berfungsi sebagai unit pemrosesan utama dan sering disebut sebagai "otak" komputer adalah...',
+    options: [
+      { text: 'Random Access Memory (RAM)' },
+      { text: 'Central Processing Unit (CPU)' },
+      { text: 'Hard Disk Drive (HDD)' },
+      { text: 'Power Supply Unit (PSU)' }
+    ],
+    answer: 'B',
+    orderIndex: 1
+  },
+  {
+    id: 'q-inf-2',
+    subjectId: 'sub-inf-01',
+    type: 'Benar/Salah',
+    questionText: 'Perhatikan pernyataan tentang jaringan komputer dan internet berikut. Tentukan apakah masing-masing pernyataan Benar atau Salah!',
+    options: [
+      { text: 'Alamat IPv4 terdiri atas 32 bit yang dipisahkan menjadi 4 oktet desimal.' },
+      { text: 'Topologi Star memerlukan perangkat Switch atau Hub sebagai konsentrator pusat.' },
+      { text: 'HTML merupakan bahasa pemrograman berorientasi objek untuk melatih kecerdasan buatan.' },
+      { text: 'Protokol HTTPS menggunakan enkripsi SSL/TLS sehingga transmisi data lebih aman daripada HTTP.' }
+    ],
+    answer: ['Benar', 'Benar', 'Salah', 'Benar'],
+    orderIndex: 2
+  },
+  {
+    id: 'q-inf-3',
+    subjectId: 'sub-inf-01',
+    type: 'Pilihan Ganda Kompleks',
+    questionText: 'Manakah di antara sistem operasi berikut yang bersifat Open Source (sumber terbuka) dan bebas dikembangkan? (Pilihlah satu atau lebih jawaban)',
+    options: [
+      { text: 'Linux Ubuntu' },
+      { text: 'Microsoft Windows 11' },
+      { text: 'Debian GNU/Linux' },
+      { text: 'Apple macOS' }
+    ],
+    answer: ['A', 'C'],
+    orderIndex: 3
+  },
+  {
+    id: 'q-inf-4',
+    subjectId: 'sub-inf-01',
+    type: 'Menjodohkan',
+    questionText: 'Pasangkanlah ekstensi file di sebelah kiri dengan format data yang tepat di sebelah kanan!',
+    options: [
+      { q: { text: '.docx' }, a: { text: 'Dokumen Pengolah Kata' } },
+      { q: { text: '.mp4' }, a: { text: 'Video Digital' } },
+      { q: { text: '.py' }, a: { text: 'Skrip Kode Python' } },
+      { q: { text: '.png' }, a: { text: 'Gambar Grafis Portabel' } }
+    ],
+    answer: 'Otomatis',
+    orderIndex: 4
+  },
+  {
+    id: 'q-inf-5',
+    subjectId: 'sub-inf-01',
+    type: 'Isian Singkat',
+    questionText: 'Jaringan komputer global terdesentralisasi yang saling terhubung menggunakan standar protokol komunikasi TCP/IP disebut...',
+    options: [],
+    answer: ['internet', 'the internet'],
+    orderIndex: 5
+  },
+  {
+    id: 'q-inf-6',
+    subjectId: 'sub-inf-01',
+    type: 'Esai',
+    questionText: 'Jelaskan perbedaan mendasar antara perangkat masukan (Input Device) dan perangkat keluaran (Output Device) beserta masing-masing 2 contoh konkretnya!',
+    options: [],
+    answer: 'Input Device berfungsi memasukkan data/perintah ke komputer (contoh: Keyboard, Mouse, Mikrofon), sedangkan Output Device menyajikan hasil pemrosesan informasi kepada pengguna (contoh: Monitor, Printer, Speaker).',
     orderIndex: 6
   }
 ];

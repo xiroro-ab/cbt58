@@ -87,6 +87,7 @@ export const TeacherLogin: React.FC<TeacherLoginProps> = ({
   const [regNip, setRegNip] = useState('');
   const [regEmail, setRegEmail] = useState('');
   const [regRole, setRegRole] = useState<'guru_mapel' | 'pengawas' | 'admin'>('guru_mapel');
+  const [regSchoolPasscode, setRegSchoolPasscode] = useState('');
   const [regPin, setRegPin] = useState('');
   const [regConfirmPin, setRegConfirmPin] = useState('');
   const [showRegPin, setShowRegPin] = useState(false);
@@ -213,6 +214,17 @@ export const TeacherLogin: React.FC<TeacherLoginProps> = ({
     const cleanEmail = regEmail.trim().toLowerCase();
     const cleanPin = regPin.trim();
     const cleanConfirm = regConfirmPin.trim();
+    const cleanSchoolPasscode = regSchoolPasscode.trim().toUpperCase();
+
+    if (!cleanSchoolPasscode) {
+      setRegError('Kode Otorisasi Dewan Guru wajib diisi untuk verifikasi keamanan sekolah.');
+      return;
+    }
+
+    if (cleanSchoolPasscode !== 'GURU58') {
+      setRegError('Kode Otorisasi Dewan Guru salah! Akses pendaftaran ini dilindungi khusus bagi dewan guru resmi SMPN 58 Palembang.');
+      return;
+    }
 
     if (!cleanName || !cleanNip || !cleanEmail) {
       setRegError('Nama, NIP, dan Email wajib diisi.');
@@ -620,6 +632,30 @@ export const TeacherLogin: React.FC<TeacherLoginProps> = ({
                   </div>
                 ))}
               </div>
+            </div>
+
+            {/* Kode Otorisasi Dewan Guru (Proteksi agar Siswa Tidak Bisa Daftar) */}
+            <div className="p-3.5 rounded-2xl bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200/80 dark:border-amber-800/60 space-y-1.5">
+              <label className="block text-slate-800 dark:text-slate-200 font-bold flex items-center justify-between text-xs">
+                <span className="flex items-center gap-1.5">
+                  <ShieldCheck className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                  <span>Kode Otorisasi Dewan Guru</span>
+                </span>
+                <span className="text-[10px] bg-amber-100 dark:bg-amber-900/60 text-amber-700 dark:text-amber-300 font-bold px-2 py-0.5 rounded-full">
+                  Wajib dari Sekolah
+                </span>
+              </label>
+              <input
+                type="text"
+                required
+                value={regSchoolPasscode}
+                onChange={e => setRegSchoolPasscode(e.target.value)}
+                placeholder="Masukkan Kode Rahasia Guru (Contoh: GURU58)"
+                className="w-full px-3.5 py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-amber-300 dark:border-amber-700 text-slate-900 dark:text-white uppercase tracking-wider font-mono font-bold text-xs focus:outline-none focus:ring-2 focus:ring-amber-500 transition"
+              />
+              <p className="text-[10px] text-amber-800/80 dark:text-amber-400/80">
+                Kode rahasia yang diterbitkan oleh Kepala Sekolah / Waka Kurikulum agar siswa tidak bisa ikut mendaftar.
+              </p>
             </div>
 
             {/* Password & Konfirmasi Password */}

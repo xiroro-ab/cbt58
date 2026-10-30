@@ -1,8 +1,38 @@
 import { supabase } from './supabaseClient';
 import { Subject, Question, ExamResult, ScoringRules, ExamNotification, ExamMessage, Student, Teacher } from '@/types/cbt';
-import { initialSubject, sampleQuestions } from './mockData';
+import { initialSubject, sampleSubjects, sampleQuestions } from './mockData';
 import { initialStudents } from './rosterStudents';
 import { initialTeachers } from './rosterTeachers';
+
+/**
+ * Mengambil seluruh daftar mata pelajaran dari Supabase (fallback ke sampleSubjects)
+ */
+export async function fetchAllSubjects(): Promise<Subject[]> {
+  try {
+    const { data, error } = await supabase
+      .from('subjects')
+      .select('*')
+      .order('title', { ascending: true });
+
+    if (error || !data || data.length === 0) {
+      return sampleSubjects;
+    }
+
+    return data.map(d => ({
+      id: d.id,
+      title: d.title,
+      className: d.class_target,
+      durationMinutes: d.duration_minutes,
+      violationLimit: d.violation_limit,
+      token: d.token,
+      isActive: d.is_active,
+      scoringRules: d.scoring_rules || initialSubject.scoringRules
+    }));
+  } catch (err) {
+    console.error('Error fetchAllSubjects:', err);
+    return sampleSubjects;
+  }
+}
 
 /**
  * Mengambil data mata pelajaran aktif dari Supabase

@@ -2,6 +2,30 @@ import { Teacher } from '@/types/cbt';
 
 export const initialTeachers: Teacher[] = [
   {
+    id: 'admin-super',
+    nip: 'admin',
+    name: 'Administrator CBT & Proktor Utama',
+    email: 'admin@smpn58.sch.id',
+    subject: 'Semua Mata Pelajaran',
+    classes: ['Semua Kelas'],
+    role: 'admin',
+    pin: 'admin123',
+    avatarColor: 'bg-violet-900',
+    status: 'Aktif Mengawas'
+  },
+  {
+    id: 'pengawas-utama',
+    nip: 'pengawas',
+    name: 'Pengawas Ruang / Laboratorium CBT',
+    email: 'pengawas@smpn58.sch.id',
+    subject: 'Pengawasan Ujian Terpadu',
+    classes: ['Semua Kelas'],
+    role: 'pengawas',
+    pin: 'pengawas123',
+    avatarColor: 'bg-amber-700',
+    status: 'Aktif Mengawas'
+  },
+  {
     id: 'tea-01',
     nip: '198503152010011012',
     name: 'Ahmad Fauzi, S.Pd',

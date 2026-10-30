@@ -122,15 +122,20 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
     );
   }, [results, searchQuery]);
 
+  const activeQuestions = useMemo(() => {
+    // Isolasi Bank Soal: Hanya tampilkan soal yang sesuai dengan ID Mapel yang sedang aktif
+    return questions.filter(q => !q.subjectId || q.subjectId === subject.id);
+  }, [questions, subject.id]);
+
   const filteredQuestions = useMemo(() => {
-    if (!searchQuery.trim()) return questions;
+    if (!searchQuery.trim()) return activeQuestions;
     const q = searchQuery.toLowerCase();
-    return questions.filter(
+    return activeQuestions.filter(
       item =>
         item.questionText.toLowerCase().includes(q) ||
         item.type.toLowerCase().includes(q)
     );
-  }, [questions, searchQuery]);
+  }, [activeQuestions, searchQuery]);
 
   // Handle Simpan Soal
   const handleSaveQuestion = (e: React.FormEvent) => {
@@ -170,7 +175,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
       mediaUrl: modalMediaUrl || undefined,
       options: finalOptions,
       answer: finalAnswer,
-      orderIndex: questions.length + 1
+      orderIndex: activeQuestions.length + 1
     };
 
     onAddQuestion(newQ);
@@ -352,7 +357,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                     {t.metricQuestionsTitle}
                   </span>
                   <h3 className="text-2xl font-bold text-slate-900 dark:text-white">
-                    {questions.length} <span className="text-sm font-normal text-slate-500">Butir</span>
+                    {activeQuestions.length} <span className="text-sm font-normal text-slate-500">Butir</span>
                   </h3>
                   <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 flex items-center gap-1 mt-0.5">
                     <TrendingUp className="w-3.5 h-3.5" /> 5 Tipe Soal Terkoneksi
@@ -692,7 +697,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
             <div>
               <h3 className="text-base font-bold text-slate-900 dark:text-white">{t.navQuestions}</h3>
               <p className="text-xs text-slate-400 dark:text-slate-500">
-                {subject.title} • {questions.length} Soal Terdaftar
+                {subject.title} • {activeQuestions.length} Soal Terdaftar
               </p>
             </div>
             <button
@@ -849,7 +854,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
               <div className="grid grid-cols-2 gap-4 pt-2 border-t border-slate-100 dark:border-slate-800 text-xs">
                 <div>
                   <span className="text-slate-400 block text-[11px]">Jumlah Soal</span>
-                  <span className="font-bold text-slate-800 dark:text-slate-200 text-sm">{questions.length} Butir Soal</span>
+                  <span className="font-bold text-slate-800 dark:text-slate-200 text-sm">{activeQuestions.length} Butir Soal</span>
                 </div>
                 <div>
                   <span className="text-slate-400 block text-[11px]">Status Ujian</span>

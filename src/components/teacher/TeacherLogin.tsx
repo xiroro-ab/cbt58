@@ -650,11 +650,11 @@ export const TeacherLogin: React.FC<TeacherLoginProps> = ({
                 required
                 value={regSchoolPasscode}
                 onChange={e => setRegSchoolPasscode(e.target.value)}
-                placeholder="Masukkan Kode Rahasia Guru (Contoh: GURU58)"
+                placeholder="Masukkan Kode Otorisasi Sekolah..."
                 className="w-full px-3.5 py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-amber-300 dark:border-amber-700 text-slate-900 dark:text-white uppercase tracking-wider font-mono font-bold text-xs focus:outline-none focus:ring-2 focus:ring-amber-500 transition"
               />
               <p className="text-[10px] text-amber-800/80 dark:text-amber-400/80">
-                Kode rahasia yang diterbitkan oleh Kepala Sekolah / Waka Kurikulum agar siswa tidak bisa ikut mendaftar.
+                Kode verifikasi rahasia yang hanya dibagikan oleh Kepala Sekolah / Waka Kurikulum kepada dewan guru resmi.
               </p>
             </div>
 

@@ -15,8 +15,13 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "CBT Modern - Sistem Ujian Online",
-  description: "Aplikasi CBT Modern Berbasis Next.js, TypeScript, dan Supabase",
+  title: "SMPN58 - CBT Assessment",
+  description: "Aplikasi Asesmen Sumatif CBT SMP Negeri 58 Palembang",
+  icons: {
+    icon: "/ico.png",
+    shortcut: "/ico.png",
+    apple: "/ico.png"
+  }
 };
 
 export default function RootLayout({
@@ -30,6 +35,11 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
       suppressHydrationWarning
     >
+      <head>
+        <link rel="icon" href="/ico.png" type="image/png" />
+        <link rel="shortcut icon" href="/ico.png" type="image/png" />
+        <link rel="apple-touch-icon" href="/ico.png" />
+      </head>
       <body className="min-h-full flex flex-col">
         <ThemeProvider>
           <LanguageProvider>{children}</LanguageProvider>

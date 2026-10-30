@@ -701,6 +701,49 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
     return Array.from(set).sort();
   }, [students]);
 
+  // Rombel Siswa Unik & Helper Pemilihan Rombel Target Ujian
+  const studentClasses = useMemo(() => {
+    const set = new Set<string>();
+    students?.forEach(s => {
+      if (s.className && s.className.trim()) {
+        set.add(s.className.trim());
+      }
+    });
+    const arr = Array.from(set);
+    if (arr.length === 0) {
+      return ['VII.1', 'VII.2', 'VII.3', 'VIII.1', 'VIII.2', 'VIII.3', 'IX.1', 'IX.2', 'IX.3'];
+    }
+    return arr.sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
+  }, [students]);
+
+  const parseClassList = (classStr: string) => {
+    if (!classStr || classStr.trim() === 'Semua Kelas') return ['Semua Kelas'];
+    return classStr.split(',').map(c => c.trim()).filter(Boolean);
+  };
+
+  const toggleClassInString = (currentStr: string, targetCls: string) => {
+    if (targetCls === 'Semua Kelas') {
+      return 'Semua Kelas';
+    }
+    const currentList = currentStr === 'Semua Kelas' ? [] : parseClassList(currentStr);
+    let updated: string[];
+    if (currentList.includes(targetCls)) {
+      updated = currentList.filter(c => c !== targetCls);
+    } else {
+      updated = [...currentList, targetCls];
+    }
+    if (updated.length === 0) return 'Semua Kelas';
+    updated.sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
+    return updated.join(', ');
+  };
+
+  const getStudentCountForClasses = (classStr: string) => {
+    if (!students || students.length === 0) return 0;
+    if (!classStr || classStr === 'Semua Kelas') return students.length;
+    const list = parseClassList(classStr);
+    return students.filter(s => list.includes(s.className?.trim())).length;
+  };
+
   // Checkbox Selection Logic
   const isAllSelected = filteredResults.length > 0 && selectedResultIds.length === filteredResults.length;
 
@@ -3305,21 +3348,119 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                 />
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1">
-                    Target Rombel / Kelas
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={newSubClass}
-                    onChange={e => setNewSubClass(e.target.value)}
-                    placeholder="Misal: VII.1, VII.2, VII.3"
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white"
-                  />
-                </div>
+              {/* Target Rombel / Kelas dengan Dropdown & Interactive Chips */}
+              <div className="space-y-1.5">
+                <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1 flex items-center justify-between">
+                  <span className="flex items-center gap-1.5">
+                    <School className="w-3.5 h-3.5 text-violet-600 dark:text-violet-400" />
+                    <span>Target Rombel / Kelas (Data Siswa)</span>
+                  </span>
+                  <span className="text-[10px] text-violet-600 dark:text-violet-400 font-bold bg-violet-50 dark:bg-violet-950/60 px-2 py-0.5 rounded-full border border-violet-200 dark:border-violet-800">
+                    {getStudentCountForClasses(newSubClass)} Siswa Tercover
+                  </span>
+                </label>
 
+                {/* Dropdown Menu Pilihan Cepat */}
+                <select
+                  value={
+                    newSubClass === 'Semua Kelas'
+                      ? 'ALL'
+                      : studentClasses.includes(newSubClass)
+                      ? newSubClass
+                      : 'CUSTOM'
+                  }
+                  onChange={e => {
+                    const val = e.target.value;
+                    if (val === 'ALL') setNewSubClass('Semua Kelas');
+                    else if (val === 'VII_ALL') {
+                      const vii = studentClasses.filter(c => c.startsWith('VII'));
+                      setNewSubClass(vii.join(', ') || 'VII.1, VII.2, VII.3');
+                    } else if (val === 'VIII_ALL') {
+                      const viii = studentClasses.filter(c => c.startsWith('VIII'));
+                      setNewSubClass(viii.join(', ') || 'VIII.1, VIII.2, VIII.3');
+                    } else if (val === 'IX_ALL') {
+                      const ix = studentClasses.filter(c => c.startsWith('IX'));
+                      setNewSubClass(ix.join(', ') || 'IX.1, IX.2, IX.3');
+                    } else if (val !== 'CUSTOM') {
+                      setNewSubClass(val);
+                    }
+                  }}
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white font-semibold cursor-pointer text-xs"
+                >
+                  <option value="ALL">🌐 Semua Kelas (Seluruh Siswa)</option>
+                  <optgroup label="Pilihan Cepat per Tingkat">
+                    <option value="VII_ALL">Seluruh Kelas VII (VII.1, VII.2, VII.3, ...)</option>
+                    <option value="VIII_ALL">Seluruh Kelas VIII (VIII.1, VIII.2, VIII.3, ...)</option>
+                    <option value="IX_ALL">Seluruh Kelas IX (IX.1, IX.2, IX.3, ...)</option>
+                  </optgroup>
+                  <optgroup label="Pilih Satu Rombel Spesifik">
+                    {studentClasses.map(cls => (
+                      <option key={cls} value={cls}>Hanya Kelas {cls}</option>
+                    ))}
+                  </optgroup>
+                  <option value="CUSTOM" disabled hidden>Kombinasi Terpilih ({newSubClass})</option>
+                </select>
+
+                {/* Multi-Select Rombel Chips */}
+                <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-1.5">
+                  <div className="flex items-center justify-between text-[11px] text-slate-500">
+                    <span className="font-semibold">Klik rombel untuk menambah / mencoret:</span>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => setNewSubClass('Semua Kelas')}
+                        className="text-[10px] text-violet-600 dark:text-violet-400 font-bold hover:underline cursor-pointer"
+                      >
+                        Semua Kelas
+                      </button>
+                      <span>•</span>
+                      <button
+                        type="button"
+                        onClick={() => setNewSubClass(studentClasses[0] || 'VII.1')}
+                        className="text-[10px] text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:underline cursor-pointer"
+                      >
+                        Reset
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap gap-1.5 pt-0.5">
+                    <button
+                      type="button"
+                      onClick={() => setNewSubClass(newSubClass === 'Semua Kelas' ? (studentClasses[0] || 'VII.1') : 'Semua Kelas')}
+                      className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition flex items-center gap-1 cursor-pointer ${
+                        newSubClass === 'Semua Kelas'
+                          ? 'bg-violet-600 text-white shadow-xs'
+                          : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-violet-400'
+                      }`}
+                    >
+                      {newSubClass === 'Semua Kelas' && <Check className="w-3 h-3" />}
+                      <span>Semua Kelas</span>
+                    </button>
+
+                    {studentClasses.map(cls => {
+                      const isSelected = newSubClass === 'Semua Kelas' || parseClassList(newSubClass).includes(cls);
+                      return (
+                        <button
+                          key={cls}
+                          type="button"
+                          onClick={() => setNewSubClass(toggleClassInString(newSubClass, cls))}
+                          className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition flex items-center gap-1 cursor-pointer ${
+                            isSelected
+                              ? 'bg-violet-600 text-white shadow-xs'
+                              : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-violet-400'
+                          }`}
+                        >
+                          {isSelected && <Check className="w-3 h-3" />}
+                          <span>{cls}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1">
                     Durasi Pengerjaan (Menit)
@@ -3456,20 +3597,119 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                 />
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1">
-                    Target Rombel / Kelas
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={editSubClass}
-                    onChange={e => setEditSubClass(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white"
-                  />
-                </div>
+              {/* Target Rombel / Kelas dengan Dropdown & Interactive Chips */}
+              <div className="space-y-1.5">
+                <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1 flex items-center justify-between">
+                  <span className="flex items-center gap-1.5">
+                    <School className="w-3.5 h-3.5 text-violet-600 dark:text-violet-400" />
+                    <span>Target Rombel / Kelas (Data Siswa)</span>
+                  </span>
+                  <span className="text-[10px] text-violet-600 dark:text-violet-400 font-bold bg-violet-50 dark:bg-violet-950/60 px-2 py-0.5 rounded-full border border-violet-200 dark:border-violet-800">
+                    {getStudentCountForClasses(editSubClass)} Siswa Tercover
+                  </span>
+                </label>
 
+                {/* Dropdown Menu Pilihan Cepat */}
+                <select
+                  value={
+                    editSubClass === 'Semua Kelas'
+                      ? 'ALL'
+                      : studentClasses.includes(editSubClass)
+                      ? editSubClass
+                      : 'CUSTOM'
+                  }
+                  onChange={e => {
+                    const val = e.target.value;
+                    if (val === 'ALL') setEditSubClass('Semua Kelas');
+                    else if (val === 'VII_ALL') {
+                      const vii = studentClasses.filter(c => c.startsWith('VII'));
+                      setEditSubClass(vii.join(', ') || 'VII.1, VII.2, VII.3');
+                    } else if (val === 'VIII_ALL') {
+                      const viii = studentClasses.filter(c => c.startsWith('VIII'));
+                      setEditSubClass(viii.join(', ') || 'VIII.1, VIII.2, VIII.3');
+                    } else if (val === 'IX_ALL') {
+                      const ix = studentClasses.filter(c => c.startsWith('IX'));
+                      setEditSubClass(ix.join(', ') || 'IX.1, IX.2, IX.3');
+                    } else if (val !== 'CUSTOM') {
+                      setEditSubClass(val);
+                    }
+                  }}
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white font-semibold cursor-pointer text-xs"
+                >
+                  <option value="ALL">🌐 Semua Kelas (Seluruh Siswa)</option>
+                  <optgroup label="Pilihan Cepat per Tingkat">
+                    <option value="VII_ALL">Seluruh Kelas VII (VII.1, VII.2, VII.3, ...)</option>
+                    <option value="VIII_ALL">Seluruh Kelas VIII (VIII.1, VIII.2, VIII.3, ...)</option>
+                    <option value="IX_ALL">Seluruh Kelas IX (IX.1, IX.2, IX.3, ...)</option>
+                  </optgroup>
+                  <optgroup label="Pilih Satu Rombel Spesifik">
+                    {studentClasses.map(cls => (
+                      <option key={cls} value={cls}>Hanya Kelas {cls}</option>
+                    ))}
+                  </optgroup>
+                  <option value="CUSTOM" disabled hidden>Kombinasi Terpilih ({editSubClass})</option>
+                </select>
+
+                {/* Multi-Select Rombel Chips */}
+                <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-1.5">
+                  <div className="flex items-center justify-between text-[11px] text-slate-500">
+                    <span className="font-semibold">Klik rombel untuk menambah / mencoret:</span>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => setEditSubClass('Semua Kelas')}
+                        className="text-[10px] text-violet-600 dark:text-violet-400 font-bold hover:underline cursor-pointer"
+                      >
+                        Semua Kelas
+                      </button>
+                      <span>•</span>
+                      <button
+                        type="button"
+                        onClick={() => setEditSubClass(studentClasses[0] || 'VII.1')}
+                        className="text-[10px] text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:underline cursor-pointer"
+                      >
+                        Reset
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap gap-1.5 pt-0.5">
+                    <button
+                      type="button"
+                      onClick={() => setEditSubClass(editSubClass === 'Semua Kelas' ? (studentClasses[0] || 'VII.1') : 'Semua Kelas')}
+                      className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition flex items-center gap-1 cursor-pointer ${
+                        editSubClass === 'Semua Kelas'
+                          ? 'bg-violet-600 text-white shadow-xs'
+                          : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-violet-400'
+                      }`}
+                    >
+                      {editSubClass === 'Semua Kelas' && <Check className="w-3 h-3" />}
+                      <span>Semua Kelas</span>
+                    </button>
+
+                    {studentClasses.map(cls => {
+                      const isSelected = editSubClass === 'Semua Kelas' || parseClassList(editSubClass).includes(cls);
+                      return (
+                        <button
+                          key={cls}
+                          type="button"
+                          onClick={() => setEditSubClass(toggleClassInString(editSubClass, cls))}
+                          className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition flex items-center gap-1 cursor-pointer ${
+                            isSelected
+                              ? 'bg-violet-600 text-white shadow-xs'
+                              : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-violet-400'
+                          }`}
+                        >
+                          {isSelected && <Check className="w-3 h-3" />}
+                          <span>{cls}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1">
                     Durasi Pengerjaan (Menit)

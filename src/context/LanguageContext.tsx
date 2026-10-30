@@ -114,7 +114,7 @@ export interface Translations {
 
 const dictionaries: Record<Language, Translations> = {
   id: {
-    appName: 'Tabor Study',
+    appName: 'SMPN58',
     appSubtitle: 'CBT Assessment v2.0',
     searchPlaceholder: 'Cari menu, siswa, soal...',
     loading: 'Memuat data...',
@@ -212,7 +212,7 @@ const dictionaries: Record<Language, Translations> = {
     confirmSubmitDesc: 'Pastikan seluruh soal telah Anda jawab dengan teliti sebelum mengirimkan lembar jawaban.'
   },
   en: {
-    appName: 'Tabor Study',
+    appName: 'SMPN58',
     appSubtitle: 'CBT Assessment v2.0',
     searchPlaceholder: 'Search menu, student, question...',
     loading: 'Loading data...',

@@ -923,8 +923,12 @@ export default function Home() {
         {/* Card Login Siswa Formal SaaS */}
         <div className="max-w-md w-full bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-3xl p-6 sm:p-8 space-y-6 shadow-xl shadow-slate-200/50 dark:shadow-none animate-in fade-in zoom-in-95 duration-200">
           <div className="text-center space-y-2">
-            <div className="inline-flex p-3.5 rounded-2xl bg-violet-50 dark:bg-violet-950/50 text-violet-600 dark:text-violet-400 border border-violet-200 dark:border-violet-800/60 shadow-xs mb-1">
-              <GraduationCap className="w-7 h-7" />
+            <div className="inline-flex p-2.5 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-xs mb-1">
+              <img
+                src="https://raw.githubusercontent.com/xiroro-ab/smp58dataguru/refs/heads/main/ico.png"
+                alt="Logo SMPN 58"
+                className="w-10 h-10 object-contain"
+              />
             </div>
             <h2 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white">
               {t.studentLoginTitle}

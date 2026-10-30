@@ -60,12 +60,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
       {/* 1. BRAND LOGO */}
       <div className="p-5 flex items-center justify-between border-b border-slate-100 dark:border-slate-800/60">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-violet-600 to-indigo-500 flex items-center justify-center text-white shadow-md shadow-violet-500/20 font-black text-lg">
-            ✦
+          <div className="w-10 h-10 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700/80 flex items-center justify-center p-1 shadow-xs flex-shrink-0">
+            <img
+              src="https://raw.githubusercontent.com/xiroro-ab/smp58dataguru/refs/heads/main/ico.png"
+              alt="Logo SMPN 58"
+              className="w-full h-full object-contain"
+            />
           </div>
           <div>
-            <h1 className="font-bold text-slate-900 dark:text-white text-base leading-tight">
-              {t.appName}
+            <h1 className="font-extrabold text-slate-900 dark:text-white text-base leading-tight tracking-tight">
+              SMPN58
             </h1>
             <p className="text-[11px] text-slate-400 dark:text-slate-500 font-medium">{t.appSubtitle}</p>
           </div>

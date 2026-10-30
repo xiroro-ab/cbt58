@@ -3,6 +3,8 @@
 import React, { useState, useEffect } from 'react';
 import { initialSubject, sampleQuestions } from '@/lib/mockData';
 import { Subject, Question, ExamResult } from '@/types/cbt';
+import { Sidebar, NavItem } from '@/components/layout/Sidebar';
+import { Navbar } from '@/components/layout/Navbar';
 import { TeacherDashboard } from '@/components/teacher/TeacherDashboard';
 import { ExamScreen } from '@/components/exam/ExamScreen';
 import {
@@ -13,10 +15,26 @@ import {
   saveExamResult,
   fetchExamResults
 } from '@/lib/supabaseService';
-import { GraduationCap, LayoutDashboard, Sparkles, UserCircle } from 'lucide-react';
+import { useTheme } from '@/context/ThemeContext';
+import {
+  GraduationCap,
+  Sparkles,
+  Sun,
+  Moon,
+  ArrowRight,
+  ShieldCheck,
+  KeyRound,
+  User,
+  School,
+  ArrowLeft
+} from 'lucide-react';
 
 export default function Home() {
+  const { theme, toggleTheme } = useTheme();
   const [viewMode, setViewMode] = useState<'teacher' | 'student_login' | 'student_exam'>('teacher');
+  const [currentNav, setCurrentNav] = useState<NavItem>('dashboard');
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+
   const [subject, setSubject] = useState<Subject>(initialSubject);
   const [questions, setQuestions] = useState<Question[]>(sampleQuestions);
   const [results, setResults] = useState<ExamResult[]>([]);
@@ -35,10 +53,14 @@ export default function Home() {
         if (sub.token) setInputToken(sub.token);
 
         const qList = await fetchQuestionsBySubject(sub.id);
-        setQuestions(qList);
+        if (qList && qList.length > 0) {
+          setQuestions(qList);
+        }
 
         const resList = await fetchExamResults(sub.id);
-        if (resList.length > 0) setResults(resList);
+        if (resList && resList.length > 0) {
+          setResults(resList);
+        }
       } catch (err) {
         console.error('Failed to load initial data:', err);
       } finally {
@@ -50,16 +72,28 @@ export default function Home() {
 
   const handleAddQuestion = async (newQ: Question) => {
     setQuestions(prev => [...prev, newQ]);
-    await insertQuestion(newQ);
+    try {
+      await insertQuestion(newQ);
+    } catch (err) {
+      console.warn('Supabase insert fallback to local state:', err);
+    }
   };
 
   const handleDeleteQuestion = async (qId: string) => {
     setQuestions(prev => prev.filter(q => q.id !== qId));
-    await removeQuestion(qId);
+    try {
+      await removeQuestion(qId);
+    } catch (err) {
+      console.warn('Supabase delete fallback to local state:', err);
+    }
   };
 
   const handleStartExam = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!studentName.trim()) {
+      setLoginError('Harap masukkan nama lengkap siswa.');
+      return;
+    }
     if (inputToken.trim().toUpperCase() !== subject.token.toUpperCase()) {
       setLoginError('Token ujian salah! Silakan tanyakan token kepada guru pengawas.');
       return;
@@ -86,158 +120,177 @@ export default function Home() {
     };
 
     setResults(prev => [newResult, ...prev]);
-    await saveExamResult(newResult);
+    try {
+      await saveExamResult(newResult);
+    } catch (err) {
+      console.warn('Supabase save result fallback:', err);
+    }
   };
 
-  return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col font-sans">
-      {/* GLOBAL NAVBAR (Hanya muncul jika bukan sedang di tengah pengerjaan ujian siswa) */}
-      {viewMode !== 'student_exam' && (
-        <header className="border-b border-zinc-800 bg-zinc-900/80 backdrop-blur-md px-4 sm:px-8 py-3.5 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-xl bg-gradient-to-tr from-fuchsia-600 to-pink-500 text-white shadow-lg shadow-fuchsia-600/20">
-              <GraduationCap className="w-5 h-5" />
+  // =========================================================================
+  // VIEW 1: LAYAR PENGERJAAN UJIAN SISWA (FULLSCREEN / ANTI-CHEAT)
+  // =========================================================================
+  if (viewMode === 'student_exam') {
+    return (
+      <ExamScreen
+        subject={subject}
+        questions={questions}
+        studentName={studentName}
+        onFinishExam={handleFinishExam}
+        onExit={() => setViewMode('teacher')}
+      />
+    );
+  }
+
+  // =========================================================================
+  // VIEW 2: LAYAR LOGIN / VERIFIKASI SISWA SEBELUM MULAI UJIAN
+  // =========================================================================
+  if (viewMode === 'student_login') {
+    return (
+      <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 flex flex-col justify-center items-center p-4 transition-colors relative">
+        {/* Top Navbar Minimalis (Switch Theme & Back to Teacher) */}
+        <div className="absolute top-4 left-4 right-4 sm:top-6 sm:left-8 sm:right-8 flex items-center justify-between">
+          <button
+            onClick={() => setViewMode('teacher')}
+            className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:text-violet-600 transition shadow-xs"
+          >
+            <ArrowLeft className="w-3.5 h-3.5" />
+            <span>Kembali ke Panel Guru</span>
+          </button>
+
+          <button
+            onClick={toggleTheme}
+            className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:text-violet-600 transition shadow-xs"
+            title="Toggle Theme"
+          >
+            {theme === 'dark' ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-indigo-600" />}
+          </button>
+        </div>
+
+        {/* Card Login Siswa Formal SaaS */}
+        <div className="max-w-md w-full bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-3xl p-6 sm:p-8 space-y-6 shadow-xl shadow-slate-200/50 dark:shadow-none animate-in fade-in zoom-in-95 duration-200">
+          <div className="text-center space-y-2">
+            <div className="inline-flex p-3.5 rounded-2xl bg-violet-50 dark:bg-violet-950/50 text-violet-600 dark:text-violet-400 border border-violet-200 dark:border-violet-800/60 shadow-xs mb-1">
+              <GraduationCap className="w-7 h-7" />
             </div>
+            <h2 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white">
+              Ruang Ujian Siswa
+            </h2>
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              {subject.title} • {subject.className}
+            </p>
+          </div>
+
+          <form onSubmit={handleStartExam} className="space-y-4 text-xs font-medium">
             <div>
-              <h1 className="font-black text-sm sm:text-base text-zinc-100 flex items-center gap-2">
-                <span>CBT Next Modern</span>
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-fuchsia-500/20 text-fuchsia-300 border border-fuchsia-500/30">
-                  TypeScript + Supabase
-                </span>
-              </h1>
-              <p className="text-[11px] text-zinc-400">Sistem Ujian Sekolah Cepat & Anti-Cheat</p>
+              <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1.5 flex items-center gap-1.5">
+                <User className="w-3.5 h-3.5 text-violet-600" />
+                <span>Nama Lengkap Siswa</span>
+              </label>
+              <input
+                type="text"
+                required
+                value={studentName}
+                onChange={e => setStudentName(e.target.value)}
+                placeholder="Contoh: Ahmad Fauzan"
+                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white placeholder-slate-400 text-xs focus:outline-none focus:ring-2 focus:ring-violet-500 transition"
+              />
             </div>
-          </div>
 
-          {/* Switcher Mode (Guru vs Siswa) */}
-          <div className="flex items-center gap-1.5 p-1 rounded-xl bg-zinc-950 border border-zinc-800 text-xs font-semibold">
-            <button
-              onClick={() => setViewMode('teacher')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition ${
-                viewMode === 'teacher'
-                  ? 'bg-fuchsia-600 text-white shadow-sm'
-                  : 'text-zinc-400 hover:text-zinc-200'
-              }`}
-            >
-              <LayoutDashboard className="w-3.5 h-3.5" />
-              <span>Panel Guru</span>
-            </button>
-            <button
-              onClick={() => setViewMode('student_login')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition ${
-                viewMode === 'student_login'
-                  ? 'bg-fuchsia-600 text-white shadow-sm'
-                  : 'text-zinc-400 hover:text-zinc-200'
-              }`}
-            >
-              <UserCircle className="w-3.5 h-3.5" />
-              <span>Layar Siswa</span>
-            </button>
-          </div>
-        </header>
-      )}
+            <div>
+              <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1.5 flex items-center gap-1.5">
+                <School className="w-3.5 h-3.5 text-violet-600" />
+                <span>Kelas</span>
+              </label>
+              <input
+                type="text"
+                disabled
+                value={subject.className}
+                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 text-xs font-semibold cursor-not-allowed"
+              />
+            </div>
 
-      {/* CONTENT SWITCHER */}
-      <main className="flex-1 flex flex-col">
-        {/* 1. DASHBOARD GURU */}
-        {viewMode === 'teacher' && (
+            <div>
+              <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1.5 flex items-center gap-1.5">
+                <KeyRound className="w-3.5 h-3.5 text-violet-600" />
+                <span>Token Ujian (Diberikan Pengawas)</span>
+              </label>
+              <input
+                type="text"
+                required
+                value={inputToken}
+                onChange={e => setInputToken(e.target.value.toUpperCase())}
+                placeholder="MASUKKAN TOKEN"
+                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white uppercase tracking-widest font-mono text-center font-bold text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 transition"
+              />
+            </div>
+
+            {loginError && (
+              <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800/60 text-rose-600 dark:text-rose-400 text-center text-xs">
+                {loginError}
+              </div>
+            )}
+
+            <div className="pt-2">
+              <button
+                type="submit"
+                className="w-full py-3 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-bold text-xs shadow-md shadow-violet-600/20 flex items-center justify-center gap-2 transition active:scale-[0.99]"
+              >
+                <span>Mulai Mengerjakan Ujian</span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
+            </div>
+          </form>
+
+          <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/60 dark:border-slate-800 flex items-center gap-3 text-[11px] text-slate-500 dark:text-slate-400">
+            <ShieldCheck className="w-5 h-5 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
+            <span>
+              Sistem Anti-Cheat aktif. Dilarang berpindah tab atau keluar dari halaman saat ujian berlangsung.
+            </span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // =========================================================================
+  // VIEW 3: PANEL GURU / DASHBOARD UTAMA SAAS (TABOR STUDY FORMAL THEME)
+  // =========================================================================
+  return (
+    <div className="flex h-screen bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 overflow-hidden font-sans transition-colors">
+      {/* SIDEBAR FORMAL */}
+      <Sidebar
+        currentNav={currentNav}
+        onSelectNav={setCurrentNav}
+        questionsCount={questions.length}
+        resultsCount={results.length}
+      />
+
+      {/* MAIN CONTAINER */}
+      <div className="flex-1 flex flex-col h-screen overflow-y-auto">
+        {/* NAVBAR HEADER */}
+        <Navbar
+          onStartStudentExam={() => setViewMode('student_login')}
+          onOpenAddQuestion={() => setIsAddModalOpen(true)}
+        />
+
+        {/* DASHBOARD CONTENT BODY */}
+        <main className="flex-1">
           <TeacherDashboard
+            currentNav={currentNav}
             subject={subject}
             questions={questions}
             results={results}
             onUpdateSubject={setSubject}
             onAddQuestion={handleAddQuestion}
             onDeleteQuestion={handleDeleteQuestion}
+            isAddModalOpen={isAddModalOpen}
+            onCloseAddModal={() => setIsAddModalOpen(false)}
+            onOpenAddModal={() => setIsAddModalOpen(true)}
             onStartStudentExam={() => setViewMode('student_login')}
           />
-        )}
-
-        {/* 2. LAYAR LOGIN SISWA */}
-        {viewMode === 'student_login' && (
-          <div className="flex-1 flex items-center justify-center p-4">
-            <div className="max-w-md w-full bg-zinc-900 border border-zinc-800 rounded-3xl p-6 sm:p-8 space-y-6 shadow-2xl">
-              <div className="text-center space-y-1">
-                <div className="inline-flex p-3 rounded-2xl bg-fuchsia-500/10 text-fuchsia-400 mb-2 border border-fuchsia-500/20">
-                  <Sparkles className="w-6 h-6" />
-                </div>
-                <h2 className="text-xl font-black text-zinc-100">Mulai Mengerjakan Ujian</h2>
-                <p className="text-xs text-zinc-400">{subject.title}</p>
-              </div>
-
-              <form onSubmit={handleStartExam} className="space-y-4 text-sm">
-                <div>
-                  <label className="block text-xs font-semibold text-zinc-300 mb-1">Nama Lengkap Siswa</label>
-                  <input
-                    type="text"
-                    required
-                    value={studentName}
-                    onChange={e => setStudentName(e.target.value)}
-                    className="w-full p-3 rounded-xl bg-zinc-950 border border-zinc-800 text-zinc-100 focus:outline-none focus:border-fuchsia-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-zinc-300 mb-1">Kelas</label>
-                  <input
-                    type="text"
-                    disabled
-                    value={subject.className}
-                    className="w-full p-3 rounded-xl bg-zinc-950/60 border border-zinc-800/60 text-zinc-400 font-semibold cursor-not-allowed"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-zinc-300 mb-1">Token Ujian</label>
-                  <input
-                    type="text"
-                    required
-                    value={inputToken}
-                    onChange={e => setInputToken(e.target.value.toUpperCase())}
-                    placeholder="Masukkan token dari guru..."
-                    className="w-full p-3 rounded-xl bg-zinc-950 border border-zinc-800 text-zinc-100 uppercase tracking-widest font-mono text-center font-bold focus:outline-none focus:border-fuchsia-500"
-                  />
-                </div>
-
-                {loginError && (
-                  <p className="text-xs text-rose-400 bg-rose-500/10 p-2.5 rounded-lg border border-rose-500/20 text-center font-medium">
-                    {loginError}
-                  </p>
-                )}
-
-                <div className="pt-2">
-                  <button
-                    type="submit"
-                    className="w-full py-3 rounded-xl bg-gradient-to-r from-fuchsia-600 to-pink-600 hover:from-fuchsia-500 hover:to-pink-500 text-white font-bold text-sm shadow-lg shadow-fuchsia-600/25 transition active:scale-[0.99]"
-                  >
-                    Masuk ke Ruang Ujian
-                  </button>
-                </div>
-              </form>
-
-              <div className="pt-2 text-center">
-                <button
-                  type="button"
-                  onClick={() => setViewMode('teacher')}
-                  className="text-xs text-zinc-500 hover:text-zinc-300 transition"
-                >
-                  ← Kembali ke Panel Guru
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* 3. LAYAR PENGERJAAN UJIAN SISWA (FULLSCREEN / ANTI-CHEAT) */}
-        {viewMode === 'student_exam' && (
-          <ExamScreen
-            subject={subject}
-            questions={questions}
-            studentName={studentName}
-            onFinishExam={handleFinishExam}
-            onExit={() => setViewMode('teacher')}
-          />
-        )}
-      </main>
+        </main>
+      </div>
     </div>
   );
 }

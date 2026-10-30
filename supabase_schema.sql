@@ -188,3 +188,92 @@ VALUES (
     '"Menghasilkan oksigen untuk respirasi makhluk hidup dan menghasilkan glukosa/energi sebagai produsen primer rantai makanan."'::jsonb,
     6
 );
+
+-- ===============================================================
+-- 8. TABEL NOTIFIKASI EVENT SISTEM (Lonceng 🔔)
+-- Otomatis terisi saat siswa submit, tab switch violation, dsb.
+-- ===============================================================
+CREATE TABLE IF NOT EXISTS exam_notifications (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    subject_id UUID REFERENCES subjects(id) ON DELETE CASCADE,
+    student_name VARCHAR(100),
+    type VARCHAR(30) NOT NULL CHECK (type IN ('submission', 'violation', 'autolock', 'system')),
+    title VARCHAR(150) NOT NULL,
+    message TEXT NOT NULL,
+    is_read BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- ===============================================================
+-- 9. TABEL PESAN KENDALA SISWA & BROADCAST PENGAWAS (Amplop ✉️)
+-- Siswa lapor kendala -> Guru terima & balas / Kirim Broadcast
+-- ===============================================================
+CREATE TABLE IF NOT EXISTS exam_messages (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    subject_id UUID REFERENCES subjects(id) ON DELETE CASCADE,
+    sender_name VARCHAR(100) NOT NULL,
+    sender_role VARCHAR(20) NOT NULL DEFAULT 'student' CHECK (sender_role IN ('student', 'teacher', 'admin')),
+    target_type VARCHAR(20) NOT NULL DEFAULT 'proctor' CHECK (target_type IN ('broadcast', 'proctor', 'student')),
+    student_class VARCHAR(50),
+    question_number INT,
+    title VARCHAR(150),
+    body TEXT NOT NULL,
+    status VARCHAR(20) DEFAULT 'pending' CHECK (status IN ('pending', 'resolved', 'acknowledged')),
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- AKTIFKAN KEAMANAN RLS (Public read-write untuk aplikasi CBT)
+ALTER TABLE exam_notifications ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Allow public all notifications" ON exam_notifications FOR ALL USING (true);
+
+ALTER TABLE exam_messages ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Allow public all messages" ON exam_messages FOR ALL USING (true);
+
+-- AKTIFKAN SUPABASE REALTIME
+ALTER PUBLICATION supabase_realtime ADD TABLE exam_notifications;
+ALTER PUBLICATION supabase_realtime ADD TABLE exam_messages;
+
+-- CONTOH DATA AWAL NOTIFIKASI & PESAN
+INSERT INTO exam_notifications (subject_id, student_name, type, title, message, is_read)
+VALUES
+(
+    'a1b2c3d4-e5f6-4a5b-8c9d-0e1f2a3b4c5d',
+    'Ahmad Fauzan',
+    'submission',
+    'Ujian Telah Diselesaikan',
+    'Siswa Ahmad Fauzan (Kelas 8A) telah menyelesaikan ujian IPA dengan skor 87%.',
+    false
+),
+(
+    'a1b2c3d4-e5f6-4a5b-8c9d-0e1f2a3b4c5d',
+    'Budi Santoso',
+    'violation',
+    'Peringatan Anti-Cheat',
+    'Siswa terdeteksi berpindah tab browser sebanyak 1x saat ujian berlangsung.',
+    false
+);
+
+INSERT INTO exam_messages (subject_id, sender_name, sender_role, target_type, student_class, question_number, title, body, status)
+VALUES
+(
+    'a1b2c3d4-e5f6-4a5b-8c9d-0e1f2a3b4c5d',
+    'Siti Rahmawati',
+    'student',
+    'proctor',
+    '8A',
+    4,
+    'Kendala Gambar Soal',
+    'Pak/Bu Pengawas, gambar diagram sel pada soal no. 4 tidak muncul di layar saya.',
+    'pending'
+),
+(
+    'a1b2c3d4-e5f6-4a5b-8c9d-0e1f2a3b4c5d',
+    'Pengawas Ruang 1',
+    'teacher',
+    'broadcast',
+    '8A',
+    NULL,
+    'Pengumuman Waktu Ujian',
+    'Waktu ujian tersisa 15 menit lagi. Harap periksa kembali nomor yang masih ragu-ragu.',
+    'acknowledged'
+);

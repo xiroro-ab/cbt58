@@ -94,3 +94,28 @@ export interface ExamResult {
   violationCount: number;
   details?: QuestionScoreDetail[];
 }
+
+export interface ExamNotification {
+  id: string;
+  subjectId?: string;
+  studentName?: string;
+  type: 'submission' | 'violation' | 'autolock' | 'system';
+  title: string;
+  message: string;
+  isRead: boolean;
+  createdAt: string;
+}
+
+export interface ExamMessage {
+  id: string;
+  subjectId?: string;
+  senderName: string;
+  senderRole: 'student' | 'teacher' | 'admin';
+  targetType: 'broadcast' | 'proctor' | 'student';
+  studentClass?: string;
+  questionNumber?: number;
+  title?: string;
+  body: string;
+  status: 'pending' | 'resolved' | 'acknowledged';
+  createdAt: string;
+}

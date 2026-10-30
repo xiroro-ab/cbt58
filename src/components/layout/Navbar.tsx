@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { useTheme } from '@/context/ThemeContext';
 import { useLanguage } from '@/context/LanguageContext';
+import { ExamNotification, ExamMessage } from '@/types/cbt';
 import {
   Sun,
   Moon,
@@ -16,15 +17,32 @@ import {
   Send,
   Users,
   X,
-  Clock
+  Clock,
+  ShieldAlert,
+  LifeBuoy,
+  Megaphone,
+  Check
 } from 'lucide-react';
 
 interface NavbarProps {
   onStartStudentExam: () => void;
   onOpenAddQuestion: () => void;
+  notifications: ExamNotification[];
+  messages: ExamMessage[];
+  onMarkAllNotificationsRead: () => void;
+  onResolveMessage: (msgId: string) => void;
+  onSendBroadcast: (broadcastText: string) => void;
 }
 
-export const Navbar: React.FC<NavbarProps> = ({ onStartStudentExam, onOpenAddQuestion }) => {
+export const Navbar: React.FC<NavbarProps> = ({
+  onStartStudentExam,
+  onOpenAddQuestion,
+  notifications,
+  messages,
+  onMarkAllNotificationsRead,
+  onResolveMessage,
+  onSendBroadcast
+}) => {
   const { theme, toggleTheme } = useTheme();
   const { language, toggleLanguage, t } = useLanguage();
 
@@ -33,77 +51,39 @@ export const Navbar: React.FC<NavbarProps> = ({ onStartStudentExam, onOpenAddQue
   const [showMessages, setShowMessages] = useState(false);
   const [showTeachersModal, setShowTeachersModal] = useState(false);
 
-  // Live Notifications State
-  const [notifications, setNotifications] = useState([
-    {
-      id: 'notif-1',
-      title: 'Ujian IPA Selesai',
-      desc: 'Siswa Ahmad Fauzan telah mengirimkan jawaban ujian dengan skor 87%.',
-      time: 'Baru saja',
-      type: 'success',
-      read: false
-    },
-    {
-      id: 'notif-2',
-      title: 'Database Supabase Terhubung',
-      desc: 'Koneksi cloud PostgreSQL lxglsphqrpnrzfnvpwoa aktif & sinkron.',
-      time: '5 menit lalu',
-      type: 'info',
-      read: false
-    },
-    {
-      id: 'notif-3',
-      title: 'Peringatan Anti-Cheat',
-      desc: 'Terdeteksi siswa berpindah tab browser sebanyak 1x saat ujian.',
-      time: '12 menit lalu',
-      type: 'warning',
-      read: false
-    }
-  ]);
+  // Filter Tab Notifikasi
+  const [notifFilter, setNotifFilter] = useState<'all' | 'violation' | 'submission'>('all');
 
-  // Live Messages State
-  const [messages, setMessages] = useState([
-    {
-      id: 'msg-1',
-      sender: 'Wakil Kurikulum',
-      title: 'Jadwal Asesmen Akhir Semester',
-      body: 'Harap pastikan semua guru telah mengunggah bank soal dan memverifikasi token sebelum ujian dimulai.',
-      date: 'Hari ini, 07:30'
-    },
-    {
-      id: 'msg-2',
-      sender: 'Admin CBT',
-      title: 'Server Supabase Stabil',
-      body: 'Kapasitas database telah diuji untuk 30 guru dan 1000 siswa aktif.',
-      date: 'Kemarin, 14:00'
-    }
-  ]);
+  // Tab Pesan (Opsi A: Laporan Kendala Siswa vs Kirim Broadcast)
+  const [messageTab, setMessageTab] = useState<'reports' | 'broadcast'>('reports');
+  const [broadcastInput, setBroadcastInput] = useState('');
+  const [broadcastSentStatus, setBroadcastSentStatus] = useState(false);
 
-  const [newMessageText, setNewMessageText] = useState('');
+  // Unread Count
+  const unreadNotifCount = notifications.filter(n => !n.isRead).length;
+  const pendingKendalaCount = messages.filter(
+    m => m.status === 'pending' && m.targetType === 'proctor'
+  ).length;
 
-  const unreadCount = notifications.filter(n => !n.read).length;
+  // Filtered Notifikasi
+  const filteredNotifications = notifications.filter(n => {
+    if (notifFilter === 'violation') return n.type === 'violation' || n.type === 'autolock';
+    if (notifFilter === 'submission') return n.type === 'submission';
+    return true;
+  });
 
-  const handleMarkAllRead = () => {
-    setNotifications(prev => prev.map(n => ({ ...n, read: true })));
-  };
+  const studentReports = messages.filter(m => m.targetType === 'proctor');
 
-  const handleSendMessage = (e: React.FormEvent) => {
+  const handleBroadcastSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newMessageText.trim()) return;
-    setMessages(prev => [
-      {
-        id: `msg-${Date.now()}`,
-        sender: 'Pak Guru (Anda)',
-        title: 'Pesan / Catatan Baru',
-        body: newMessageText.trim(),
-        date: 'Baru saja'
-      },
-      ...prev
-    ]);
-    setNewMessageText('');
+    if (!broadcastInput.trim()) return;
+    onSendBroadcast(broadcastInput.trim());
+    setBroadcastInput('');
+    setBroadcastSentStatus(true);
+    setTimeout(() => setBroadcastSentStatus(false), 2500);
   };
 
-  // 30 Guru Roster Data
+  // 30 Guru Roster Data SMPN 58 Palembang
   const teachersList = [
     { name: 'Ahmad Fauzi, S.Pd', subject: 'Ilmu Pengetahuan Alam (IPA)', status: 'Aktif Mengawas' },
     { name: 'Siti Rahmawati, M.Pd', subject: 'Matematika', status: 'Aktif Mengawas' },
@@ -148,28 +128,40 @@ export const Navbar: React.FC<NavbarProps> = ({ onStartStudentExam, onOpenAddQue
           {theme === 'dark' ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-indigo-600" />}
         </button>
 
-        {/* Mail Notification (Messages Drawer) */}
+        {/* ============================================================== */}
+        {/* IKON PESAN (AMPLOP ✉️) — OPSI A: KENDALA SISWA & BROADCAST      */}
+        {/* ============================================================== */}
         <div className="relative">
           <button
             onClick={() => {
               setShowMessages(!showMessages);
               setShowNotifications(false);
             }}
-            className="p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition hidden sm:flex relative"
-            title={t.messagesTitle}
+            className="p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition hidden sm:flex relative cursor-pointer"
+            title="Pusat Kendala Siswa & Broadcast Pengawas"
           >
             <Mail className="w-4 h-4" />
-            <span className="w-2 h-2 rounded-full bg-emerald-500 absolute top-2 right-2"></span>
+            {pendingKendalaCount > 0 && (
+              <span className="w-2.5 h-2.5 rounded-full bg-amber-500 absolute top-1.5 right-1.5 ring-2 ring-white dark:ring-slate-900"></span>
+            )}
           </button>
 
-          {/* Messages Popover */}
+          {/* Popover Pesan Kendala & Broadcast */}
           {showMessages && (
-            <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl p-4 space-y-3 z-50 animate-in fade-in zoom-in-95">
-              <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2.5">
-                <h4 className="font-bold text-xs text-slate-900 dark:text-white flex items-center gap-2">
-                  <Mail className="w-3.5 h-3.5 text-violet-600" />
-                  <span>{t.messagesTitle}</span>
-                </h4>
+            <div className="absolute right-0 mt-2 w-80 sm:w-[420px] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-2xl p-5 space-y-4 z-50 animate-in fade-in zoom-in-95">
+              {/* Header Popover */}
+              <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-lg bg-amber-100 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 flex items-center justify-center font-bold">
+                    <LifeBuoy className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-xs text-slate-900 dark:text-white">
+                      Pusat Kendala & Siaran Pengawas
+                    </h4>
+                    <p className="text-[10px] text-slate-400">Komunikasi real-time pengawas dan peserta ujian</p>
+                  </div>
+                </div>
                 <button
                   onClick={() => setShowMessages(false)}
                   className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
@@ -178,107 +170,252 @@ export const Navbar: React.FC<NavbarProps> = ({ onStartStudentExam, onOpenAddQue
                 </button>
               </div>
 
-              <div className="max-h-60 overflow-y-auto space-y-2.5 text-xs">
-                {messages.map(m => (
-                  <div
-                    key={m.id}
-                    className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800 space-y-1"
-                  >
-                    <div className="flex items-center justify-between font-semibold">
-                      <span className="text-violet-600 dark:text-violet-400">{m.sender}</span>
-                      <span className="text-[10px] text-slate-400">{m.date}</span>
-                    </div>
-                    <p className="font-bold text-slate-900 dark:text-slate-100">{m.title}</p>
-                    <p className="text-slate-600 dark:text-slate-400 leading-relaxed text-[11px]">{m.body}</p>
-                  </div>
-                ))}
+              {/* Tabs Switcher: Laporan Siswa vs Kirim Broadcast */}
+              <div className="flex gap-1.5 bg-slate-100 dark:bg-slate-800/60 p-1 rounded-xl text-xs font-semibold">
+                <button
+                  onClick={() => setMessageTab('reports')}
+                  className={`flex-1 py-1.5 rounded-lg transition flex items-center justify-center gap-1.5 ${
+                    messageTab === 'reports'
+                      ? 'bg-white dark:bg-slate-900 text-violet-600 dark:text-violet-400 shadow-xs'
+                      : 'text-slate-600 dark:text-slate-400'
+                  }`}
+                >
+                  <span>Kendala Siswa</span>
+                  {pendingKendalaCount > 0 && (
+                    <span className="px-1.5 py-0.2 rounded-full bg-amber-500 text-slate-950 font-bold text-[10px]">
+                      {pendingKendalaCount}
+                    </span>
+                  )}
+                </button>
+                <button
+                  onClick={() => setMessageTab('broadcast')}
+                  className={`flex-1 py-1.5 rounded-lg transition flex items-center justify-center gap-1.5 ${
+                    messageTab === 'broadcast'
+                      ? 'bg-white dark:bg-slate-900 text-violet-600 dark:text-violet-400 shadow-xs'
+                      : 'text-slate-600 dark:text-slate-400'
+                  }`}
+                >
+                  <Megaphone className="w-3.5 h-3.5" />
+                  <span>Kirim Broadcast</span>
+                </button>
               </div>
 
-              {/* Kirim Pesan Cepat */}
-              <form onSubmit={handleSendMessage} className="pt-2 flex gap-1.5 border-t border-slate-100 dark:border-slate-800">
-                <input
-                  type="text"
-                  value={newMessageText}
-                  onChange={e => setNewMessageText(e.target.value)}
-                  placeholder="Kirim catatan guru / pengawas..."
-                  className="flex-1 px-3 py-1.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-white"
-                />
-                <button
-                  type="submit"
-                  className="px-3 py-1.5 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-xs font-semibold"
-                >
-                  <Send className="w-3 h-3" />
-                </button>
-              </form>
+              {/* CONTENT TAB 1: KENDALA SISWA */}
+              {messageTab === 'reports' && (
+                <div className="max-h-72 overflow-y-auto space-y-2.5 text-xs">
+                  {studentReports.length === 0 ? (
+                    <div className="py-8 text-center text-slate-400 space-y-1">
+                      <CheckCircle2 className="w-6 h-6 text-emerald-500 mx-auto" />
+                      <p className="font-semibold text-xs">Tidak Ada Kendala Siswa</p>
+                      <p className="text-[11px]">Seluruh siswa mengerjakan ujian tanpa laporan gangguan.</p>
+                    </div>
+                  ) : (
+                    studentReports.map(rep => (
+                      <div
+                        key={rep.id}
+                        className={`p-3.5 rounded-2xl border transition space-y-1.5 ${
+                          rep.status === 'resolved'
+                            ? 'bg-slate-50/60 dark:bg-slate-800/40 border-slate-100 dark:border-slate-800/60 opacity-70'
+                            : 'bg-amber-50/50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-900/50 shadow-xs'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-1.5 font-bold text-slate-900 dark:text-white">
+                            <span className="text-violet-600 dark:text-violet-400">{rep.senderName}</span>
+                            <span className="text-[10px] text-slate-400">({rep.studentClass || 'Siswa'})</span>
+                          </div>
+                          <span className="text-[10px] text-slate-400">{rep.createdAt}</span>
+                        </div>
+
+                        <div className="text-[11px] font-semibold text-amber-700 dark:text-amber-300">
+                          {rep.questionNumber ? `Soal No. ${rep.questionNumber} • ` : ''}{rep.title}
+                        </div>
+
+                        <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed">
+                          {rep.body}
+                        </p>
+
+                        <div className="pt-1 flex items-center justify-between border-t border-slate-100 dark:border-slate-800">
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                            rep.status === 'resolved'
+                              ? 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300'
+                              : 'bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300'
+                          }`}>
+                            {rep.status === 'resolved' ? '✓ Terselesaikan' : '⏳ Menunggu Tindakan'}
+                          </span>
+
+                          {rep.status !== 'resolved' && (
+                            <button
+                              onClick={() => onResolveMessage(rep.id)}
+                              className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-[11px] transition flex items-center gap-1"
+                            >
+                              <Check className="w-3 h-3" />
+                              <span>Tandai Selesai</span>
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
+
+              {/* CONTENT TAB 2: KIRIM BROADCAST PENGUMUMAN KE SELURUH SISWA */}
+              {messageTab === 'broadcast' && (
+                <form onSubmit={handleBroadcastSubmit} className="space-y-3 text-xs">
+                  <div className="p-3 bg-violet-50 dark:bg-violet-950/40 rounded-2xl border border-violet-200 dark:border-violet-800/60 text-[11px] text-violet-800 dark:text-violet-300 leading-relaxed">
+                    Pesan siaran yang Anda kirimkan akan <strong>langsung muncul di seluruh layar siswa</strong> yang sedang mengerjakan ujian secara real-time.
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1">
+                      Isi Pesan Siaran / Pengumuman
+                    </label>
+                    <textarea
+                      rows={3}
+                      required
+                      value={broadcastInput}
+                      onChange={e => setBroadcastInput(e.target.value)}
+                      placeholder="Contoh: Perhatian, waktu ujian tersisa 10 menit lagi. Harap periksa kembali nomor yang ragu-ragu..."
+                      className="w-full p-3 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500"
+                    />
+                  </div>
+
+                  {broadcastSentStatus && (
+                    <div className="p-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 text-emerald-700 dark:text-emerald-300 text-center font-bold text-[11px]">
+                      ✓ Pengumuman berhasil disiarkan ke seluruh layar siswa!
+                    </div>
+                  )}
+
+                  <div className="flex justify-end pt-1">
+                    <button
+                      type="submit"
+                      className="px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-bold text-xs shadow-md shadow-violet-600/20 transition flex items-center gap-1.5"
+                    >
+                      <Megaphone className="w-3.5 h-3.5" />
+                      <span>Kirim Siaran ke Siswa</span>
+                    </button>
+                  </div>
+                </form>
+              )}
             </div>
           )}
         </div>
 
-        {/* Bell Notification (Interactive Notifications Popover) */}
+        {/* ============================================================== */}
+        {/* IKON NOTIFIKASI (LONCENG 🔔) — EVENT OTOMATIS SUPABASE          */}
+        {/* ============================================================== */}
         <div className="relative">
           <button
             onClick={() => {
               setShowNotifications(!showNotifications);
               setShowMessages(false);
             }}
-            className="relative p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition"
-            title={t.notificationsTitle}
+            className="relative p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition cursor-pointer"
+            title="Notifikasi Real-time Sistem CBT"
           >
             <Bell className="w-4 h-4" />
-            {unreadCount > 0 && (
-              <span className="w-2 h-2 rounded-full bg-violet-600 absolute top-2 right-2 animate-ping"></span>
-            )}
-            {unreadCount > 0 && (
-              <span className="w-2 h-2 rounded-full bg-violet-600 absolute top-2 right-2"></span>
+            {unreadNotifCount > 0 && (
+              <span className="w-2.5 h-2.5 rounded-full bg-violet-600 absolute top-1.5 right-1.5 ring-2 ring-white dark:ring-slate-900 animate-pulse"></span>
             )}
           </button>
 
-          {/* Notifications Popover */}
+          {/* Notifikasi Popover */}
           {showNotifications && (
-            <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl p-4 space-y-3 z-50 animate-in fade-in zoom-in-95">
-              <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2.5">
-                <h4 className="font-bold text-xs text-slate-900 dark:text-white flex items-center gap-2">
-                  <Bell className="w-3.5 h-3.5 text-violet-600" />
-                  <span>{t.notificationsTitle}</span>
-                  {unreadCount > 0 && (
-                    <span className="px-1.5 py-0.5 rounded-full bg-violet-100 dark:bg-violet-950 text-violet-600 dark:text-violet-400 text-[10px] font-bold">
-                      {unreadCount} baru
-                    </span>
-                  )}
-                </h4>
-                {unreadCount > 0 && (
+            <div className="absolute right-0 mt-2 w-80 sm:w-[420px] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-2xl p-5 space-y-3.5 z-50 animate-in fade-in zoom-in-95">
+              <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-lg bg-violet-100 dark:bg-violet-950/60 text-violet-600 dark:text-violet-400 flex items-center justify-center font-bold">
+                    <Bell className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-xs text-slate-900 dark:text-white flex items-center gap-1.5">
+                      <span>Notifikasi Aktivitas Realtime</span>
+                      {unreadNotifCount > 0 && (
+                        <span className="px-1.5 py-0.2 rounded-full bg-violet-600 text-white text-[10px] font-bold">
+                          {unreadNotifCount} baru
+                        </span>
+                      )}
+                    </h4>
+                    <p className="text-[10px] text-slate-400">Pembaruan otomatis dari database Supabase</p>
+                  </div>
+                </div>
+
+                {unreadNotifCount > 0 && (
                   <button
-                    onClick={handleMarkAllRead}
-                    className="text-[11px] font-semibold text-violet-600 hover:underline"
+                    onClick={onMarkAllNotificationsRead}
+                    className="text-[11px] font-semibold text-violet-600 dark:text-violet-400 hover:underline cursor-pointer"
                   >
-                    {t.markAllRead}
+                    Tandai Dibaca
                   </button>
                 )}
               </div>
 
-              <div className="max-h-64 overflow-y-auto space-y-2 text-xs">
-                {notifications.length === 0 ? (
-                  <p className="text-center text-slate-400 py-4">{t.noNotifications}</p>
+              {/* Filter Notifikasi */}
+              <div className="flex gap-1.5 text-[11px] font-semibold">
+                <button
+                  onClick={() => setNotifFilter('all')}
+                  className={`px-3 py-1 rounded-lg transition ${
+                    notifFilter === 'all'
+                      ? 'bg-violet-600 text-white'
+                      : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+                  }`}
+                >
+                  Semua ({notifications.length})
+                </button>
+                <button
+                  onClick={() => setNotifFilter('violation')}
+                  className={`px-3 py-1 rounded-lg transition ${
+                    notifFilter === 'violation'
+                      ? 'bg-rose-600 text-white'
+                      : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+                  }`}
+                >
+                  Anti-Cheat ({notifications.filter(n => n.type === 'violation' || n.type === 'autolock').length})
+                </button>
+                <button
+                  onClick={() => setNotifFilter('submission')}
+                  className={`px-3 py-1 rounded-lg transition ${
+                    notifFilter === 'submission'
+                      ? 'bg-emerald-600 text-white'
+                      : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+                  }`}
+                >
+                  Nilai Masuk ({notifications.filter(n => n.type === 'submission').length})
+                </button>
+              </div>
+
+              {/* Daftar Notifikasi Riil */}
+              <div className="max-h-72 overflow-y-auto space-y-2 text-xs">
+                {filteredNotifications.length === 0 ? (
+                  <div className="py-8 text-center text-slate-400 space-y-1">
+                    <CheckCircle2 className="w-6 h-6 text-emerald-500 mx-auto" />
+                    <p className="font-semibold text-xs">Tidak Ada Notifikasi Baru</p>
+                    <p className="text-[11px]">Aktivitas siswa akan muncul di sini secara real-time.</p>
+                  </div>
                 ) : (
-                  notifications.map(n => (
+                  filteredNotifications.map(n => (
                     <div
                       key={n.id}
-                      className={`p-3 rounded-xl border transition ${
-                        n.read
+                      className={`p-3.5 rounded-2xl border transition space-y-1 ${
+                        n.isRead
                           ? 'bg-slate-50/60 dark:bg-slate-800/40 border-slate-100 dark:border-slate-800/60 text-slate-500'
-                          : 'bg-violet-50/40 dark:bg-violet-950/20 border-violet-100 dark:border-violet-900/40 text-slate-800 dark:text-slate-200'
+                          : 'bg-violet-50/50 dark:bg-violet-950/20 border-violet-200 dark:border-violet-900/40 shadow-xs'
                       }`}
                     >
-                      <div className="flex items-center justify-between font-bold mb-1">
-                        <span className="flex items-center gap-1.5">
-                          {n.type === 'success' && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />}
-                          {n.type === 'warning' && <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />}
-                          {n.type === 'info' && <Clock className="w-3.5 h-3.5 text-violet-500" />}
+                      <div className="flex items-center justify-between font-bold text-slate-900 dark:text-white">
+                        <span className="flex items-center gap-1.5 text-xs">
+                          {n.type === 'submission' && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />}
+                          {n.type === 'violation' && <ShieldAlert className="w-3.5 h-3.5 text-rose-500" />}
+                          {n.type === 'autolock' && <AlertTriangle className="w-3.5 h-3.5 text-rose-600" />}
+                          {n.type === 'system' && <Clock className="w-3.5 h-3.5 text-violet-500" />}
                           <span>{n.title}</span>
                         </span>
-                        <span className="text-[10px] text-slate-400 font-normal">{n.time}</span>
+                        <span className="text-[10px] text-slate-400 font-normal">{n.createdAt}</span>
                       </div>
-                      <p className="text-[11px] leading-relaxed text-slate-600 dark:text-slate-400">{n.desc}</p>
+                      <p className="text-[11px] leading-relaxed text-slate-600 dark:text-slate-300">
+                        {n.message}
+                      </p>
                     </div>
                   ))
                 )}

@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { initialSubject, sampleQuestions } from '@/lib/mockData';
-import { Subject, Question, ExamResult } from '@/types/cbt';
+import { Subject, Question, ExamResult, ExamNotification, ExamMessage } from '@/types/cbt';
 import { Sidebar, NavItem } from '@/components/layout/Sidebar';
 import { Navbar } from '@/components/layout/Navbar';
 import { TeacherDashboard } from '@/components/teacher/TeacherDashboard';
@@ -17,7 +17,14 @@ import {
   saveExamResult,
   fetchExamResults,
   updateSubjectInSupabase,
-  subscribeToExamResults
+  subscribeToExamResults,
+  fetchNotifications,
+  fetchMessages,
+  markAllNotificationsAsRead,
+  updateMessageStatus,
+  insertMessage,
+  subscribeToNotifications,
+  subscribeToMessages
 } from '@/lib/supabaseService';
 import { useTheme } from '@/context/ThemeContext';
 import { useLanguage } from '@/context/LanguageContext';
@@ -55,6 +62,42 @@ export default function Home() {
   const [loginError, setLoginError] = useState('');
   const [isLoading, setIsLoading] = useState(true);
 
+  // Live Notifications State (Lonceng 🔔)
+  const [notifications, setNotifications] = useState<ExamNotification[]>([
+    {
+      id: 'notif-seed-1',
+      type: 'submission',
+      title: 'Ujian IPA Selesai',
+      message: 'Siswa Ahmad Fauzan (Kelas 8A) telah menyelesaikan ujian dengan skor 87%.',
+      isRead: false,
+      createdAt: 'Baru saja'
+    },
+    {
+      id: 'notif-seed-2',
+      type: 'system',
+      title: 'Database Supabase Terhubung',
+      message: 'Koneksi cloud PostgreSQL lxglsphqrpnrzfnvpwoa aktif & sinkron.',
+      isRead: true,
+      createdAt: '08:00'
+    }
+  ]);
+
+  // Live Messages State (Amplop ✉️ - Opsi A: Kendala Siswa & Broadcast Pengawas)
+  const [messages, setMessages] = useState<ExamMessage[]>([
+    {
+      id: 'msg-seed-1',
+      senderName: 'Siti Rahmawati',
+      senderRole: 'student',
+      targetType: 'proctor',
+      studentClass: '8A',
+      questionNumber: 4,
+      title: 'Kendala Gambar Soal',
+      body: 'Pak/Bu Pengawas, gambar diagram sel pada soal no. 4 tidak muncul di layar saya.',
+      status: 'pending',
+      createdAt: '08:15'
+    }
+  ]);
+
   // 1. Load data awal dari Supabase
   useEffect(() => {
     async function loadData() {
@@ -73,6 +116,18 @@ export default function Home() {
         if (resList && resList.length > 0) {
           setResults(resList);
         }
+
+        // Ambil notifikasi dari Supabase
+        const notifList = await fetchNotifications(sub.id);
+        if (notifList && notifList.length > 0) {
+          setNotifications(notifList);
+        }
+
+        // Ambil pesan kendala dari Supabase
+        const msgList = await fetchMessages(sub.id);
+        if (msgList && msgList.length > 0) {
+          setMessages(msgList);
+        }
       } catch (err) {
         console.error('Failed to load initial data:', err);
       } finally {
@@ -82,18 +137,38 @@ export default function Home() {
     loadData();
   }, []);
 
-  // 2. Realtime listener: Dapatkan hasil ujian baru dari Supabase secara langsung
+  // 2. Realtime listener: Dapatkan hasil ujian baru, notifikasi, dan kendala siswa dari Supabase
   useEffect(() => {
     if (!subject?.id) return;
-    const unsubscribe = subscribeToExamResults(subject.id, newResult => {
+
+    // Realtime hasil ujian
+    const unsubResults = subscribeToExamResults(subject.id, newResult => {
       setResults(prev => {
-        // Cek duplikasi ID
         if (prev.some(r => r.id === newResult.id)) return prev;
         return [newResult, ...prev];
       });
     });
+
+    // Realtime notifikasi event sistem (Lonceng 🔔)
+    const unsubNotifs = subscribeToNotifications(newNotif => {
+      setNotifications(prev => {
+        if (prev.some(n => n.id === newNotif.id)) return prev;
+        return [newNotif, ...prev];
+      });
+    });
+
+    // Realtime pesan kendala siswa (Amplop ✉️)
+    const unsubMsgs = subscribeToMessages(newMsg => {
+      setMessages(prev => {
+        if (prev.some(m => m.id === newMsg.id)) return prev;
+        return [newMsg, ...prev];
+      });
+    });
+
     return () => {
-      unsubscribe();
+      unsubResults();
+      unsubNotifs();
+      unsubMsgs();
     };
   }, [subject?.id]);
 
@@ -170,6 +245,47 @@ export default function Home() {
   const handleOpenCertificates = (target?: ExamResult) => {
     setCertificateTargetResult(target || results[0] || null);
     setIsCertificatesModalOpen(true);
+  };
+
+  // Handlers Notifikasi & Pesan (Opsi A)
+  const handleMarkAllNotificationsRead = async () => {
+    setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
+    try {
+      await markAllNotificationsAsRead(subject.id);
+    } catch (err) {
+      console.warn('Gagal update isRead di Supabase:', err);
+    }
+  };
+
+  const handleResolveMessage = async (msgId: string) => {
+    setMessages(prev =>
+      prev.map(m => (m.id === msgId ? { ...m, status: 'resolved' } : m))
+    );
+    try {
+      await updateMessageStatus(msgId, 'resolved');
+    } catch (err) {
+      console.warn('Gagal updateMessageStatus di Supabase:', err);
+    }
+  };
+
+  const handleSendBroadcast = async (broadcastText: string) => {
+    const newMsg: ExamMessage = {
+      id: `msg-${Date.now()}`,
+      subjectId: subject.id,
+      senderName: 'Guru Pengawas',
+      senderRole: 'teacher',
+      targetType: 'broadcast',
+      title: 'Pengumuman Pengawas Ruang',
+      body: broadcastText,
+      status: 'acknowledged',
+      createdAt: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
+    };
+    setMessages(prev => [newMsg, ...prev]);
+    try {
+      await insertMessage(newMsg);
+    } catch (err) {
+      console.warn('Gagal kirim broadcast ke Supabase:', err);
+    }
   };
 
   // =========================================================================
@@ -324,10 +440,15 @@ export default function Home() {
 
       {/* MAIN CONTAINER */}
       <div className="flex-1 flex flex-col h-screen overflow-y-auto">
-        {/* NAVBAR HEADER DENGAN NOTIFIKASI & PESAN AKTIF */}
+        {/* NAVBAR HEADER DENGAN NOTIFIKASI & PESAN KENDALA AKTIF (OPSI A) */}
         <Navbar
           onStartStudentExam={() => setViewMode('student_login')}
           onOpenAddQuestion={() => setIsAddModalOpen(true)}
+          notifications={notifications}
+          messages={messages}
+          onMarkAllNotificationsRead={handleMarkAllNotificationsRead}
+          onResolveMessage={handleResolveMessage}
+          onSendBroadcast={handleSendBroadcast}
         />
 
         {/* DASHBOARD CONTENT BODY */}

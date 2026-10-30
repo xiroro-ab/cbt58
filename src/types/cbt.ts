@@ -80,6 +80,12 @@ export interface Student {
 
 export type TeacherRole = 'admin' | 'guru_mapel' | 'pengawas';
 
+export interface TeacherAssignment {
+  id?: string;
+  subject: string;
+  classes: string[];
+}
+
 export interface Teacher {
   id: string;
   nip: string;
@@ -87,6 +93,7 @@ export interface Teacher {
   email: string;
   subject: string;
   classes: string[];
+  assignments?: TeacherAssignment[];
   role: TeacherRole;
   pin: string;
   avatarColor?: string;

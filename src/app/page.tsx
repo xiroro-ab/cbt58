@@ -68,6 +68,7 @@ export default function Home() {
   // Sesi 30 Guru & Pengawas CBT
   const [teachers, setTeachers] = useState<Teacher[]>(initialTeachers);
   const [currentTeacher, setCurrentTeacher] = useState<Teacher | null>(null);
+  const [activeAssignmentSubject, setActiveAssignmentSubject] = useState<string>('');
   const [viewMode, setViewMode] = useState<'teacher_login' | 'teacher' | 'student_login' | 'student_exam'>('teacher_login');
   const [currentNav, setCurrentNav] = useState<NavItem>('dashboard');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -241,6 +242,28 @@ export default function Home() {
             const foundTeacher = listToSearch.find(t => t.id === savedTeacherId);
             if (foundTeacher) {
               setCurrentTeacher(foundTeacher);
+              const firstAsg = foundTeacher.assignments?.[0];
+              if (firstAsg) {
+                setActiveAssignmentSubject(firstAsg.subject);
+                setSubject(prev => ({
+                  ...prev,
+                  title: `Asesmen Sumatif - ${firstAsg.subject}`,
+                  className: firstAsg.classes.join(', ')
+                }));
+                if (firstAsg.classes.length > 0) {
+                  setSelectedStudentClass(firstAsg.classes[0]);
+                }
+              } else {
+                setActiveAssignmentSubject(foundTeacher.subject);
+                if (foundTeacher.classes?.length > 0) {
+                  setSubject(prev => ({
+                    ...prev,
+                    title: `Asesmen Sumatif - ${foundTeacher.subject}`,
+                    className: foundTeacher.classes.join(', ')
+                  }));
+                  setSelectedStudentClass(foundTeacher.classes[0]);
+                }
+              }
               setViewMode('teacher');
             }
           }
@@ -367,30 +390,76 @@ export default function Home() {
     }
   };
 
-  // Teacher Login & Session Handlers (Skenario 30 Guru)
+  // Teacher Login & Session Handlers (Skenario 30 Guru & Multi-Mapel/Multi-Rombel)
   const handleTeacherLoginSuccess = async (teacher: Teacher) => {
     setCurrentTeacher(teacher);
     setViewMode('teacher');
     if (typeof window !== 'undefined') {
       localStorage.setItem('cbt_logged_teacher_id', teacher.id);
     }
-    // Sesuaikan judul mapel dengan mapel guru yang login
-    if (
+
+    const firstAsg = teacher.assignments && teacher.assignments.length > 0
+      ? teacher.assignments[0]
+      : null;
+
+    if (firstAsg) {
+      setActiveAssignmentSubject(firstAsg.subject);
+      setSubject(prev => ({
+        ...prev,
+        title: `Asesmen Sumatif - ${firstAsg.subject}`,
+        className: firstAsg.classes.join(', ')
+      }));
+      if (firstAsg.classes.length > 0) {
+        setSelectedStudentClass(firstAsg.classes[0]);
+      }
+    } else if (
       teacher.subject &&
       !teacher.subject.includes('Waka') &&
       !teacher.subject.includes('Kepala Sekolah') &&
       !teacher.subject.includes('BK')
     ) {
+      setActiveAssignmentSubject(teacher.subject);
       setSubject(prev => ({
         ...prev,
         title: `Asesmen Sumatif - ${teacher.subject}`,
-        className: teacher.classes[0] || prev.className
+        className: teacher.classes.join(', ') || prev.className
       }));
+      if (teacher.classes.length > 0) {
+        setSelectedStudentClass(teacher.classes[0]);
+      }
+    } else {
+      setActiveAssignmentSubject(teacher.subject || '');
     }
+
     try {
       await updateTeacherStatusInSupabase(teacher.id, 'Aktif Mengawas');
     } catch (err) {
       console.warn('Gagal update status guru:', err);
+    }
+  };
+
+  const handleSelectAssignment = (subjectName: string) => {
+    setActiveAssignmentSubject(subjectName);
+    if (!currentTeacher) return;
+    const asg = currentTeacher.assignments?.find(a => a.subject === subjectName);
+    if (asg) {
+      setSubject(prev => ({
+        ...prev,
+        title: `Asesmen Sumatif - ${asg.subject}`,
+        className: asg.classes.join(', ')
+      }));
+      if (asg.classes.length > 0) {
+        setSelectedStudentClass(asg.classes[0]);
+      }
+    } else if (currentTeacher.subject === subjectName) {
+      setSubject(prev => ({
+        ...prev,
+        title: `Asesmen Sumatif - ${currentTeacher.subject}`,
+        className: currentTeacher.classes.join(', ')
+      }));
+      if (currentTeacher.classes.length > 0) {
+        setSelectedStudentClass(currentTeacher.classes[0]);
+      }
     }
   };
 
@@ -876,6 +945,8 @@ export default function Home() {
           onSendBroadcast={handleSendBroadcast}
           currentTeacher={currentTeacher}
           teachers={teachers}
+          activeAssignmentSubject={activeAssignmentSubject || currentTeacher?.subject}
+          onSelectAssignment={handleSelectAssignment}
           onLogoutTeacher={handleTeacherLogout}
           onSwitchTeacher={handleSwitchTeacher}
         />

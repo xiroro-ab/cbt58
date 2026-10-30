@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Teacher } from '@/types/cbt';
+import { Teacher, TeacherAssignment } from '@/types/cbt';
 import { useLanguage } from '@/context/LanguageContext';
 import { useTheme } from '@/context/ThemeContext';
 import {
@@ -22,7 +22,10 @@ import {
   IdCard,
   AlertCircle,
   CheckCircle2,
-  LogIn
+  LogIn,
+  Plus,
+  Trash2,
+  Layers
 } from 'lucide-react';
 
 interface TeacherLoginProps {
@@ -54,6 +57,13 @@ const AVAILABLE_CLASSES = [
   'IX.1', 'IX.2', 'IX.3', 'IX.4'
 ];
 
+interface AssignmentItem {
+  id: string;
+  subject: string;
+  customSubject: string;
+  classes: string[];
+}
+
 export const TeacherLogin: React.FC<TeacherLoginProps> = ({
   teachers,
   onLoginSuccess,
@@ -76,9 +86,6 @@ export const TeacherLogin: React.FC<TeacherLoginProps> = ({
   const [regName, setRegName] = useState('');
   const [regNip, setRegNip] = useState('');
   const [regEmail, setRegEmail] = useState('');
-  const [regSubject, setRegSubject] = useState(AVAILABLE_SUBJECTS[0]);
-  const [regCustomSubject, setRegCustomSubject] = useState('');
-  const [regSelectedClasses, setRegSelectedClasses] = useState<string[]>(['VII.1', 'VII.2']);
   const [regRole, setRegRole] = useState<'guru_mapel' | 'pengawas' | 'admin'>('guru_mapel');
   const [regPin, setRegPin] = useState('');
   const [regConfirmPin, setRegConfirmPin] = useState('');
@@ -87,10 +94,55 @@ export const TeacherLogin: React.FC<TeacherLoginProps> = ({
   const [regSuccess, setRegSuccess] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Toggle pilihan kelas saat pendaftaran
-  const handleToggleClass = (cls: string) => {
-    setRegSelectedClasses(prev =>
-      prev.includes(cls) ? prev.filter(c => c !== cls) : [...prev, cls]
+  // Multi-Mapel & Multi-Rombel State
+  const [assignments, setAssignments] = useState<AssignmentItem[]>([
+    {
+      id: 'asg-1',
+      subject: 'Ilmu Pengetahuan Alam (IPA)',
+      customSubject: '',
+      classes: ['VII.1', 'VII.2', 'VII.3']
+    }
+  ]);
+
+  const handleAddAssignment = () => {
+    setAssignments(prev => [
+      ...prev,
+      {
+        id: `asg-${Date.now()}`,
+        subject: 'Informatika & TIK',
+        customSubject: '',
+        classes: ['IX.1', 'IX.2', 'IX.3', 'IX.4']
+      }
+    ]);
+  };
+
+  const handleRemoveAssignment = (id: string) => {
+    if (assignments.length <= 1) return;
+    setAssignments(prev => prev.filter(a => a.id !== id));
+  };
+
+  const handleUpdateAssignmentSubject = (id: string, subject: string) => {
+    setAssignments(prev =>
+      prev.map(a => (a.id === id ? { ...a, subject } : a))
+    );
+  };
+
+  const handleUpdateAssignmentCustomSubject = (id: string, customSubject: string) => {
+    setAssignments(prev =>
+      prev.map(a => (a.id === id ? { ...a, customSubject } : a))
+    );
+  };
+
+  const handleToggleAssignmentClass = (id: string, cls: string) => {
+    setAssignments(prev =>
+      prev.map(a => {
+        if (a.id !== id) return a;
+        const exists = a.classes.includes(cls);
+        return {
+          ...a,
+          classes: exists ? a.classes.filter(c => c !== cls) : [...a.classes, cls]
+        };
+      })
     );
   };
 
@@ -159,76 +211,65 @@ export const TeacherLogin: React.FC<TeacherLoginProps> = ({
     const cleanName = regName.trim();
     const cleanNip = regNip.trim();
     const cleanEmail = regEmail.trim().toLowerCase();
-    const finalSubject = regSubject === 'Lainnya' ? regCustomSubject.trim() : regSubject;
     const cleanPin = regPin.trim();
     const cleanConfirm = regConfirmPin.trim();
 
-    if (!cleanName || !cleanNip || !cleanEmail || !finalSubject) {
-      setRegError(
-        language === 'id'
-          ? 'Semua kolom wajib diisi dengan lengkap.'
-          : 'Please complete all required fields.'
-      );
+    if (!cleanName || !cleanNip || !cleanEmail) {
+      setRegError('Nama, NIP, dan Email wajib diisi.');
       return;
     }
 
+    // Validasi assignments
+    for (let i = 0; i < assignments.length; i++) {
+      const asg = assignments[i];
+      const subj = asg.subject === 'Lainnya' ? asg.customSubject.trim() : asg.subject;
+      if (!subj) {
+        setRegError(`Mata Pelajaran #${i + 1} belum diisi.`);
+        return;
+      }
+      if (asg.classes.length === 0) {
+        setRegError(`Pilih minimal satu kelas / rombel untuk Mapel #${i + 1} (${subj}).`);
+        return;
+      }
+    }
+
     if (cleanPin.length < 4) {
-      setRegError(
-        language === 'id'
-          ? 'Password / PIN minimal 4 karakter.'
-          : 'Password or PIN must be at least 4 characters.'
-      );
+      setRegError('Password / PIN minimal 4 karakter.');
       return;
     }
 
     if (cleanPin !== cleanConfirm) {
-      setRegError(
-        language === 'id'
-          ? 'Konfirmasi Password / PIN tidak cocok!'
-          : 'Password and confirm password do not match!'
-      );
+      setRegError('Konfirmasi Password / PIN tidak cocok!');
       return;
     }
 
-    // Validasi NIP atau Email apakah sudah pernah didaftarkan
-    const isNipExists = teachers.some(t => t.nip === cleanNip);
-    if (isNipExists) {
-      setRegError(
-        language === 'id'
-          ? `NIP ${cleanNip} sudah terdaftar di sistem. Silakan masuk menggunakan menu Login.`
-          : `NIP ${cleanNip} is already registered.`
-      );
+    // Cek NIP atau Email ganda
+    if (teachers.some(t => t.nip === cleanNip)) {
+      setRegError(`NIP ${cleanNip} sudah terdaftar di sistem. Silakan masuk via Login.`);
       return;
     }
 
-    const isEmailExists = teachers.some(t => t.email.toLowerCase() === cleanEmail);
-    if (isEmailExists) {
-      setRegError(
-        language === 'id'
-          ? `Email ${cleanEmail} sudah terdaftar di sistem.`
-          : `Email ${cleanEmail} is already registered.`
-      );
-      return;
-    }
-
-    if (regSelectedClasses.length === 0) {
-      setRegError(
-        language === 'id'
-          ? 'Pilih minimal satu kelas yang Anda ampu.'
-          : 'Please select at least one assigned class.'
-      );
+    if (teachers.some(t => t.email.toLowerCase() === cleanEmail)) {
+      setRegError(`Email ${cleanEmail} sudah terdaftar di sistem.`);
       return;
     }
 
     setIsSubmitting(true);
+
+    const finalAssignments: TeacherAssignment[] = assignments.map(a => ({
+      id: a.id,
+      subject: a.subject === 'Lainnya' ? a.customSubject.trim() : a.subject,
+      classes: a.classes
+    }));
 
     const newTeacher: Teacher = {
       id: `tea-${Date.now()}`,
       nip: cleanNip,
       name: cleanName,
       email: cleanEmail,
-      subject: finalSubject,
-      classes: regSelectedClasses,
+      subject: finalAssignments[0].subject,
+      classes: finalAssignments[0].classes,
+      assignments: finalAssignments,
       role: regRole,
       pin: cleanPin,
       avatarColor: 'bg-violet-600',
@@ -238,11 +279,7 @@ export const TeacherLogin: React.FC<TeacherLoginProps> = ({
 
     try {
       await onRegisterTeacher(newTeacher);
-      setRegSuccess(
-        language === 'id'
-          ? 'Pendaftaran akun guru berhasil! Mengalihkan ke dashboard...'
-          : 'Registration successful! Redirecting to dashboard...'
-      );
+      setRegSuccess('Pendaftaran akun guru berhasil! Mengalihkan ke dashboard...');
       setTimeout(() => {
         onLoginSuccess(newTeacher);
       }, 700);
@@ -295,7 +332,7 @@ export const TeacherLogin: React.FC<TeacherLoginProps> = ({
       </div>
 
       {/* Main Authentication Card */}
-      <div className="max-w-lg w-full bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-3xl p-6 sm:p-8 space-y-6 shadow-xl shadow-slate-200/50 dark:shadow-none animate-in fade-in zoom-in-95 duration-200 my-10">
+      <div className="max-w-xl w-full bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-3xl p-6 sm:p-8 space-y-6 shadow-xl shadow-slate-200/50 dark:shadow-none animate-in fade-in zoom-in-95 duration-200 my-10">
         {/* Header */}
         <div className="text-center space-y-1.5">
           <div className="inline-flex p-3 rounded-2xl bg-violet-50 dark:bg-violet-950/50 text-violet-600 dark:text-violet-400 border border-violet-200 dark:border-violet-800/60 shadow-xs mb-1">
@@ -312,8 +349,8 @@ export const TeacherLogin: React.FC<TeacherLoginProps> = ({
                 ? 'Masuk ke dashboard untuk mengelola soal, token ujian, dan dossier nilai'
                 : 'Sign in to manage questions, exam tokens, and scores'
               : language === 'id'
-                ? 'Daftarkan akun guru baru untuk mulai membuat ujian dan mengawas'
-                : 'Register a new teacher account to start managing exams'}
+                ? 'Mendukung guru multi-mapel & multi-rombel (misal IPA kelas 7 dan Informatika kelas 9)'
+                : 'Supports teachers with multiple subjects and distinct class assignments'}
           </p>
         </div>
 
@@ -422,7 +459,7 @@ export const TeacherLogin: React.FC<TeacherLoginProps> = ({
         )}
 
         {/* ============================================================== */}
-        {/* FORM 2: DAFTAR AKUN GURU BARU (REGISTRATION)                   */}
+        {/* FORM 2: DAFTAR AKUN GURU BARU (MULTI-MAPEL & MULTI-ROMBEL)     */}
         {/* ============================================================== */}
         {activeTab === 'register' && (
           <form onSubmit={handleRegisterSubmit} className="space-y-4 text-xs font-medium">
@@ -436,7 +473,7 @@ export const TeacherLogin: React.FC<TeacherLoginProps> = ({
                 required
                 value={regName}
                 onChange={e => setRegName(e.target.value)}
-                placeholder="Contoh: Dra. Siti Rahmawati, M.Pd"
+                placeholder="Contoh: Ahmad Fauzi, S.Pd"
                 className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white placeholder-slate-400 text-xs focus:outline-none focus:ring-2 focus:ring-violet-500 transition"
               />
             </div>
@@ -473,73 +510,120 @@ export const TeacherLogin: React.FC<TeacherLoginProps> = ({
               </div>
             </div>
 
-            <div>
-              <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1 flex items-center justify-between">
-                <span className="flex items-center gap-1.5">
-                  <BookOpen className="w-3.5 h-3.5 text-violet-600" />
-                  <span>Mata Pelajaran yang Diampu</span>
-                </span>
-                <span className="text-[10px] text-slate-400">Pilih kurikulum</span>
-              </label>
-              <select
-                value={regSubject}
-                onChange={e => setRegSubject(e.target.value)}
-                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-violet-500 transition cursor-pointer"
-              >
-                {AVAILABLE_SUBJECTS.map(subj => (
-                  <option key={subj} value={subj}>
-                    {subj}
-                  </option>
+            {/* SEKSI PENUGASAN MULTI-MAPEL & ROMBEL */}
+            <div className="space-y-3 pt-1">
+              <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2">
+                <div>
+                  <label className="block text-slate-900 dark:text-white font-bold flex items-center gap-1.5">
+                    <Layers className="w-4 h-4 text-violet-600" />
+                    <span>Penugasan Mata Pelajaran & Rombel Kelas</span>
+                  </label>
+                  <p className="text-[10px] text-slate-400">
+                    Bisa menambahkan lebih dari 1 mata pelajaran dengan rombel kelas berbeda
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleAddAssignment}
+                  className="px-2.5 py-1.5 rounded-xl bg-violet-50 dark:bg-violet-950/50 hover:bg-violet-600 hover:text-white text-violet-700 dark:text-violet-300 border border-violet-200 dark:border-violet-800 text-[11px] font-bold transition flex items-center gap-1 cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>+ Tambah Mapel</span>
+                </button>
+              </div>
+
+              {/* Daftar Penugasan */}
+              <div className="space-y-3">
+                {assignments.map((asg, idx) => (
+                  <div
+                    key={asg.id}
+                    className="p-3.5 rounded-2xl bg-slate-50/80 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/80 space-y-3"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-bold text-violet-700 dark:text-violet-300 bg-violet-100 dark:bg-violet-950 px-2.5 py-0.5 rounded-md flex items-center gap-1.5">
+                        <BookOpen className="w-3 h-3" />
+                        <span>Mata Pelajaran #{idx + 1}</span>
+                      </span>
+
+                      {assignments.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveAssignment(asg.id)}
+                          className="p-1 rounded text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition cursor-pointer"
+                          title="Hapus penugasan mapel ini"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Pilih Mapel */}
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-300 mb-1">
+                        Pilih Mapel:
+                      </label>
+                      <select
+                        value={asg.subject}
+                        onChange={e => handleUpdateAssignmentSubject(asg.id, e.target.value)}
+                        className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-violet-500 cursor-pointer"
+                      >
+                        {AVAILABLE_SUBJECTS.map(subj => (
+                          <option key={subj} value={subj}>
+                            {subj}
+                          </option>
+                        ))}
+                        <option value="Lainnya">Lainnya (Ketik Manual)...</option>
+                      </select>
+
+                      {asg.subject === 'Lainnya' && (
+                        <input
+                          type="text"
+                          required
+                          value={asg.customSubject}
+                          onChange={e => handleUpdateAssignmentCustomSubject(asg.id, e.target.value)}
+                          placeholder="Ketik nama mata pelajaran..."
+                          className="w-full mt-2 px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs focus:outline-none focus:ring-2 focus:ring-violet-500"
+                        />
+                      )}
+                    </div>
+
+                    {/* Pilih Rombel Khusus Mapel Ini */}
+                    <div>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-[11px] font-semibold text-slate-600 dark:text-slate-300">
+                          Rombel Kelas yang Diajar:
+                        </span>
+                        <span className="text-[10px] text-violet-600 dark:text-violet-400 font-bold">
+                          {asg.classes.length} Rombel Terpilih
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-5 gap-1.5">
+                        {AVAILABLE_CLASSES.map(cls => {
+                          const isSelected = asg.classes.includes(cls);
+                          return (
+                            <button
+                              type="button"
+                              key={cls}
+                              onClick={() => handleToggleAssignmentClass(asg.id, cls)}
+                              className={`py-1.5 px-1.5 rounded-lg text-[10px] font-bold transition text-center border cursor-pointer ${
+                                isSelected
+                                  ? 'bg-violet-600 text-white border-violet-600 shadow-xs'
+                                  : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:border-violet-400'
+                              }`}
+                            >
+                              {cls}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
                 ))}
-                <option value="Lainnya">Lainnya (Ketik Manual)...</option>
-              </select>
-
-              {regSubject === 'Lainnya' && (
-                <input
-                  type="text"
-                  required
-                  value={regCustomSubject}
-                  onChange={e => setRegCustomSubject(e.target.value)}
-                  placeholder="Ketik nama mata pelajaran..."
-                  className="w-full mt-2 px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs focus:outline-none focus:ring-2 focus:ring-violet-500 transition"
-                />
-              )}
-            </div>
-
-            {/* Pilihan Kelas yang Diampu */}
-            <div>
-              <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1.5 flex items-center justify-between">
-                <span className="flex items-center gap-1.5">
-                  <School className="w-3.5 h-3.5 text-violet-600" />
-                  <span>Kelas yang Diampu:</span>
-                </span>
-                <span className="text-[10px] text-violet-600 dark:text-violet-400 font-semibold">
-                  {regSelectedClasses.length} Kelas Terpilih
-                </span>
-              </label>
-              <div className="grid grid-cols-5 gap-1.5">
-                {AVAILABLE_CLASSES.map(cls => {
-                  const isSelected = regSelectedClasses.includes(cls);
-                  return (
-                    <button
-                      type="button"
-                      key={cls}
-                      onClick={() => handleToggleClass(cls)}
-                      className={`py-1.5 px-2 rounded-lg text-[11px] font-bold transition text-center border cursor-pointer ${
-                        isSelected
-                          ? 'bg-violet-600 text-white border-violet-600 shadow-xs'
-                          : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:border-violet-400'
-                      }`}
-                    >
-                      {cls}
-                    </button>
-                  );
-                })}
               </div>
             </div>
 
             {/* Password & Konfirmasi Password */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
               <div>
                 <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1 flex items-center gap-1.5">
                   <KeyRound className="w-3.5 h-3.5 text-violet-600" />
@@ -624,7 +708,7 @@ export const TeacherLogin: React.FC<TeacherLoginProps> = ({
         <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/60 dark:border-slate-800 flex items-center gap-3 text-[11px] text-slate-500 dark:text-slate-400">
           <ShieldCheck className="w-5 h-5 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
           <span>
-            Setiap akun guru yang didaftarkan tersimpan aman di database Supabase dan memiliki bank soal, token ujian, serta rekap nilai masing-masing.
+            Guru dapat berpindah antar mapel yang diajarnya kapan saja langsung dari header navbar atau menu profil.
           </span>
         </div>
       </div>

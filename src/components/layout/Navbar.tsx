@@ -27,7 +27,8 @@ import {
   LogOut,
   ChevronDown,
   UserCheck,
-  ShieldCheck
+  ShieldCheck,
+  Layers
 } from 'lucide-react';
 
 interface NavbarProps {
@@ -45,6 +46,8 @@ interface NavbarProps {
   onSendBroadcast: (broadcastText: string) => void;
   currentTeacher?: Teacher | null;
   teachers?: Teacher[];
+  activeAssignmentSubject?: string;
+  onSelectAssignment?: (subjectName: string) => void;
   onLogoutTeacher?: () => void;
   onSwitchTeacher?: (teacher: Teacher) => void;
 }
@@ -64,6 +67,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   onSendBroadcast,
   currentTeacher,
   teachers = initialTeachers,
+  activeAssignmentSubject,
+  onSelectAssignment,
   onLogoutTeacher,
   onSwitchTeacher
 }) => {
@@ -134,6 +139,27 @@ export const Navbar: React.FC<NavbarProps> = ({
 
       {/* 2. ACTIONS & USER BAR */}
       <div className="flex items-center gap-2.5">
+        {/* Switcher Mapel & Rombel (Khusus Guru yang Mengajar > 1 Mapel Berbeda) */}
+        {currentTeacher?.assignments && currentTeacher.assignments.length > 1 && onSelectAssignment && (
+          <div className="hidden xl:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-violet-50 dark:bg-violet-950/40 border border-violet-200 dark:border-violet-800 text-xs">
+            <Layers className="w-3.5 h-3.5 text-violet-600 dark:text-violet-400 flex-shrink-0" />
+            <div className="flex flex-col text-left">
+              <span className="text-[9px] uppercase tracking-wider text-slate-400 font-bold">Mapel & Rombel:</span>
+              <select
+                value={activeAssignmentSubject || currentTeacher.subject}
+                onChange={(e) => onSelectAssignment(e.target.value)}
+                className="bg-transparent font-bold text-violet-700 dark:text-violet-300 focus:outline-none cursor-pointer text-xs pr-1"
+              >
+                {currentTeacher.assignments.map((asg, i) => (
+                  <option key={i} value={asg.subject} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
+                    {asg.subject} (Kelas {asg.classes.join(', ')})
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+        )}
+
         {/* Toggle Language ID / EN */}
         <button
           onClick={toggleLanguage}
@@ -546,6 +572,42 @@ export const Navbar: React.FC<NavbarProps> = ({
                   <p className="text-[11px] text-slate-500 dark:text-slate-400">NIP: {currentTeacher.nip}</p>
                   <p className="text-[10px] text-slate-400">{currentTeacher.email}</p>
                 </div>
+
+                {/* Penugasan Mapel & Rombel (Multi-Mapel) */}
+                {currentTeacher.assignments && currentTeacher.assignments.length > 1 && (
+                  <div className="pt-2 border-t border-slate-100 dark:border-slate-800 space-y-1.5">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
+                      <Layers className="w-3 h-3 text-violet-600" />
+                      <span>Mapel & Rombel Diajar:</span>
+                    </p>
+                    {currentTeacher.assignments.map((asg, idx) => {
+                      const isCurrentActive = (activeAssignmentSubject || currentTeacher.subject) === asg.subject;
+                      return (
+                        <button
+                          key={idx}
+                          type="button"
+                          onClick={() => {
+                            if (onSelectAssignment) onSelectAssignment(asg.subject);
+                            setShowProfileMenu(false);
+                          }}
+                          className={`w-full text-left p-2 rounded-xl transition flex items-center justify-between cursor-pointer border ${
+                            isCurrentActive
+                              ? 'bg-violet-50 dark:bg-violet-950/60 border-violet-200 dark:border-violet-800 text-violet-700 dark:text-violet-300 font-bold'
+                              : 'hover:bg-slate-50 dark:hover:bg-slate-800 border-transparent text-slate-600 dark:text-slate-400'
+                          }`}
+                        >
+                          <div>
+                            <p className="text-xs">{asg.subject}</p>
+                            <p className="text-[10px] text-slate-400 font-normal">
+                              Kelas: {asg.classes.join(', ')}
+                            </p>
+                          </div>
+                          {isCurrentActive && <Check className="w-3.5 h-3.5 text-violet-600" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
 
                 <button
                   onClick={() => {

@@ -7,7 +7,19 @@ export const initialTeachers: Teacher[] = [
     name: 'Ahmad Fauzi, S.Pd',
     email: 'ahmad.fauzi@smpn58.sch.id',
     subject: 'Ilmu Pengetahuan Alam (IPA)',
-    classes: ['VII.1', 'VII.2', 'VII.3', 'VIII.1'],
+    classes: ['VII.1', 'VII.2', 'VII.3'],
+    assignments: [
+      {
+        id: 'asg-01-ipa',
+        subject: 'Ilmu Pengetahuan Alam (IPA)',
+        classes: ['VII.1', 'VII.2', 'VII.3']
+      },
+      {
+        id: 'asg-01-inf',
+        subject: 'Informatika & TIK',
+        classes: ['IX.1', 'IX.2', 'IX.3', 'IX.4']
+      }
+    ],
     role: 'guru_mapel',
     pin: '123456',
     avatarColor: 'bg-indigo-600',

@@ -680,7 +680,7 @@ export default function Home() {
     }
   };
 
-  const handleStartExam = (e: React.FormEvent) => {
+  const handleStartExam = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!studentName.trim()) {
       setLoginError(language === 'id' ? 'Harap pilih atau masukkan nama lengkap siswa.' : 'Please enter student name.');
@@ -744,8 +744,26 @@ export default function Home() {
       return;
     }
 
-    // Pasang otomatis mata pelajaran yang terdeteksi
+    // 4. Muat butir soal riil untuk paket ujian ini sebelum masuk ke layar ujian
+    let loadedQuestions: Question[] = [];
+    try {
+      loadedQuestions = await fetchQuestionsBySubject(matchedSub.id);
+    } catch (err) {
+      console.warn('Gagal memuat soal ujian:', err);
+    }
+
+    if (!loadedQuestions || loadedQuestions.length === 0) {
+      setLoginError(
+        language === 'id'
+          ? `Paket ujian "${matchedSub.title}" belum memiliki butir soal yang diunggah oleh guru pengawas. Silakan hubungi guru yang bersangkutan.`
+          : `No questions found for "${matchedSub.title}". Please contact your teacher or proctor.`
+      );
+      return;
+    }
+
+    // Pasang otomatis mata pelajaran & butir soal yang terdeteksi
     setSubject(matchedSub);
+    setQuestions(loadedQuestions);
     setLoginError('');
     setViewMode('student_exam');
   };

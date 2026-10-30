@@ -394,8 +394,10 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
     return () => unsub();
   }, [isExamCompleted, subject.id]);
 
-  const currentQuestion = questions[currentIndex];
-  const currentAnswerData = answers[currentIndex];
+  const currentQuestion = questions && questions.length > 0 ? questions[currentIndex] : undefined;
+  const currentAnswerData = answers && answers.length > 0
+    ? (answers[currentIndex] || { questionId: currentQuestion?.id || '', answer: null, isDoubtful: false })
+    : { questionId: '', answer: null, isDoubtful: false };
 
   const handleUpdateAnswer = (newAnswer: QuestionAnswer) => {
     setAnswers(prev => {
@@ -546,6 +548,33 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
               Kembali ke Halaman Utama
             </button>
           </div>
+        </div>
+      </div>
+    );
+  }
+
+  // =========================================================================
+  // VIEW: JIKA SOAL KOSONG / BELUM TERSEDIA
+  // =========================================================================
+  if (!questions || questions.length === 0 || !currentQuestion) {
+    return (
+      <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 flex flex-col items-center justify-center p-4">
+        <div className="max-w-md w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 sm:p-8 space-y-4 shadow-2xl text-center animate-in zoom-in-95">
+          <div className="w-16 h-16 rounded-2xl bg-amber-100 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 mx-auto flex items-center justify-center shadow-lg shadow-amber-500/20">
+            <AlertTriangle className="w-8 h-8" />
+          </div>
+          <div className="space-y-1">
+            <h2 className="text-xl font-bold text-slate-900 dark:text-white">Soal Ujian Belum Tersedia</h2>
+            <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+              Paket ujian <strong>{subject.title}</strong> belum memiliki butir soal yang diunggah oleh guru pengawas.
+            </p>
+          </div>
+          <button
+            onClick={onExit}
+            className="w-full py-3 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-bold text-xs shadow-md transition cursor-pointer"
+          >
+            Kembali ke Halaman Login
+          </button>
         </div>
       </div>
     );

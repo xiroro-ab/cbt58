@@ -3991,30 +3991,88 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                     {/* REVIEW JAWABAN SISWA VS KUNCI GURU */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
                       {/* JAWABAN SISWA */}
-                      <div className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-1">
-                        <span className="text-[10px] font-bold uppercase text-slate-400 block">
+                      <div className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-1.5">
+                        <span className="text-[10px] font-bold uppercase text-slate-400 block tracking-wider">
                           Jawaban Siswa:
                         </span>
                         <div className="text-slate-800 dark:text-slate-100 font-semibold break-words">
-                          {rawStudentAns === null || rawStudentAns === undefined || rawStudentAns === ''
-                            ? <span className="text-rose-500 italic">(Tidak dijawab)</span>
-                            : typeof rawStudentAns === 'object'
-                            ? JSON.stringify(rawStudentAns)
-                            : String(rawStudentAns)}
+                          {(() => {
+                            if (rawStudentAns === null || rawStudentAns === undefined || rawStudentAns === '') {
+                              return <span className="text-rose-500 italic font-normal">(Tidak dijawab)</span>;
+                            }
+                            if (Array.isArray(rawStudentAns)) {
+                              if (rawStudentAns.length === 0) return <span className="text-rose-500 italic font-normal">(Tidak dijawab)</span>;
+                              if (typeof rawStudentAns[0] === 'object' && rawStudentAns[0] !== null) {
+                                return (
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {rawStudentAns.map((item: any, idx: number) => {
+                                      const left = item.questionItem || item.qText || item.q || `Item ${idx + 1}`;
+                                      const right = item.answerItem || item.aText || item.a || '-';
+                                      return (
+                                        <span key={idx} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-violet-50 dark:bg-violet-950/50 text-violet-700 dark:text-violet-300 border border-violet-200 dark:border-violet-800 text-xs font-bold">
+                                          <span>{left}</span>
+                                          <span className="text-slate-400">➔</span>
+                                          <span className="text-slate-900 dark:text-white">{right}</span>
+                                        </span>
+                                      );
+                                    })}
+                                  </div>
+                                );
+                              }
+                              return (
+                                <div className="flex flex-wrap gap-1.5">
+                                  {rawStudentAns.map((item: any, idx: number) => (
+                                    <span key={idx} className="px-2.5 py-0.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 font-bold border border-slate-200 dark:border-slate-700 text-xs">
+                                      {typeof item === 'object' ? JSON.stringify(item) : String(item)}
+                                    </span>
+                                  ))}
+                                </div>
+                              );
+                            }
+                            const objAns = rawStudentAns as any;
+                            if (typeof objAns === 'object' && objAns !== null) {
+                              if (objAns.questionItem || objAns.answerItem) {
+                                return (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-violet-50 dark:bg-violet-950/50 text-violet-700 dark:text-violet-300 border border-violet-200 dark:border-violet-800 text-xs font-bold">
+                                    <span>{objAns.questionItem}</span>
+                                    <span className="text-slate-400">➔</span>
+                                    <span className="text-slate-900 dark:text-white">{objAns.answerItem}</span>
+                                  </span>
+                                );
+                              }
+                              return <span>{JSON.stringify(objAns)}</span>;
+                            }
+                            return <span>{String(rawStudentAns)}</span>;
+                          })()}
                         </div>
                       </div>
 
                       {/* KUNCI REFERENSI GURU */}
-                      <div className="p-3 rounded-xl bg-emerald-50/60 dark:bg-emerald-950/30 border border-emerald-200/80 dark:border-emerald-800/60 space-y-1">
-                        <span className="text-[10px] font-bold uppercase text-emerald-600 dark:text-emerald-400 block">
+                      <div className="p-3 rounded-xl bg-emerald-50/60 dark:bg-emerald-950/30 border border-emerald-200/80 dark:border-emerald-800/60 space-y-1.5">
+                        <span className="text-[10px] font-bold uppercase text-emerald-600 dark:text-emerald-400 block tracking-wider">
                           {isEssay ? 'Kunci / Rubrik Referensi Guru:' : 'Kunci Jawaban Benar:'}
                         </span>
                         <div className="text-emerald-950 dark:text-emerald-200 font-semibold break-words">
-                          {q.answer === null || q.answer === undefined
-                            ? <span className="italic text-slate-400">(Belum ditentukan kunci)</span>
-                            : typeof q.answer === 'object'
-                            ? JSON.stringify(q.answer)
-                            : String(q.answer)}
+                          {(() => {
+                            if (q.answer === null || q.answer === undefined || q.answer === '') {
+                              return <span className="italic text-slate-400 font-normal">(Belum ditentukan kunci)</span>;
+                            }
+                            if (Array.isArray(q.answer)) {
+                              return (
+                                <div className="flex flex-wrap gap-1.5">
+                                  {q.answer.map((item: any, idx: number) => (
+                                    <span key={idx} className="px-2.5 py-0.5 rounded-lg bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-200 font-bold border border-emerald-300 dark:border-emerald-800 text-xs">
+                                      {typeof item === 'object' ? JSON.stringify(item) : String(item)}
+                                    </span>
+                                  ))}
+                                </div>
+                              );
+                            }
+                            if (typeof q.answer === 'object' && q.answer !== null) {
+                              return <span>{JSON.stringify(q.answer)}</span>;
+                            }
+                            return <span>{String(q.answer)}</span>;
+                          })()}
                         </div>
                       </div>
                     </div>
@@ -4073,78 +4131,77 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
             </div>
 
             {/* DOSSIER FOOTER ACTIONS */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">
-              <div className="flex items-center gap-2 flex-wrap">
-                {/* TOMBOL SIMPAN NILAI URAIAN */}
-                <button
-                  onClick={() => {
-                    if (!selectedResult || !liveDossierEval) return;
-                    const updated: ExamResult = {
-                      ...selectedResult,
-                      score: liveDossierEval.finalScore,
-                      totalEarned: liveDossierEval.totalEarned,
-                      totalMax: liveDossierEval.totalMax,
-                      essayScores: manualEssayScores,
-                      details: liveDossierEval.details
-                    };
-                    setSelectedResult(updated);
-                    if (onUpdateResult) {
-                      onUpdateResult(updated);
-                    }
-                    setEssaySavedNotice(true);
-                    setTimeout(() => setEssaySavedNotice(false), 3500);
-                  }}
-                  className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-md shadow-emerald-600/20 transition cursor-pointer"
-                >
-                  <Save className="w-4 h-4" />
-                  <span>Simpan Nilai Uraian & Perbarui Skor</span>
-                </button>
-
-                {/* TOMBOL CETAK SERTIFIKAT */}
-                <button
-                  onClick={() => onOpenCertificates?.(selectedResult)}
-                  className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-xs font-semibold cursor-pointer shadow-xs transition"
-                >
-                  <Award className="w-3.5 h-3.5" />
-                  <span>Cetak Sertifikat</span>
-                </button>
-
-                {/* TOMBOL CETAK BERKAS */}
-                <button
-                  onClick={() => window.print()}
-                  className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-semibold cursor-pointer transition"
-                >
-                  <Printer className="w-3.5 h-3.5" />
-                  <span>Cetak Dossier</span>
-                </button>
-              </div>
-
-              <div className="flex items-center gap-2">
-                {/* TOMBOL RESET UJIAN SISWA (UJIAN ULANG) */}
-                <button
-                  onClick={() => {
-                    if (!selectedResult) return;
-                    if (confirm(`Apakah Anda yakin ingin mereset ujian siswa "${selectedResult.studentName}"? Seluruh lembar jawaban dan nilai akan dihapus, sehingga siswa dapat login dan mengerjakan ulang ujian ini.`)) {
-                      if (onDeleteResult) {
-                        onDeleteResult(selectedResult.id, selectedResult.subjectId);
+            <div className="pt-4 border-t border-slate-100 dark:border-slate-800">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                {/* GRUP KIRI: SIMPAN NILAI & RESET */}
+                <div className="flex items-center gap-2 flex-wrap">
+                  <button
+                    onClick={() => {
+                      if (!selectedResult || !liveDossierEval) return;
+                      const updated: ExamResult = {
+                        ...selectedResult,
+                        score: liveDossierEval.finalScore,
+                        totalEarned: liveDossierEval.totalEarned,
+                        totalMax: liveDossierEval.totalMax,
+                        essayScores: manualEssayScores,
+                        details: liveDossierEval.details
+                      };
+                      setSelectedResult(updated);
+                      if (onUpdateResult) {
+                        onUpdateResult(updated);
                       }
-                      setSelectedResult(null);
-                    }
-                  }}
-                  className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-600 hover:text-white text-rose-600 dark:text-rose-400 text-xs font-bold border border-rose-200 dark:border-rose-900 transition cursor-pointer"
-                  title="Hapus nilai agar siswa dapat ujian kembali"
-                >
-                  <RotateCcw className="w-3.5 h-3.5" />
-                  <span>Reset Ujian (Izinkan Ulang)</span>
-                </button>
+                      setEssaySavedNotice(true);
+                      setTimeout(() => setEssaySavedNotice(false), 3500);
+                    }}
+                    className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-md shadow-emerald-600/20 transition cursor-pointer"
+                  >
+                    <Save className="w-4 h-4" />
+                    <span>Simpan Nilai Uraian</span>
+                  </button>
 
-                {/* TOMBOL TUTUP */}
-                <button
-                  onClick={() => setSelectedResult(null)}
-                  className="px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold cursor-pointer"
-                >
-                  {t.close}
-                </button>
+                  <button
+                    onClick={() => {
+                      if (!selectedResult) return;
+                      if (confirm(`Apakah Anda yakin ingin mereset ujian siswa "${selectedResult.studentName}"? Seluruh lembar jawaban dan nilai akan dihapus, sehingga siswa dapat login dan mengerjakan ulang ujian ini.`)) {
+                        if (onDeleteResult) {
+                          onDeleteResult(selectedResult.id, selectedResult.subjectId);
+                        }
+                        setSelectedResult(null);
+                      }
+                    }}
+                    className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-600 hover:text-white text-rose-600 dark:text-rose-400 text-xs font-bold border border-rose-200 dark:border-rose-900 transition cursor-pointer"
+                    title="Hapus nilai agar siswa dapat ujian kembali"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    <span>Reset Ujian (Ujian Ulang)</span>
+                  </button>
+                </div>
+
+                {/* GRUP KANAN: CETAK & TUTUP */}
+                <div className="flex items-center gap-2 flex-wrap justify-end">
+                  <button
+                    onClick={() => onOpenCertificates?.(selectedResult)}
+                    className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-xs font-semibold cursor-pointer shadow-xs transition"
+                  >
+                    <Award className="w-3.5 h-3.5" />
+                    <span>Cetak Sertifikat</span>
+                  </button>
+
+                  <button
+                    onClick={() => window.print()}
+                    className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-semibold cursor-pointer transition border border-slate-200 dark:border-slate-700"
+                  >
+                    <Printer className="w-3.5 h-3.5" />
+                    <span>Cetak Dossier</span>
+                  </button>
+
+                  <button
+                    onClick={() => setSelectedResult(null)}
+                    className="px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold cursor-pointer border border-slate-200 dark:border-slate-700"
+                  >
+                    {t.close}
+                  </button>
+                </div>
               </div>
             </div>
           </div>

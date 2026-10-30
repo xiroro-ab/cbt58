@@ -138,6 +138,35 @@ export async function saveExamResult(result: ExamResult): Promise<boolean> {
 }
 
 /**
+ * Memperbarui data mata pelajaran di Supabase
+ */
+export async function updateSubjectInSupabase(sub: Subject): Promise<boolean> {
+  try {
+    const { error } = await supabase
+      .from('subjects')
+      .update({
+        title: sub.title,
+        class_target: sub.className,
+        duration_minutes: sub.durationMinutes,
+        violation_limit: sub.violationLimit,
+        token: sub.token,
+        is_active: sub.isActive,
+        scoring_rules: sub.scoringRules
+      })
+      .eq('id', sub.id);
+
+    if (error) {
+      console.warn('Gagal update subject di Supabase, fallback ke lokal:', error.message);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error('Exception updateSubjectInSupabase:', err);
+    return false;
+  }
+}
+
+/**
  * Mengambil daftar hasil ujian siswa dari Supabase
  */
 export async function fetchExamResults(subjectId: string): Promise<ExamResult[]> {
@@ -171,3 +200,82 @@ export async function fetchExamResults(subjectId: string): Promise<ExamResult[]>
     return [];
   }
 }
+
+/**
+ * Mengupdate soal di Supabase
+ */
+export async function updateQuestionInSupabase(q: Question): Promise<boolean> {
+  try {
+    const { error } = await supabase
+      .from('questions')
+      .update({
+        type: q.type,
+        question_text: q.questionText,
+        media_url: q.mediaUrl || null,
+        options: q.options,
+        answer: q.answer,
+        order_index: q.orderIndex
+      })
+      .eq('id', q.id);
+
+    if (error) {
+      console.error('Error updateQuestionInSupabase:', error);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error('Exception updateQuestionInSupabase:', err);
+    return false;
+  }
+}
+
+/**
+ * Berlangganan (Realtime Subscription) hasil ujian baru dari Supabase
+ */
+export function subscribeToExamResults(
+  subjectId: string,
+  onNewResult: (result: ExamResult) => void
+) {
+  try {
+    const channel = supabase
+      .channel('realtime_exam_results')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'exam_results',
+          filter: `subject_id=eq.${subjectId}`
+        },
+        payload => {
+          const r = payload.new;
+          if (r) {
+            const mappedResult: ExamResult = {
+              id: r.id,
+              subjectId: r.subject_id,
+              subjectTitle: '',
+              studentId: r.id,
+              studentName: r.student_name,
+              className: r.class_name,
+              score: Number(r.score),
+              totalEarned: Number(r.total_earned || 0),
+              totalMax: Number(r.total_max || 0),
+              answers: r.answers || [],
+              submittedAt: new Date(r.submitted_at || Date.now()).toLocaleString('id-ID'),
+              violationCount: r.violation_count || 0
+            };
+            onNewResult(mappedResult);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  } catch (err) {
+    console.warn('Realtime subscription not available, fallback to manual refresh:', err);
+    return () => {};
+  }
+}
+

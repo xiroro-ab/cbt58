@@ -1,8 +1,9 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Subject, Question, QuestionType, ExamResult } from '@/types/cbt';
 import { NavItem } from '../layout/Sidebar';
+import { useLanguage } from '@/context/LanguageContext';
 import {
   TrendingUp,
   Award,
@@ -27,7 +28,10 @@ import {
   Eye,
   Database,
   Sliders,
-  Play
+  Play,
+  FileText,
+  Printer,
+  Download
 } from 'lucide-react';
 
 interface TeacherDashboardProps {
@@ -42,6 +46,8 @@ interface TeacherDashboardProps {
   onCloseAddModal: () => void;
   onOpenAddModal: () => void;
   onStartStudentExam?: () => void;
+  searchQuery?: string;
+  onOpenCertificates?: (selectedResult?: ExamResult) => void;
 }
 
 export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
@@ -55,9 +61,13 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   isAddModalOpen,
   onCloseAddModal,
   onOpenAddModal,
-  onStartStudentExam
+  onStartStudentExam,
+  searchQuery = '',
+  onOpenCertificates
 }) => {
+  const { language, t } = useLanguage();
   const [selectedResult, setSelectedResult] = useState<ExamResult | null>(null);
+  const [selectedResultIds, setSelectedResultIds] = useState<string[]>([]);
 
   // Form State untuk Tambah Soal
   const [modalType, setModalType] = useState<QuestionType>('Benar/Salah');
@@ -74,7 +84,12 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   const [bsSingleAnswer, setBsSingleAnswer] = useState<'Benar' | 'Salah'>('Benar');
 
   // State PG / PGK
-  const [pgOptions, setPgOptions] = useState<string[]>(['Opsi A', 'Opsi B', 'Opsi C', 'Opsi D']);
+  const [pgOptions, setPgOptions] = useState<string[]>([
+    'Venus',
+    'Merkurius',
+    'Mars',
+    'Jupiter'
+  ]);
   const [pgAnswer, setPgAnswer] = useState<string>('A');
   const [pgkAnswer, setPgkAnswer] = useState<string[]>(['A', 'C']);
 
@@ -82,6 +97,29 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   const [shortAnswer, setShortAnswer] = useState('');
   const [essayKey, setEssayKey] = useState('');
 
+  // Live Filtering dari Search Bar
+  const filteredResults = useMemo(() => {
+    if (!searchQuery.trim()) return results;
+    const q = searchQuery.toLowerCase();
+    return results.filter(
+      r =>
+        r.studentName.toLowerCase().includes(q) ||
+        r.className.toLowerCase().includes(q) ||
+        String(r.score).includes(q)
+    );
+  }, [results, searchQuery]);
+
+  const filteredQuestions = useMemo(() => {
+    if (!searchQuery.trim()) return questions;
+    const q = searchQuery.toLowerCase();
+    return questions.filter(
+      item =>
+        item.questionText.toLowerCase().includes(q) ||
+        item.type.toLowerCase().includes(q)
+    );
+  }, [questions, searchQuery]);
+
+  // Handle Simpan Soal
   const handleSaveQuestion = (e: React.FormEvent) => {
     e.preventDefault();
     if (!modalText.trim()) return;
@@ -128,29 +166,101 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
     setModalMediaUrl('');
   };
 
-  // Hitung persentase kelulusan rata-rata (misal KKM = 75)
+  // Real Metric Calculations
   const avgScore = results.length > 0
     ? Math.round(results.reduce((acc, curr) => acc + curr.score, 0) / results.length)
     : 87;
 
+  const passRate = results.length > 0
+    ? Math.round((results.filter(r => r.score >= 75).length / results.length) * 100)
+    : 92;
+
+  // Real Score Distribution Buckets
+  const scoreBuckets = useMemo(() => {
+    if (results.length === 0) {
+      return [
+        { label: 'IPA / Fisika', w1: '30%', w2: '20%', w3: '30%', w4: '20%' },
+        { label: 'IPA / Biologi', w1: '40%', w2: '15%', w3: '25%', w4: '20%' },
+        { label: 'Kimia Dasar', w1: '25%', w2: '35%', w3: '20%', w4: '20%' },
+        { label: 'Tata Surya', w1: '35%', w2: '25%', w3: '20%', w4: '20%' }
+      ];
+    }
+    const c1 = results.filter(r => r.score < 60).length;
+    const c2 = results.filter(r => r.score >= 60 && r.score < 75).length;
+    const c3 = results.filter(r => r.score >= 75 && r.score < 90).length;
+    const c4 = results.filter(r => r.score >= 90).length;
+    const total = results.length || 1;
+
+    const p1 = `${Math.max(10, Math.round((c1 / total) * 100))}%`;
+    const p2 = `${Math.max(10, Math.round((c2 / total) * 100))}%`;
+    const p3 = `${Math.max(10, Math.round((c3 / total) * 100))}%`;
+    const p4 = `${Math.max(10, Math.round((c4 / total) * 100))}%`;
+
+    return [
+      { label: subject.title, w1: p1, w2: p2, w3: p3, w4: p4 },
+      { label: 'IPA Terpadu', w1: '25%', w2: '25%', w3: '30%', w4: '20%' },
+      { label: 'Praktikum Sains', w1: '20%', w2: '30%', w3: '35%', w4: '15%' }
+    ];
+  }, [results, subject.title]);
+
+  // Checkbox Selection Logic
+  const isAllSelected = filteredResults.length > 0 && selectedResultIds.length === filteredResults.length;
+
+  const toggleSelectAll = () => {
+    if (isAllSelected) {
+      setSelectedResultIds([]);
+    } else {
+      setSelectedResultIds(filteredResults.map(r => r.id));
+    }
+  };
+
+  const toggleSelectRow = (id: string) => {
+    setSelectedResultIds(prev =>
+      prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
+    );
+  };
+
+  // Real CSV Export Function
+  const exportResultsToCSV = () => {
+    if (results.length === 0) return;
+    const headers = ['Nama Siswa', 'Kelas', 'Skor Akhir (%)', 'Poin Diperoleh', 'Poin Maksimal', 'Jumlah Pelanggaran', 'Waktu Selesai'];
+    const rows = results.map(r => [
+      `"${r.studentName}"`,
+      `"${r.className}"`,
+      r.score,
+      r.totalEarned,
+      r.totalMax,
+      r.violationCount,
+      `"${r.submittedAt}"`
+    ]);
+    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `Rekap_Nilai_CBT_${subject.title.replace(/\s+/g, '_')}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   return (
     <div className="p-6 sm:p-8 space-y-6 max-w-7xl mx-auto w-full transition-colors">
       {/* ============================================================== */}
-      {/* 1. TAMPILAN DASHBOARD UTAMA (PERSIS SEPERTI GAMBAR TABOR STUDY)  */}
+      {/* 1. TAMPILAN DASHBOARD UTAMA (TABOR STUDY FORMAL SAAS)           */}
       {/* ============================================================== */}
       {(currentNav === 'dashboard' || currentNav === 'statistics') && (
         <>
           {/* A. TOP 3 METRIC CARDS */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {/* Card 1: Need to grade / Progress */}
+            {/* Card 1: Kelulusan Siswa (Circular Progress Ring) */}
             <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-6 shadow-xs flex items-center justify-between">
               <div className="space-y-3">
                 <span className="text-xs font-semibold text-slate-400 dark:text-slate-500 block">
-                  Need to grade / Kelulusan
+                  {t.metricGradingTitle}
                 </span>
                 <div>
                   <h3 className="text-2xl font-bold text-slate-900 dark:text-white">
-                    {avgScore}% <span className="text-sm font-normal text-slate-500">Grade</span>
+                    {passRate}% <span className="text-sm font-normal text-slate-500">{t.metricPassRate}</span>
                   </h3>
                   <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 flex items-center gap-1 mt-0.5">
                     <TrendingUp className="w-3.5 h-3.5" /> +4.56%
@@ -160,7 +270,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                   <span className="w-5 h-5 rounded-md bg-violet-100 dark:bg-violet-950/60 text-violet-600 dark:text-violet-400 flex items-center justify-center font-bold">
                     ✓
                   </span>
-                  <span>yearly student exam test online system</span>
+                  <span>{t.metricGradingSub}</span>
                 </div>
               </div>
 
@@ -176,7 +286,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                   />
                   <path
                     className="text-violet-600 dark:text-violet-500"
-                    strokeDasharray={`${avgScore}, 100`}
+                    strokeDasharray={`${passRate}, 100`}
                     strokeWidth="3.5"
                     strokeLinecap="round"
                     stroke="currentColor"
@@ -185,27 +295,27 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                   />
                 </svg>
                 <div className="absolute font-bold text-sm text-slate-900 dark:text-white">
-                  {avgScore}%
+                  {passRate}%
                 </div>
               </div>
             </div>
 
-            {/* Card 2: New Active student */}
+            {/* Card 2: Peserta Ujian Selesai */}
             <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-6 shadow-xs flex flex-col justify-between">
               <div className="flex items-start justify-between">
                 <div>
                   <span className="text-xs font-semibold text-slate-400 dark:text-slate-500 block mb-1">
-                    New Active student
+                    {t.metricActiveStudentsTitle}
                   </span>
                   <h3 className="text-2xl font-bold text-slate-900 dark:text-white">
-                    {results.length > 0 ? results.length * 28 + 24 : 536}
+                    {results.length} <span className="text-sm font-normal text-slate-500">Siswa</span>
                   </h3>
                   <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 flex items-center gap-1 mt-0.5">
-                    <TrendingUp className="w-3.5 h-3.5" /> +6.354%
+                    <TrendingUp className="w-3.5 h-3.5" /> Rata-Rata: {avgScore}%
                   </span>
                 </div>
-                <div className="w-8 h-8 rounded-xl bg-orange-100 dark:bg-orange-950/50 text-orange-600 dark:text-orange-400 flex items-center justify-center">
-                  <Users className="w-4 h-4" />
+                <div className="w-9 h-9 rounded-xl bg-orange-100 dark:bg-orange-950/50 text-orange-600 dark:text-orange-400 flex items-center justify-center">
+                  <Users className="w-5 h-5" />
                 </div>
               </div>
 
@@ -221,18 +331,18 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
               </div>
             </div>
 
-            {/* Card 3: Questions */}
+            {/* Card 3: Total Butir Soal */}
             <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-6 shadow-xs flex flex-col justify-between">
               <div className="flex items-start justify-between">
                 <div>
                   <span className="text-xs font-semibold text-slate-400 dark:text-slate-500 block mb-1">
-                    Questions
+                    {t.metricQuestionsTitle}
                   </span>
                   <h3 className="text-2xl font-bold text-slate-900 dark:text-white">
-                    {questions.length}
+                    {questions.length} <span className="text-sm font-normal text-slate-500">Butir</span>
                   </h3>
                   <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 flex items-center gap-1 mt-0.5">
-                    <TrendingUp className="w-3.5 h-3.5" /> +2.56%
+                    <TrendingUp className="w-3.5 h-3.5" /> 5 Tipe Soal Terkoneksi
                   </span>
                 </div>
 
@@ -250,41 +360,41 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
 
               <div className="flex items-center gap-2 pt-4 text-[11px] text-slate-400 dark:text-slate-500">
                 <span className="w-5 h-5 rounded-md bg-teal-100 dark:bg-teal-950/60 text-teal-600 dark:text-teal-400 flex items-center justify-center font-bold">
-                  ?
+                  ✓
                 </span>
-                <span>yearly student exam test online system monthly time remaining</span>
+                <span>{t.metricQuestionsSub}</span>
               </div>
             </div>
           </div>
 
           {/* B. MIDDLE SECTION: 2 ANALYTICS CHARTS */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Chart Left: Exam Taken Times */}
+            {/* Chart 1: Tren Penilaian & Kelulusan */}
             <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-6 shadow-xs space-y-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <h4 className="font-bold text-sm text-slate-900 dark:text-white">Exam Taken Times</h4>
-                  <p className="text-xs text-slate-400 dark:text-slate-500">Taken records of last Years</p>
+                  <h4 className="font-bold text-sm text-slate-900 dark:text-white">
+                    {t.chartAssessmentTitle}
+                  </h4>
+                  <p className="text-xs text-slate-400 dark:text-slate-500">
+                    {t.chartAssessmentSub}
+                  </p>
                 </div>
                 <div className="flex items-center gap-3 text-xs">
                   <div className="flex items-center gap-1.5">
                     <span className="w-2.5 h-2.5 rounded-full bg-violet-600"></span>
-                    <span className="text-slate-600 dark:text-slate-400 text-[11px]">Active Exams</span>
+                    <span className="text-slate-600 dark:text-slate-400 text-[11px]">Capaian KKM</span>
                   </div>
                   <div className="flex items-center gap-1.5">
                     <span className="w-2.5 h-2.5 rounded-full bg-slate-300 dark:bg-slate-600"></span>
-                    <span className="text-slate-600 dark:text-slate-400 text-[11px]">Active Exam Takers</span>
+                    <span className="text-slate-600 dark:text-slate-400 text-[11px]">Peserta Aktif</span>
                   </div>
-                  <span className="px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 text-[11px] font-semibold text-slate-600 dark:text-slate-300">
-                    Monthly
-                  </span>
                 </div>
               </div>
 
               {/* Area Wave Line Representation */}
               <div className="pt-2">
                 <div className="h-44 w-full relative flex items-end">
-                  {/* Grid lines */}
                   <div className="absolute inset-0 flex flex-col justify-between pointer-events-none opacity-20">
                     <div className="border-b border-slate-400 w-full"></div>
                     <div className="border-b border-slate-400 w-full"></div>
@@ -292,7 +402,6 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                     <div className="border-b border-slate-400 w-full"></div>
                   </div>
 
-                  {/* SVG Smooth Curve Area */}
                   <svg className="w-full h-full overflow-visible" viewBox="0 0 500 150" preserveAspectRatio="none">
                     <defs>
                       <linearGradient id="curveGradient" x1="0" y1="0" x2="0" y2="1">
@@ -310,7 +419,6 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                       stroke="#7c3aed"
                       strokeWidth="3"
                     />
-                    {/* Data Points */}
                     {[
                       [0, 110], [120, 100], [250, 55], [380, 105], [500, 100]
                     ].map(([cx, cy], idx) => (
@@ -320,47 +428,42 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                 </div>
 
                 <div className="flex justify-between text-[11px] text-slate-400 dark:text-slate-500 pt-2 border-t border-slate-100 dark:border-slate-800">
-                  {['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'].map(m => (
+                  {['Ujian 1', 'Ujian 2', 'UTS IPA', 'Kuis 1', 'PAS'].map(m => (
                     <span key={m}>{m}</span>
                   ))}
                 </div>
               </div>
             </div>
 
-            {/* Chart Right: Average Results For Test Questions */}
+            {/* Chart 2: Distribusi Sebaran Nilai */}
             <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-6 shadow-xs space-y-4">
               <div>
                 <h4 className="font-bold text-sm text-slate-900 dark:text-white">
-                  Average Results For Test Questions
+                  {t.chartDistributionTitle}
                 </h4>
                 <div className="flex flex-wrap items-center gap-3 pt-2 text-[11px]">
                   <div className="flex items-center gap-1.5">
                     <span className="w-2.5 h-2.5 rounded-full bg-violet-600"></span>
-                    <span className="text-slate-600 dark:text-slate-400">Easy questions</span>
+                    <span className="text-slate-600 dark:text-slate-400">&gt; 90 (Sangat Baik)</span>
                   </div>
                   <div className="flex items-center gap-1.5">
                     <span className="w-2.5 h-2.5 rounded-full bg-teal-500"></span>
-                    <span className="text-slate-600 dark:text-slate-400">Medium questions</span>
+                    <span className="text-slate-600 dark:text-slate-400">75 - 89 (Baik)</span>
                   </div>
                   <div className="flex items-center gap-1.5">
                     <span className="w-2.5 h-2.5 rounded-full bg-amber-400"></span>
-                    <span className="text-slate-600 dark:text-slate-400">Difficult questions</span>
+                    <span className="text-slate-600 dark:text-slate-400">60 - 74 (Cukup)</span>
                   </div>
                   <div className="flex items-center gap-1.5">
-                    <span className="w-2.5 h-2.5 rounded-full bg-orange-500"></span>
-                    <span className="text-slate-600 dark:text-slate-400">Hard</span>
+                    <span className="w-2.5 h-2.5 rounded-full bg-rose-500"></span>
+                    <span className="text-slate-600 dark:text-slate-400">&lt; 60 (Remedial)</span>
                   </div>
                 </div>
               </div>
 
-              {/* Segmented Horizontal Progress Bars */}
+              {/* Segmented Progress Bars */}
               <div className="space-y-4 pt-1">
-                {[
-                  { label: 'IPA / Fisika', w1: '28%', w2: '20%', w3: '32%', w4: '20%' },
-                  { label: 'IPA / Biologi', w1: '40%', w2: '15%', w3: '25%', w4: '20%' },
-                  { label: 'Kimia Dasar', w1: '20%', w2: '35%', w3: '20%', w4: '25%' },
-                  { label: 'Tata Surya', w1: '30%', w2: '25%', w3: '25%', w4: '20%' }
-                ].map((row, rIdx) => (
+                {scoreBuckets.map((row, rIdx) => (
                   <div key={rIdx} className="space-y-1">
                     <div className="flex justify-between text-xs font-semibold text-slate-700 dark:text-slate-300">
                       <span>{row.label}</span>
@@ -369,14 +472,14 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                       <div style={{ width: row.w1 }} className="h-full rounded-full bg-violet-600"></div>
                       <div style={{ width: row.w2 }} className="h-full rounded-full bg-teal-500"></div>
                       <div style={{ width: row.w3 }} className="h-full rounded-full bg-amber-400"></div>
-                      <div style={{ width: row.w4 }} className="h-full rounded-full bg-orange-500"></div>
+                      <div style={{ width: row.w4 }} className="h-full rounded-full bg-rose-500"></div>
                     </div>
                   </div>
                 ))}
               </div>
 
               <div className="flex items-center justify-between text-[11px] text-slate-400 dark:text-slate-500 pt-2 border-t border-slate-100 dark:border-slate-800">
-                <span className="font-semibold text-slate-600 dark:text-slate-300">Pass Mark:</span>
+                <span className="font-semibold text-slate-600 dark:text-slate-300">{t.chartPassMark}</span>
                 {[10, 20, 30, 40, 50, 60, 70, 80, 90, 100].map(n => (
                   <span key={n}>{n}</span>
                 ))}
@@ -386,59 +489,120 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
         </>
       )}
 
-      {/* C. BOTTOM TABLE: BROWSE TEST RESULTS (SEPERTI PADA GAMBAR TABOR STUDY) */}
+      {/* ============================================================== */}
+      {/* C. BOTTOM TABLE: BROWSE TEST RESULTS (TABOR STUDY STYLE)        */}
+      {/* ============================================================== */}
       {(currentNav === 'dashboard' || currentNav === 'results') && (
         <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl shadow-xs overflow-hidden">
-          <div className="p-5 flex items-center justify-between border-b border-slate-100 dark:border-slate-800">
+          <div className="p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800">
             <div>
-              <h4 className="font-bold text-sm text-slate-900 dark:text-white">
-                Browse test results
+              <h4 className="font-bold text-sm text-slate-900 dark:text-white flex items-center gap-2">
+                <span>{t.tableTitle}</span>
+                {searchQuery && (
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-violet-100 dark:bg-violet-950 text-violet-600 dark:text-violet-400 font-bold">
+                    Filter: &ldquo;{searchQuery}&rdquo;
+                  </span>
+                )}
               </h4>
-              <p className="text-xs text-slate-400 dark:text-slate-500">Hasil dan rekam jejak ujian siswa terkini</p>
+              <p className="text-xs text-slate-400 dark:text-slate-500">
+                {t.tableSubtitle}
+              </p>
             </div>
 
-            <div className="flex items-center gap-2">
-              <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition">
-                <Send className="w-3.5 h-3.5" />
-                <span>Send certificates</span>
+            <div className="flex items-center gap-2 flex-wrap">
+              {/* Tombol Cetak Sertifikat Aktif */}
+              <button
+                onClick={() => {
+                  const firstSelected = results.find(r => selectedResultIds.includes(r.id)) || results[0];
+                  onOpenCertificates?.(firstSelected);
+                }}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition"
+              >
+                <Award className="w-3.5 h-3.5 text-violet-600" />
+                <span>{t.sendCertificatesBtn}</span>
+              </button>
+
+              {/* Tombol Ekspor CSV / Excel Aktif */}
+              <button
+                onClick={exportResultsToCSV}
+                className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-xs font-semibold shadow-xs transition"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>{t.exportCsvBtn}</span>
               </button>
             </div>
           </div>
+
+          {/* Banner Pilihan Baris */}
+          {selectedResultIds.length > 0 && (
+            <div className="px-5 py-2.5 bg-violet-50 dark:bg-violet-950/40 border-b border-violet-100 dark:border-violet-900 flex items-center justify-between text-xs">
+              <span className="font-semibold text-violet-900 dark:text-violet-200">
+                {selectedResultIds.length} siswa dipilih
+              </span>
+              <button
+                onClick={() => {
+                  const target = results.find(r => selectedResultIds.includes(r.id));
+                  onOpenCertificates?.(target);
+                }}
+                className="px-3 py-1 rounded-lg bg-violet-600 text-white font-bold text-[11px]"
+              >
+                Cetak Sertifikat Siswa Terpilih
+              </button>
+            </div>
+          )}
 
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
               <thead className="bg-slate-50 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400 uppercase text-[11px]">
                 <tr>
                   <th className="py-3 px-4 w-10">
-                    <input type="checkbox" className="rounded accent-violet-600" />
+                    <input
+                      type="checkbox"
+                      checked={isAllSelected}
+                      onChange={toggleSelectAll}
+                      className="rounded accent-violet-600 cursor-pointer"
+                    />
                   </th>
-                  <th className="py-3 px-4">Name</th>
-                  <th className="py-3 px-4">Total score</th>
-                  <th className="py-3 px-4">Score Reasoning</th>
-                  <th className="py-3 px-4">Time</th>
-                  <th className="py-3 px-4">Score Analysis</th>
-                  <th className="py-3 px-4">Start Date</th>
-                  <th className="py-3 px-4">Pelanggaran</th>
-                  <th className="py-3 px-4 text-center">Action</th>
+                  <th className="py-3 px-4">{t.colName}</th>
+                  <th className="py-3 px-4">{t.colScore}</th>
+                  <th className="py-3 px-4">{t.colReasoning}</th>
+                  <th className="py-3 px-4">{t.colTime}</th>
+                  <th className="py-3 px-4">{t.colAnalysis}</th>
+                  <th className="py-3 px-4">{t.colDate}</th>
+                  <th className="py-3 px-4">{t.colViolations}</th>
+                  <th className="py-3 px-4 text-center">{t.colAction}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-700 dark:text-slate-200 font-medium">
-                {results.length === 0 ? (
+                {filteredResults.length === 0 ? (
                   <tr>
                     <td colSpan={9} className="py-8 text-center text-slate-400">
-                      Belum ada data nilai ujian siswa. Silakan klik tombol <strong>Layar Siswa</strong> di pojok kanan atas untuk mencoba simulasi ujian.
+                      {t.noResults}
                     </td>
                   </tr>
                 ) : (
-                  results.map((r, i) => {
+                  filteredResults.map((r, i) => {
+                    const isSelected = selectedResultIds.includes(r.id);
                     const scoreColor = r.score >= 75
                       ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800'
                       : 'bg-orange-50 dark:bg-orange-950/40 text-orange-600 dark:text-orange-400 border-orange-200 dark:border-orange-800';
 
                     return (
-                      <tr key={r.id || i} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition">
+                      <tr
+                        key={r.id || i}
+                        className={`transition ${
+                          isSelected
+                            ? 'bg-violet-50/50 dark:bg-violet-950/30'
+                            : 'hover:bg-slate-50/80 dark:hover:bg-slate-800/40'
+                        }`}
+                      >
                         <td className="py-3.5 px-4">
-                          <input type="checkbox" className="rounded accent-violet-600" />
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => toggleSelectRow(r.id)}
+                            className="rounded accent-violet-600 cursor-pointer"
+                          />
                         </td>
                         <td className="py-3.5 px-4 font-semibold flex items-center gap-2.5">
                           <div className="w-7 h-7 rounded-full bg-gradient-to-tr from-violet-500 to-indigo-500 text-white font-bold text-[11px] flex items-center justify-center">
@@ -453,7 +617,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                         </td>
                         <td className="py-3.5 px-4">
                           <span className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-[11px] font-semibold">
-                            {r.score >= 50 ? '50% (1/2)' : '0% (0/2)'}
+                            {r.totalEarned} / {r.totalMax} Poin
                           </span>
                         </td>
                         <td className="py-3.5 px-4 font-mono text-slate-600 dark:text-slate-400 font-semibold">
@@ -480,12 +644,21 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                           )}
                         </td>
                         <td className="py-3.5 px-4 text-center">
-                          <button
-                            onClick={() => setSelectedResult(r)}
-                            className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold transition"
-                          >
-                            Detail
-                          </button>
+                          <div className="flex items-center justify-center gap-1.5">
+                            <button
+                              onClick={() => setSelectedResult(r)}
+                              className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold transition"
+                            >
+                              {t.detail}
+                            </button>
+                            <button
+                              onClick={() => onOpenCertificates?.(r)}
+                              className="p-1 rounded-lg hover:bg-violet-100 dark:hover:bg-violet-950 text-violet-600 dark:text-violet-400 transition"
+                              title="Cetak Piagam"
+                            >
+                              <Award className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     );
@@ -504,20 +677,22 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="text-base font-bold text-slate-900 dark:text-white">Bank Soal Ujian</h3>
-              <p className="text-xs text-slate-400 dark:text-slate-500">Kelola soal untuk {subject.title}</p>
+              <h3 className="text-base font-bold text-slate-900 dark:text-white">{t.navQuestions}</h3>
+              <p className="text-xs text-slate-400 dark:text-slate-500">
+                {subject.title} • {questions.length} Soal Terdaftar
+              </p>
             </div>
             <button
               onClick={onOpenAddModal}
               className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-semibold text-xs shadow-md shadow-violet-600/20 transition"
             >
               <PlusCircle className="w-4 h-4" />
-              <span>Tambah Soal</span>
+              <span>{t.addQuestionBtn}</span>
             </button>
           </div>
 
           <div className="space-y-3">
-            {questions.map((q, idx) => (
+            {filteredQuestions.map((q, idx) => (
               <div
                 key={q.id}
                 className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-3"
@@ -532,7 +707,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                   <button
                     onClick={() => onDeleteQuestion(q.id)}
                     className="text-slate-400 hover:text-rose-500 p-1.5 transition"
-                    title="Hapus Soal"
+                    title={t.delete}
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>
@@ -585,7 +760,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
       {currentNav === 'scoring' && (
         <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-6 shadow-xs space-y-4">
           <div>
-            <h3 className="text-base font-bold text-slate-900 dark:text-white">Pengaturan Bobot Poin</h3>
+            <h3 className="text-base font-bold text-slate-900 dark:text-white">{t.navScoring}</h3>
             <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
               Nilai ujian akhir (skor 0 - 100) dihitung secara proporsional sesuai bobot poin per tipe soal ini.
             </p>
@@ -631,7 +806,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
         <div className="space-y-6">
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="text-base font-bold text-slate-900 dark:text-white">Jadwal & Konfigurasi Ujian</h3>
+              <h3 className="text-base font-bold text-slate-900 dark:text-white">{t.navExams}</h3>
               <p className="text-xs text-slate-400 dark:text-slate-500">Atur durasi, token pengawas, dan jadwal rilis soal</p>
             </div>
             {onStartStudentExam && (
@@ -673,7 +848,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
               </div>
             </div>
 
-            {/* Card Edit Token & Durasi */}
+            {/* Card Edit Token & Durasi (Sinkron ke Supabase) */}
             <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-4">
               <h4 className="font-bold text-slate-900 dark:text-white text-sm flex items-center gap-2">
                 <KeyRound className="w-4 h-4 text-violet-600" />
@@ -719,7 +894,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="text-base font-bold text-slate-900 dark:text-white">Daftar Siswa & Partisipasi</h3>
+              <h3 className="text-base font-bold text-slate-900 dark:text-white">{t.navStudents}</h3>
               <p className="text-xs text-slate-400 dark:text-slate-500">Monitoring kehadiran dan status pengerjaan siswa</p>
             </div>
             <span className="text-xs px-3 py-1 rounded-full bg-violet-50 dark:bg-violet-950/40 text-violet-600 dark:text-violet-300 border border-violet-200 dark:border-violet-800 font-semibold">
@@ -761,7 +936,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                         <td className="py-3 px-4 font-bold text-violet-600 dark:text-violet-400">{r.score}%</td>
                         <td className="py-3 px-4">
                           <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${r.score >= 75 ? 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300' : 'bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300'}`}>
-                            {r.score >= 75 ? 'LULUS (KKM)' : 'REMEDIAL'}
+                            {r.score >= 75 ? t.passedStatus : t.remedialStatus}
                           </span>
                         </td>
                         <td className="py-3 px-4 text-slate-400">{r.submittedAt}</td>
@@ -796,7 +971,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
       {currentNav === 'settings' && (
         <div className="space-y-6">
           <div>
-            <h3 className="text-base font-bold text-slate-900 dark:text-white">Pengaturan Sistem & Database Supabase</h3>
+            <h3 className="text-base font-bold text-slate-900 dark:text-white">{t.navSettings}</h3>
             <p className="text-xs text-slate-400 dark:text-slate-500">Konfigurasi arsitektur cloud, anti-cheat, dan keamanan ujian</p>
           </div>
 
@@ -857,17 +1032,17 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
       )}
 
       {/* ============================================================== */}
-      {/* 7. MODAL TAMBAH SOAL BARU (Mendukung Benar/Salah Multi-Pernyataan) */}
+      {/* 7. MODAL TAMBAH SOAL BARU (Benar/Salah Multi-Pernyataan)        */}
       {/* ============================================================== */}
       {isAddModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6 space-y-5 shadow-2xl animate-in zoom-in-95">
-            <h3 className="text-lg font-bold text-slate-900 dark:text-white">Tambah Soal Baru</h3>
+            <h3 className="text-lg font-bold text-slate-900 dark:text-white">{t.addQuestionTitle}</h3>
 
             <form onSubmit={handleSaveQuestion} className="space-y-4 text-xs">
               <div>
                 <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  Tipe Soal
+                  {t.questionTypeLabel}
                 </label>
                 <select
                   value={modalType}
@@ -875,8 +1050,8 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                   className="w-full p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white font-medium"
                 >
                   <option value="Benar/Salah">Benar/Salah (Banyak Pernyataan & 1 Pernyataan)</option>
-                  <option value="Pilihan Ganda">Pilihan Ganda</option>
-                  <option value="Pilihan Ganda Kompleks">Pilihan Ganda Kompleks</option>
+                  <option value="Pilihan Ganda">Pilihan Ganda (Single Choice)</option>
+                  <option value="Pilihan Ganda Kompleks">Pilihan Ganda Kompleks (Multi Choice)</option>
                   <option value="Isian Singkat">Isian Singkat</option>
                   <option value="Esai">Esai</option>
                 </select>
@@ -884,14 +1059,14 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
 
               <div>
                 <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  Teks Soal / Stimulus
+                  {t.stimulusLabel}
                 </label>
                 <textarea
                   rows={3}
                   required
                   value={modalText}
                   onChange={e => setModalText(e.target.value)}
-                  placeholder="Ketik pengantar atau teks soal..."
+                  placeholder={t.stimulusPlaceholder}
                   className="w-full p-3 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white"
                 />
               </div>
@@ -907,7 +1082,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                         onChange={() => setBsMode('multiple')}
                         className="accent-violet-600"
                       />
-                      <span>Banyak Pernyataan (&gt; 1 Jawaban)</span>
+                      <span>{t.bsModeMultiple}</span>
                     </label>
                     <label className="flex items-center gap-2 cursor-pointer font-medium text-slate-800 dark:text-slate-200">
                       <input
@@ -916,75 +1091,73 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                         onChange={() => setBsMode('single')}
                         className="accent-violet-600"
                       />
-                      <span>1 Pernyataan Saja</span>
+                      <span>{t.bsModeSingle}</span>
                     </label>
                   </div>
 
                   {bsMode === 'multiple' ? (
-                    <div className="space-y-2">
-                      <label className="block font-semibold text-slate-600 dark:text-slate-400">
-                        Daftar Pernyataan & Kunci
-                      </label>
+                    <div className="space-y-3">
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                        Tiap pernyataan memiliki pilihan Benar / Salah masing-masing:
+                      </p>
                       {bsStatements.map((stmt, sIdx) => (
-                        <div key={sIdx} className="flex items-center gap-2">
-                          <span className="w-5 font-bold text-violet-600 dark:text-violet-400">{sIdx + 1}.</span>
+                        <div key={sIdx} className="flex items-center gap-2 bg-white dark:bg-slate-900 p-2.5 rounded-xl border border-slate-200 dark:border-slate-700">
+                          <span className="font-bold text-violet-600">{sIdx + 1}.</span>
                           <input
                             type="text"
                             value={stmt.text}
                             onChange={e => {
-                              const next = [...bsStatements];
-                              next[sIdx].text = e.target.value;
-                              setBsStatements(next);
+                              const newArr = [...bsStatements];
+                              newArr[sIdx].text = e.target.value;
+                              setBsStatements(newArr);
                             }}
-                            className="flex-1 p-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white"
+                            className="flex-1 bg-transparent border-none text-xs text-slate-900 dark:text-white focus:outline-none"
+                            placeholder={`Tulis pernyataan #${sIdx + 1}`}
                           />
                           <select
                             value={stmt.answer}
                             onChange={e => {
-                              const next = [...bsStatements];
-                              next[sIdx].answer = e.target.value as 'Benar' | 'Salah';
-                              setBsStatements(next);
+                              const newArr = [...bsStatements];
+                              newArr[sIdx].answer = e.target.value as 'Benar' | 'Salah';
+                              setBsStatements(newArr);
                             }}
-                            className="p-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 font-bold text-emerald-600 dark:text-emerald-400"
+                            className="p-1 rounded-lg bg-slate-100 dark:bg-slate-800 font-bold text-xs"
                           >
                             <option value="Benar">Benar</option>
                             <option value="Salah">Salah</option>
                           </select>
+                          {bsStatements.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => setBsStatements(prev => prev.filter((_, idx) => idx !== sIdx))}
+                              className="text-rose-500 hover:text-rose-700 px-1"
+                            >
+                              ✕
+                            </button>
+                          )}
                         </div>
                       ))}
                       <button
                         type="button"
-                        onClick={() =>
-                          setBsStatements([...bsStatements, { text: '', answer: 'Benar' }])
-                        }
-                        className="text-xs text-violet-600 dark:text-violet-400 hover:underline pt-1 block"
+                        onClick={() => setBsStatements(prev => [...prev, { text: '', answer: 'Benar' }])}
+                        className="text-xs text-violet-600 dark:text-violet-400 font-bold hover:underline"
                       >
-                        + Tambah Baris Pernyataan
+                        {t.addStatementBtn}
                       </button>
                     </div>
                   ) : (
                     <div>
-                      <label className="block font-semibold text-slate-600 dark:text-slate-400 mb-2">Jawaban Benar</label>
-                      <div className="flex gap-4 font-semibold">
-                        <label className="flex items-center gap-2 cursor-pointer text-emerald-600 dark:text-emerald-400">
-                          <input
-                            type="radio"
-                            checked={bsSingleAnswer === 'Benar'}
-                            onChange={() => setBsSingleAnswer('Benar')}
-                            className="accent-violet-600"
-                          />
-                          <span>Benar</span>
-                        </label>
-                        <label className="flex items-center gap-2 cursor-pointer text-rose-600 dark:text-rose-400">
-                          <input
-                            type="radio"
-                            checked={bsSingleAnswer === 'Salah'}
-                            onChange={() => setBsSingleAnswer('Salah')}
-                            className="accent-violet-600"
-                          />
-                          <span>Salah</span>
-                        </label>
-                      </div>
+                      <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1">
+                        {t.singleAnswerKey}
+                      </label>
+                      <select
+                        value={bsSingleAnswer}
+                        onChange={e => setBsSingleAnswer(e.target.value as 'Benar' | 'Salah')}
+                        className="p-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 font-bold"
+                      >
+                        <option value="Benar">Benar</option>
+                        <option value="Salah">Salah</option>
+                      </select>
                     </div>
                   )}
                 </div>
@@ -992,29 +1165,75 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
 
               {/* KHUSUS PILIHAN GANDA */}
               {modalType === 'Pilihan Ganda' && (
-                <div className="space-y-2">
-                  <label className="block font-semibold text-slate-600 dark:text-slate-400">Opsi Jawaban & Kunci</label>
-                  {pgOptions.map((optText, oIdx) => {
-                    const letter = String.fromCharCode(65 + oIdx);
+                <div className="space-y-3">
+                  <label className="block text-slate-700 dark:text-slate-300 font-semibold">Opsi Pilihan Jawaban</label>
+                  {pgOptions.map((opt, idx) => (
+                    <div key={idx} className="flex items-center gap-2">
+                      <span className="w-6 font-bold text-center text-slate-500">
+                        {String.fromCharCode(65 + idx)}
+                      </span>
+                      <input
+                        type="text"
+                        value={opt}
+                        onChange={e => {
+                          const updated = [...pgOptions];
+                          updated[idx] = e.target.value;
+                          setPgOptions(updated);
+                        }}
+                        className="flex-1 p-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white"
+                      />
+                    </div>
+                  ))}
+                  <div className="pt-2">
+                    <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1">Kunci Jawaban</label>
+                    <select
+                      value={pgAnswer}
+                      onChange={e => setPgAnswer(e.target.value)}
+                      className="p-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 font-bold text-violet-600"
+                    >
+                      {pgOptions.map((_, idx) => (
+                        <option key={idx} value={String.fromCharCode(65 + idx)}>
+                          Opsi {String.fromCharCode(65 + idx)}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              )}
+
+              {/* KHUSUS PILIHAN GANDA KOMPLEKS */}
+              {modalType === 'Pilihan Ganda Kompleks' && (
+                <div className="space-y-3">
+                  <label className="block text-slate-700 dark:text-slate-300 font-semibold">
+                    Centang Opsi yang Menjadi Kunci Jawaban (&gt; 1):
+                  </label>
+                  {pgOptions.map((opt, idx) => {
+                    const letter = String.fromCharCode(65 + idx);
+                    const isChecked = pgkAnswer.includes(letter);
                     return (
-                      <div key={oIdx} className="flex items-center gap-2">
+                      <div key={idx} className="flex items-center gap-2">
                         <input
-                          type="radio"
-                          name="pg-kunci"
-                          checked={pgAnswer === letter}
-                          onChange={() => setPgAnswer(letter)}
-                          className="accent-violet-600 h-4 w-4"
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={() => {
+                            if (isChecked) {
+                              setPgkAnswer(prev => prev.filter(l => l !== letter));
+                            } else {
+                              setPgkAnswer(prev => [...prev, letter]);
+                            }
+                          }}
+                          className="accent-violet-600 w-4 h-4 rounded cursor-pointer"
                         />
-                        <span className="font-bold text-violet-600 dark:text-violet-400 w-4">{letter}</span>
+                        <span className="w-5 font-bold text-slate-500">{letter}</span>
                         <input
                           type="text"
-                          value={optText}
+                          value={opt}
                           onChange={e => {
-                            const next = [...pgOptions];
-                            next[oIdx] = e.target.value;
-                            setPgOptions(next);
+                            const updated = [...pgOptions];
+                            updated[idx] = e.target.value;
+                            setPgOptions(updated);
                           }}
-                          className="flex-1 p-2 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white"
+                          className="flex-1 p-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white"
                         />
                       </div>
                     );
@@ -1025,32 +1244,48 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
               {/* KHUSUS ISIAN SINGKAT */}
               {modalType === 'Isian Singkat' && (
                 <div>
-                  <label className="block font-semibold text-slate-600 dark:text-slate-400 mb-1">
-                    Variasi Kunci Jawaban (Pisahkan tanda koma atau titik koma)
+                  <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1">
+                    Kunci Jawaban (Pisahkan dengan tanda koma jika ada alternatif ejaan)
                   </label>
                   <input
                     type="text"
                     value={shortAnswer}
                     onChange={e => setShortAnswer(e.target.value)}
-                    placeholder="Contoh: newton; n; sir isaac newton"
+                    placeholder="Contoh: karbondioksida, co2, karbon dioksida"
                     className="w-full p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white"
                   />
                 </div>
               )}
 
-              <div className="flex gap-3 justify-end pt-4 border-t border-slate-100 dark:border-slate-800">
+              {/* KHUSUS ESAI */}
+              {modalType === 'Esai' && (
+                <div>
+                  <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1">
+                    Pedoman / Rubrik Penilaian Guru
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={essayKey}
+                    onChange={e => setEssayKey(e.target.value)}
+                    placeholder="Tulis kata kunci utama yang wajib muncul dalam jawaban siswa..."
+                    className="w-full p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white"
+                  />
+                </div>
+              )}
+
+              <div className="flex justify-end gap-2 pt-4 border-t border-slate-100 dark:border-slate-800">
                 <button
                   type="button"
                   onClick={onCloseAddModal}
                   className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold"
                 >
-                  Batal
+                  {t.cancel}
                 </button>
                 <button
                   type="submit"
                   className="px-5 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-semibold transition"
                 >
-                  Simpan Soal
+                  {t.saveQuestionBtn}
                 </button>
               </div>
             </form>
@@ -1059,7 +1294,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
       )}
 
       {/* ============================================================== */}
-      {/* 5. MODAL DETAIL NILAI SISWA (DOSSIER)                           */}
+      {/* 8. MODAL DETAIL NILAI SISWA (DOSSIER)                           */}
       {/* ============================================================== */}
       {selectedResult && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
@@ -1097,12 +1332,20 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
               ))}
             </div>
 
-            <div className="flex justify-end pt-2">
+            <div className="flex justify-between items-center pt-2">
+              <button
+                onClick={() => onOpenCertificates?.(selectedResult)}
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-xs font-semibold"
+              >
+                <Award className="w-3.5 h-3.5" />
+                <span>Cetak Sertifikat Siswa Ini</span>
+              </button>
+
               <button
                 onClick={() => setSelectedResult(null)}
                 className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold"
               >
-                Tutup
+                {t.close}
               </button>
             </div>
           </div>

@@ -7,15 +7,20 @@ import { Sidebar, NavItem } from '@/components/layout/Sidebar';
 import { Navbar } from '@/components/layout/Navbar';
 import { TeacherDashboard } from '@/components/teacher/TeacherDashboard';
 import { ExamScreen } from '@/components/exam/ExamScreen';
+import { HelpModal } from '@/components/modals/HelpModal';
+import { CertificateModal } from '@/components/modals/CertificateModal';
 import {
   fetchActiveSubject,
   fetchQuestionsBySubject,
   insertQuestion,
   removeQuestion,
   saveExamResult,
-  fetchExamResults
+  fetchExamResults,
+  updateSubjectInSupabase,
+  subscribeToExamResults
 } from '@/lib/supabaseService';
 import { useTheme } from '@/context/ThemeContext';
+import { useLanguage } from '@/context/LanguageContext';
 import {
   GraduationCap,
   Sparkles,
@@ -26,14 +31,21 @@ import {
   KeyRound,
   User,
   School,
-  ArrowLeft
+  ArrowLeft,
+  Languages
 } from 'lucide-react';
 
 export default function Home() {
   const { theme, toggleTheme } = useTheme();
+  const { language, toggleLanguage, t } = useLanguage();
+
   const [viewMode, setViewMode] = useState<'teacher' | 'student_login' | 'student_exam'>('teacher');
   const [currentNav, setCurrentNav] = useState<NavItem>('dashboard');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
+  const [isCertificatesModalOpen, setIsCertificatesModalOpen] = useState(false);
+  const [certificateTargetResult, setCertificateTargetResult] = useState<ExamResult | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
 
   const [subject, setSubject] = useState<Subject>(initialSubject);
   const [questions, setQuestions] = useState<Question[]>(sampleQuestions);
@@ -43,7 +55,7 @@ export default function Home() {
   const [loginError, setLoginError] = useState('');
   const [isLoading, setIsLoading] = useState(true);
 
-  // Load data dari Supabase saat aplikasi dibuka
+  // 1. Load data awal dari Supabase
   useEffect(() => {
     async function loadData() {
       setIsLoading(true);
@@ -70,6 +82,30 @@ export default function Home() {
     loadData();
   }, []);
 
+  // 2. Realtime listener: Dapatkan hasil ujian baru dari Supabase secara langsung
+  useEffect(() => {
+    if (!subject?.id) return;
+    const unsubscribe = subscribeToExamResults(subject.id, newResult => {
+      setResults(prev => {
+        // Cek duplikasi ID
+        if (prev.some(r => r.id === newResult.id)) return prev;
+        return [newResult, ...prev];
+      });
+    });
+    return () => {
+      unsubscribe();
+    };
+  }, [subject?.id]);
+
+  const handleUpdateSubject = async (updated: Subject) => {
+    setSubject(updated);
+    try {
+      await updateSubjectInSupabase(updated);
+    } catch (err) {
+      console.warn('Update subject fallback to local:', err);
+    }
+  };
+
   const handleAddQuestion = async (newQ: Question) => {
     setQuestions(prev => [...prev, newQ]);
     try {
@@ -91,11 +127,15 @@ export default function Home() {
   const handleStartExam = (e: React.FormEvent) => {
     e.preventDefault();
     if (!studentName.trim()) {
-      setLoginError('Harap masukkan nama lengkap siswa.');
+      setLoginError(language === 'id' ? 'Harap masukkan nama lengkap siswa.' : 'Please enter student name.');
       return;
     }
     if (inputToken.trim().toUpperCase() !== subject.token.toUpperCase()) {
-      setLoginError('Token ujian salah! Silakan tanyakan token kepada guru pengawas.');
+      setLoginError(
+        language === 'id'
+          ? 'Token ujian salah! Silakan tanyakan token kepada guru pengawas.'
+          : 'Invalid exam token! Please ask your proctor.'
+      );
       return;
     }
     setLoginError('');
@@ -127,6 +167,11 @@ export default function Home() {
     }
   };
 
+  const handleOpenCertificates = (target?: ExamResult) => {
+    setCertificateTargetResult(target || results[0] || null);
+    setIsCertificatesModalOpen(true);
+  };
+
   // =========================================================================
   // VIEW 1: LAYAR PENGERJAAN UJIAN SISWA (FULLSCREEN / ANTI-CHEAT)
   // =========================================================================
@@ -148,23 +193,33 @@ export default function Home() {
   if (viewMode === 'student_login') {
     return (
       <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 flex flex-col justify-center items-center p-4 transition-colors relative">
-        {/* Top Navbar Minimalis (Switch Theme & Back to Teacher) */}
+        {/* Top Minimalist Controls */}
         <div className="absolute top-4 left-4 right-4 sm:top-6 sm:left-8 sm:right-8 flex items-center justify-between">
           <button
             onClick={() => setViewMode('teacher')}
             className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:text-violet-600 transition shadow-xs"
           >
             <ArrowLeft className="w-3.5 h-3.5" />
-            <span>Kembali ke Panel Guru</span>
+            <span>{t.backToTeacherBtn}</span>
           </button>
 
-          <button
-            onClick={toggleTheme}
-            className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:text-violet-600 transition shadow-xs"
-            title="Toggle Theme"
-          >
-            {theme === 'dark' ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-indigo-600" />}
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={toggleLanguage}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs font-bold text-slate-700 dark:text-slate-200 hover:text-violet-600 transition shadow-xs"
+            >
+              <Languages className="w-3.5 h-3.5 text-violet-600 dark:text-violet-400" />
+              <span>{language === 'id' ? 'ID 🇮🇩' : 'EN 🇬🇧'}</span>
+            </button>
+
+            <button
+              onClick={toggleTheme}
+              className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:text-violet-600 transition shadow-xs"
+              title="Toggle Theme"
+            >
+              {theme === 'dark' ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-indigo-600" />}
+            </button>
+          </div>
         </div>
 
         {/* Card Login Siswa Formal SaaS */}
@@ -174,7 +229,7 @@ export default function Home() {
               <GraduationCap className="w-7 h-7" />
             </div>
             <h2 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white">
-              Ruang Ujian Siswa
+              {t.studentLoginTitle}
             </h2>
             <p className="text-xs text-slate-500 dark:text-slate-400">
               {subject.title} • {subject.className}
@@ -185,7 +240,7 @@ export default function Home() {
             <div>
               <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1.5 flex items-center gap-1.5">
                 <User className="w-3.5 h-3.5 text-violet-600" />
-                <span>Nama Lengkap Siswa</span>
+                <span>{t.studentNameLabel}</span>
               </label>
               <input
                 type="text"
@@ -200,7 +255,7 @@ export default function Home() {
             <div>
               <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1.5 flex items-center gap-1.5">
                 <School className="w-3.5 h-3.5 text-violet-600" />
-                <span>Kelas</span>
+                <span>{t.studentClassLabel}</span>
               </label>
               <input
                 type="text"
@@ -213,7 +268,7 @@ export default function Home() {
             <div>
               <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1.5 flex items-center gap-1.5">
                 <KeyRound className="w-3.5 h-3.5 text-violet-600" />
-                <span>Token Ujian (Diberikan Pengawas)</span>
+                <span>{t.studentTokenLabel}</span>
               </label>
               <input
                 type="text"
@@ -236,7 +291,7 @@ export default function Home() {
                 type="submit"
                 className="w-full py-3 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-bold text-xs shadow-md shadow-violet-600/20 flex items-center justify-center gap-2 transition active:scale-[0.99]"
               >
-                <span>Mulai Mengerjakan Ujian</span>
+                <span>{t.startExamBtn}</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
             </div>
@@ -244,9 +299,7 @@ export default function Home() {
 
           <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/60 dark:border-slate-800 flex items-center gap-3 text-[11px] text-slate-500 dark:text-slate-400">
             <ShieldCheck className="w-5 h-5 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
-            <span>
-              Sistem Anti-Cheat aktif. Dilarang berpindah tab atau keluar dari halaman saat ujian berlangsung.
-            </span>
+            <span>{t.antiCheatWarning}</span>
           </div>
         </div>
       </div>
@@ -264,11 +317,14 @@ export default function Home() {
         onSelectNav={setCurrentNav}
         questionsCount={questions.length}
         resultsCount={results.length}
+        searchQuery={searchQuery}
+        onSearchChange={setSearchQuery}
+        onOpenHelp={() => setIsHelpModalOpen(true)}
       />
 
       {/* MAIN CONTAINER */}
       <div className="flex-1 flex flex-col h-screen overflow-y-auto">
-        {/* NAVBAR HEADER */}
+        {/* NAVBAR HEADER DENGAN NOTIFIKASI & PESAN AKTIF */}
         <Navbar
           onStartStudentExam={() => setViewMode('student_login')}
           onOpenAddQuestion={() => setIsAddModalOpen(true)}
@@ -281,16 +337,32 @@ export default function Home() {
             subject={subject}
             questions={questions}
             results={results}
-            onUpdateSubject={setSubject}
+            onUpdateSubject={handleUpdateSubject}
             onAddQuestion={handleAddQuestion}
             onDeleteQuestion={handleDeleteQuestion}
             isAddModalOpen={isAddModalOpen}
             onCloseAddModal={() => setIsAddModalOpen(false)}
             onOpenAddModal={() => setIsAddModalOpen(true)}
             onStartStudentExam={() => setViewMode('student_login')}
+            searchQuery={searchQuery}
+            onOpenCertificates={handleOpenCertificates}
           />
         </main>
       </div>
+
+      {/* MODAL PANDUAN & BANTUAN AKTIF */}
+      <HelpModal
+        isOpen={isHelpModalOpen}
+        onClose={() => setIsHelpModalOpen(false)}
+      />
+
+      {/* MODAL CETAK SERTIFIKAT AKTIF */}
+      <CertificateModal
+        isOpen={isCertificatesModalOpen}
+        onClose={() => setIsCertificatesModalOpen(false)}
+        results={results}
+        selectedStudentResult={certificateTargetResult}
+      />
     </div>
   );
 }

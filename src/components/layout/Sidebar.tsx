@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import { useLanguage } from '@/context/LanguageContext';
 import {
   LayoutDashboard,
   FileCheck2,
@@ -9,12 +10,11 @@ import {
   Users,
   Database,
   BarChart3,
-  Award,
-  FileText,
+  SlidersHorizontal,
   Settings,
   Search,
-  SlidersHorizontal,
-  ChevronRight
+  ChevronRight,
+  Sparkles
 } from 'lucide-react';
 
 export type NavItem =
@@ -32,14 +32,22 @@ interface SidebarProps {
   onSelectNav: (nav: NavItem) => void;
   questionsCount: number;
   resultsCount: number;
+  searchQuery: string;
+  onSearchChange: (query: string) => void;
+  onOpenHelp: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
   currentNav,
   onSelectNav,
   questionsCount,
-  resultsCount
+  resultsCount,
+  searchQuery,
+  onSearchChange,
+  onOpenHelp
 }) => {
+  const { t } = useLanguage();
+
   return (
     <aside className="w-64 flex-shrink-0 bg-white dark:bg-slate-900 border-r border-slate-200/80 dark:border-slate-800/80 flex flex-col h-screen sticky top-0 transition-colors">
       {/* 1. BRAND LOGO */}
@@ -50,34 +58,41 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </div>
           <div>
             <h1 className="font-bold text-slate-900 dark:text-white text-base leading-tight">
-              Tabor Study
+              {t.appName}
             </h1>
-            <p className="text-[11px] text-slate-400 dark:text-slate-500 font-medium">CBT Assessment v2.0</p>
+            <p className="text-[11px] text-slate-400 dark:text-slate-500 font-medium">{t.appSubtitle}</p>
           </div>
         </div>
       </div>
 
-      {/* 2. SEARCH BAR */}
+      {/* 2. LIVE SEARCH BAR */}
       <div className="px-4 pt-4 pb-2">
         <div className="relative">
           <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
           <input
             type="text"
-            placeholder="Search menu..."
+            value={searchQuery}
+            onChange={e => onSearchChange(e.target.value)}
+            placeholder={t.searchPlaceholder}
             className="w-full pl-9 pr-8 py-2 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/60 text-xs text-slate-800 dark:text-slate-200 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-violet-500"
           />
-          <kbd className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-slate-400 px-1.5 py-0.5 rounded font-mono">
-            ⌘K
-          </kbd>
+          {searchQuery && (
+            <button
+              onClick={() => onSearchChange('')}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+            >
+              ✕
+            </button>
+          )}
         </div>
       </div>
 
       {/* 3. NAVIGATION GROUPS */}
       <div className="flex-1 overflow-y-auto px-3 py-2 space-y-6 text-xs">
-        {/* GROUP: MAIN */}
+        {/* GROUP: MAIN / UTAMA */}
         <div>
           <span className="px-3 text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 block mb-1.5">
-            Main
+            {t.mainGroup}
           </span>
           <div className="space-y-0.5">
             <button
@@ -90,7 +105,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             >
               <div className="flex items-center gap-2.5">
                 <LayoutDashboard className="w-4 h-4" />
-                <span>Dashboard</span>
+                <span>{t.navDashboard}</span>
               </div>
               {currentNav === 'dashboard' && <ChevronRight className="w-3.5 h-3.5 text-violet-500" />}
             </button>
@@ -105,7 +120,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             >
               <div className="flex items-center gap-2.5">
                 <FileCheck2 className="w-4 h-4" />
-                <span>Jadwal Ujian</span>
+                <span>{t.navExams}</span>
               </div>
             </button>
 
@@ -119,7 +134,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             >
               <div className="flex items-center gap-2.5">
                 <BookOpen className="w-4 h-4" />
-                <span>Bank Soal</span>
+                <span>{t.navQuestions}</span>
               </div>
               <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-bold">
                 {questionsCount}
@@ -136,16 +151,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
             >
               <div className="flex items-center gap-2.5">
                 <Users className="w-4 h-4" />
-                <span>Daftar Siswa</span>
+                <span>{t.navStudents}</span>
               </div>
             </button>
           </div>
         </div>
 
-        {/* GROUP: MANAGEMENT */}
+        {/* GROUP: MANAGEMENT / MANAJEMEN */}
         <div>
           <span className="px-3 text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 block mb-1.5">
-            Management
+            {t.managementGroup}
           </span>
           <div className="space-y-0.5">
             <button
@@ -158,7 +173,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             >
               <div className="flex items-center gap-2.5">
                 <Database className="w-4 h-4" />
-                <span>Database Nilai</span>
+                <span>{t.navResults}</span>
               </div>
               <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-bold">
                 {resultsCount}
@@ -175,7 +190,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             >
               <div className="flex items-center gap-2.5">
                 <BarChart3 className="w-4 h-4" />
-                <span>Statistik & Analisis</span>
+                <span>{t.navStatistics}</span>
               </div>
             </button>
 
@@ -189,16 +204,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
             >
               <div className="flex items-center gap-2.5">
                 <SlidersHorizontal className="w-4 h-4" />
-                <span>Pengaturan Bobot</span>
+                <span>{t.navScoring}</span>
               </div>
             </button>
           </div>
         </div>
 
-        {/* GROUP: SYSTEM */}
+        {/* GROUP: SYSTEM / SISTEM */}
         <div>
           <span className="px-3 text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 block mb-1.5">
-            System
+            {t.systemGroup}
           </span>
           <div className="space-y-0.5">
             <button
@@ -211,19 +226,21 @@ export const Sidebar: React.FC<SidebarProps> = ({
             >
               <div className="flex items-center gap-2.5">
                 <Settings className="w-4 h-4" />
-                <span>Settings</span>
+                <span>{t.navSettings}</span>
               </div>
             </button>
 
-            <a
-              href="#help"
+            {/* Tombol Help Interaktif (Bukan lagi link # dummy) */}
+            <button
+              onClick={onOpenHelp}
               className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-slate-100 transition"
             >
               <div className="flex items-center gap-2.5">
-                <HelpCircle className="w-4 h-4" />
-                <span>Help & Panduan</span>
+                <HelpCircle className="w-4 h-4 text-violet-600 dark:text-violet-400" />
+                <span>{t.navHelp}</span>
               </div>
-            </a>
+              <span className="w-2 h-2 rounded-full bg-violet-600"></span>
+            </button>
           </div>
         </div>
       </div>

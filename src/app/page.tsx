@@ -40,6 +40,7 @@ import {
   removeStudentFromSupabase,
   bulkRemoveStudentsFromSupabase,
   fetchTeachers,
+  insertTeacher,
   updateTeacherStatusInSupabase
 } from '@/lib/supabaseService';
 import { useTheme } from '@/context/ThemeContext';
@@ -405,6 +406,17 @@ export default function Home() {
     handleTeacherLoginSuccess(teacher);
   };
 
+  const handleRegisterTeacher = async (newTeacher: Teacher): Promise<boolean> => {
+    setTeachers(prev => [newTeacher, ...prev]);
+    try {
+      await insertTeacher(newTeacher);
+      return true;
+    } catch (err) {
+      console.warn('Supabase insert teacher fallback:', err);
+      return true;
+    }
+  };
+
   const handleStartExam = (e: React.FormEvent) => {
     e.preventDefault();
     if (!studentName.trim()) {
@@ -618,13 +630,14 @@ export default function Home() {
   };
 
   // =========================================================================
-  // VIEW 0: LAYAR LOGIN GURU & PENGAWAS (SKENARIO 30 GURU SMPN 58)
+  // VIEW 0: LAYAR LOGIN GURU & PENGAWAS (PORTAL RESMI & PENDAFTARAN AKUN GURU)
   // =========================================================================
   if (viewMode === 'teacher_login') {
     return (
       <TeacherLogin
         teachers={teachers}
         onLoginSuccess={handleTeacherLoginSuccess}
+        onRegisterTeacher={handleRegisterTeacher}
         onSwitchToStudentLogin={() => setViewMode('student_login')}
       />
     );

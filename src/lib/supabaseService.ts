@@ -764,6 +764,35 @@ export async function bulkRemoveStudentsFromSupabase(studentIds: string[]): Prom
 }
 
 /**
+ * Mendaftarkan / Menyimpan satu guru baru ke Supabase
+ */
+export async function insertTeacher(t: Teacher): Promise<boolean> {
+  try {
+    const { error } = await supabase.from('teachers').insert({
+      id: t.id,
+      nip: t.nip,
+      name: t.name,
+      email: t.email,
+      subject: t.subject,
+      classes: t.classes || [],
+      role: t.role || 'guru_mapel',
+      pin: t.pin || '123456',
+      avatar_color: t.avatarColor || 'bg-violet-600',
+      status: t.status || 'Aktif Mengawas'
+    });
+
+    if (error) {
+      console.warn('Gagal insertTeacher ke Supabase:', error.message);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error('Exception insertTeacher:', err);
+    return false;
+  }
+}
+
+/**
  * Mengambil daftar 30 Guru & Pengawas dari Supabase (fallback ke initialTeachers)
  */
 export async function fetchTeachers(): Promise<Teacher[]> {

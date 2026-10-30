@@ -24,7 +24,11 @@ import {
   updateMessageStatus,
   insertMessage,
   subscribeToNotifications,
-  subscribeToMessages
+  subscribeToMessages,
+  deleteNotificationFromSupabase,
+  clearAllNotificationsFromSupabase,
+  deleteMessageFromSupabase,
+  clearAllMessagesFromSupabase
 } from '@/lib/supabaseService';
 import { useTheme } from '@/context/ThemeContext';
 import { useLanguage } from '@/context/LanguageContext';
@@ -288,6 +292,42 @@ export default function Home() {
     }
   };
 
+  const handleDeleteNotification = async (notifId: string) => {
+    setNotifications(prev => prev.filter(n => n.id !== notifId));
+    try {
+      await deleteNotificationFromSupabase(notifId);
+    } catch (err) {
+      console.warn('Gagal delete notification di Supabase:', err);
+    }
+  };
+
+  const handleClearAllNotifications = async () => {
+    setNotifications([]);
+    try {
+      await clearAllNotificationsFromSupabase(subject.id);
+    } catch (err) {
+      console.warn('Gagal clear all notifications di Supabase:', err);
+    }
+  };
+
+  const handleDeleteMessage = async (msgId: string) => {
+    setMessages(prev => prev.filter(m => m.id !== msgId));
+    try {
+      await deleteMessageFromSupabase(msgId);
+    } catch (err) {
+      console.warn('Gagal delete message di Supabase:', err);
+    }
+  };
+
+  const handleClearAllMessages = async () => {
+    setMessages([]);
+    try {
+      await clearAllMessagesFromSupabase(subject.id);
+    } catch (err) {
+      console.warn('Gagal clear all messages di Supabase:', err);
+    }
+  };
+
   // =========================================================================
   // VIEW 1: LAYAR PENGERJAAN UJIAN SISWA (FULLSCREEN / ANTI-CHEAT)
   // =========================================================================
@@ -447,7 +487,11 @@ export default function Home() {
           notifications={notifications}
           messages={messages}
           onMarkAllNotificationsRead={handleMarkAllNotificationsRead}
+          onDeleteNotification={handleDeleteNotification}
+          onClearAllNotifications={handleClearAllNotifications}
           onResolveMessage={handleResolveMessage}
+          onDeleteMessage={handleDeleteMessage}
+          onClearAllMessages={handleClearAllMessages}
           onSendBroadcast={handleSendBroadcast}
         />
 

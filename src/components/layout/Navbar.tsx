@@ -21,7 +21,8 @@ import {
   ShieldAlert,
   LifeBuoy,
   Megaphone,
-  Check
+  Check,
+  Trash2
 } from 'lucide-react';
 
 interface NavbarProps {
@@ -30,7 +31,11 @@ interface NavbarProps {
   notifications: ExamNotification[];
   messages: ExamMessage[];
   onMarkAllNotificationsRead: () => void;
+  onDeleteNotification: (notifId: string) => void;
+  onClearAllNotifications: () => void;
   onResolveMessage: (msgId: string) => void;
+  onDeleteMessage: (msgId: string) => void;
+  onClearAllMessages: () => void;
   onSendBroadcast: (broadcastText: string) => void;
 }
 
@@ -40,7 +45,11 @@ export const Navbar: React.FC<NavbarProps> = ({
   notifications,
   messages,
   onMarkAllNotificationsRead,
+  onDeleteNotification,
+  onClearAllNotifications,
   onResolveMessage,
+  onDeleteMessage,
+  onClearAllMessages,
   onSendBroadcast
 }) => {
   const { theme, toggleTheme } = useTheme();
@@ -162,12 +171,24 @@ export const Navbar: React.FC<NavbarProps> = ({
                     <p className="text-[10px] text-slate-400">Komunikasi real-time pengawas dan peserta ujian</p>
                   </div>
                 </div>
-                <button
-                  onClick={() => setShowMessages(false)}
-                  className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
-                >
-                  <X className="w-4 h-4" />
-                </button>
+
+                <div className="flex items-center gap-2">
+                  {studentReports.length > 0 && (
+                    <button
+                      onClick={onClearAllMessages}
+                      className="text-[10px] text-rose-500 hover:underline font-semibold"
+                      title="Hapus semua pesan kendala di layar & database"
+                    >
+                      Hapus Semua
+                    </button>
+                  )}
+                  <button
+                    onClick={() => setShowMessages(false)}
+                    className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
 
               {/* Tabs Switcher: Laporan Siswa vs Kirim Broadcast */}
@@ -235,7 +256,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                           {rep.body}
                         </p>
 
-                        <div className="pt-1 flex items-center justify-between border-t border-slate-100 dark:border-slate-800">
+                        <div className="pt-1.5 flex items-center justify-between border-t border-slate-100 dark:border-slate-800">
                           <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
                             rep.status === 'resolved'
                               ? 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300'
@@ -244,15 +265,26 @@ export const Navbar: React.FC<NavbarProps> = ({
                             {rep.status === 'resolved' ? '✓ Terselesaikan' : '⏳ Menunggu Tindakan'}
                           </span>
 
-                          {rep.status !== 'resolved' && (
+                          <div className="flex items-center gap-1.5">
+                            {rep.status !== 'resolved' && (
+                              <button
+                                onClick={() => onResolveMessage(rep.id)}
+                                className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-[11px] transition flex items-center gap-1"
+                              >
+                                <Check className="w-3 h-3" />
+                                <span>Tandai Selesai</span>
+                              </button>
+                            )}
+
+                            {/* Tombol Hapus Pesan Tunggal */}
                             <button
-                              onClick={() => onResolveMessage(rep.id)}
-                              className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-[11px] transition flex items-center gap-1"
+                              onClick={() => onDeleteMessage(rep.id)}
+                              className="p-1 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition"
+                              title="Hapus pesan kendala ini dari layar & database"
                             >
-                              <Check className="w-3 h-3" />
-                              <span>Tandai Selesai</span>
+                              <Trash2 className="w-3.5 h-3.5" />
                             </button>
-                          )}
+                          </div>
                         </div>
                       </div>
                     ))
@@ -341,14 +373,25 @@ export const Navbar: React.FC<NavbarProps> = ({
                   </div>
                 </div>
 
-                {unreadNotifCount > 0 && (
-                  <button
-                    onClick={onMarkAllNotificationsRead}
-                    className="text-[11px] font-semibold text-violet-600 dark:text-violet-400 hover:underline cursor-pointer"
-                  >
-                    Tandai Dibaca
-                  </button>
-                )}
+                <div className="flex items-center gap-2">
+                  {unreadNotifCount > 0 && (
+                    <button
+                      onClick={onMarkAllNotificationsRead}
+                      className="text-[11px] font-semibold text-violet-600 dark:text-violet-400 hover:underline cursor-pointer"
+                    >
+                      Tandai Dibaca
+                    </button>
+                  )}
+                  {notifications.length > 0 && (
+                    <button
+                      onClick={onClearAllNotifications}
+                      className="text-[11px] font-semibold text-rose-500 hover:underline cursor-pointer"
+                      title="Hapus seluruh riwayat notifikasi di layar & database"
+                    >
+                      Hapus Semua
+                    </button>
+                  )}
+                </div>
               </div>
 
               {/* Filter Notifikasi */}
@@ -411,7 +454,17 @@ export const Navbar: React.FC<NavbarProps> = ({
                           {n.type === 'system' && <Clock className="w-3.5 h-3.5 text-violet-500" />}
                           <span>{n.title}</span>
                         </span>
-                        <span className="text-[10px] text-slate-400 font-normal">{n.createdAt}</span>
+
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[10px] text-slate-400 font-normal">{n.createdAt}</span>
+                          <button
+                            onClick={() => onDeleteNotification(n.id)}
+                            className="p-1 rounded text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition"
+                            title="Hapus notifikasi ini dari layar & database"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        </div>
                       </div>
                       <p className="text-[11px] leading-relaxed text-slate-600 dark:text-slate-300">
                         {n.message}

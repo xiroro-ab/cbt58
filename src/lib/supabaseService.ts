@@ -526,3 +526,83 @@ export function subscribeToMessages(
   }
 }
 
+/**
+ * Menghapus satu pesan dari Supabase
+ */
+export async function deleteMessageFromSupabase(msgId: string): Promise<boolean> {
+  try {
+    const { error } = await supabase.from('exam_messages').delete().eq('id', msgId);
+    if (error) {
+      console.warn('Gagal delete message dari Supabase:', error.message);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error('Exception deleteMessageFromSupabase:', err);
+    return false;
+  }
+}
+
+/**
+ * Menghapus seluruh pesan dari Supabase
+ */
+export async function clearAllMessagesFromSupabase(subjectId?: string): Promise<boolean> {
+  try {
+    let query = supabase.from('exam_messages').delete();
+    if (subjectId) {
+      query = query.eq('subject_id', subjectId);
+    } else {
+      query = query.neq('id', '00000000-0000-0000-0000-000000000000');
+    }
+    const { error } = await query;
+    if (error) {
+      console.warn('Gagal clear all messages dari Supabase:', error.message);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error('Exception clearAllMessagesFromSupabase:', err);
+    return false;
+  }
+}
+
+/**
+ * Menghapus satu notifikasi dari Supabase
+ */
+export async function deleteNotificationFromSupabase(notifId: string): Promise<boolean> {
+  try {
+    const { error } = await supabase.from('exam_notifications').delete().eq('id', notifId);
+    if (error) {
+      console.warn('Gagal delete notification dari Supabase:', error.message);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error('Exception deleteNotificationFromSupabase:', err);
+    return false;
+  }
+}
+
+/**
+ * Menghapus seluruh notifikasi dari Supabase
+ */
+export async function clearAllNotificationsFromSupabase(subjectId?: string): Promise<boolean> {
+  try {
+    let query = supabase.from('exam_notifications').delete();
+    if (subjectId) {
+      query = query.eq('subject_id', subjectId);
+    } else {
+      query = query.neq('id', '00000000-0000-0000-0000-000000000000');
+    }
+    const { error } = await query;
+    if (error) {
+      console.warn('Gagal clear all notifications dari Supabase:', error.message);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error('Exception clearAllNotificationsFromSupabase:', err);
+    return false;
+  }
+}
+

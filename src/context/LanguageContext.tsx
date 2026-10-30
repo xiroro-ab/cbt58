@@ -30,6 +30,7 @@ export interface Translations {
   navStudents: string;
   navResults: string;
   navStatistics: string;
+  navDocuments: string;
   navScoring: string;
   navSettings: string;
   navHelp: string;
@@ -135,6 +136,7 @@ const dictionaries: Record<Language, Translations> = {
     navStudents: 'Daftar Siswa',
     navResults: 'Database Nilai',
     navStatistics: 'Statistik & Analisis',
+    navDocuments: 'Dokumen & Berita Acara',
     navScoring: 'Pengaturan Bobot',
     navSettings: 'Pengaturan',
     navHelp: 'Bantuan & Panduan',
@@ -232,6 +234,7 @@ const dictionaries: Record<Language, Translations> = {
     navStudents: 'Student List',
     navResults: 'Score Database',
     navStatistics: 'Statistics & Analytics',
+    navDocuments: 'Documents & Reports',
     navScoring: 'Scoring Rules',
     navSettings: 'Settings',
     navHelp: 'Help & Guide',

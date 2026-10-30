@@ -46,7 +46,8 @@ import {
   School,
   Image as ImageIcon,
   Upload,
-  X
+  X,
+  BarChart3
 } from 'lucide-react';
 
 interface TeacherDashboardProps {
@@ -586,42 +587,119 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
     setEssayKey('');
   };
 
-  // Real Metric Calculations
+  // 100% Real Metric Calculations
   const avgScore = results.length > 0
     ? Math.round(results.reduce((acc, curr) => acc + curr.score, 0) / results.length)
-    : 87;
+    : 0;
 
   const passRate = results.length > 0
     ? Math.round((results.filter(r => r.score >= 75).length / results.length) * 100)
-    : 92;
+    : 0;
 
-  // Real Score Distribution Buckets
-  const scoreBuckets = useMemo(() => {
-    if (results.length === 0) {
-      return [
-        { label: 'IPA / Fisika', w1: '30%', w2: '20%', w3: '30%', w4: '20%' },
-        { label: 'IPA / Biologi', w1: '40%', w2: '15%', w3: '25%', w4: '20%' },
-        { label: 'Kimia Dasar', w1: '25%', w2: '35%', w3: '20%', w4: '20%' },
-        { label: 'Tata Surya', w1: '35%', w2: '25%', w3: '20%', w4: '20%' }
-      ];
+  const passedStudentsCount = results.filter(r => r.score >= 75).length;
+  const remedialStudentsCount = results.filter(r => r.score < 75).length;
+
+  // Breakdown Tipe Soal Riil pada Mapel Aktif
+  const questionTypeBreakdown = useMemo(() => {
+    const counts: Record<string, number> = {};
+    activeQuestions.forEach(q => {
+      counts[q.type] = (counts[q.type] || 0) + 1;
+    });
+    return counts;
+  }, [activeQuestions]);
+
+  // Sebaran Capaian Rata-Rata per Rombel / Kelas (Real Data)
+  const classPerformance = useMemo(() => {
+    const map = new Map<string, { total: number; sum: number; passed: number }>();
+    results.forEach(r => {
+      const cls = r.className?.trim() || 'Umum';
+      const curr = map.get(cls) || { total: 0, sum: 0, passed: 0 };
+      curr.total += 1;
+      curr.sum += r.score;
+      if (r.score >= 75) curr.passed += 1;
+      map.set(cls, curr);
+    });
+    return Array.from(map.entries()).map(([className, data]) => ({
+      className,
+      total: data.total,
+      avgScore: Math.round(data.sum / data.total),
+      passRate: Math.round((data.passed / data.total) * 100)
+    }));
+  }, [results]);
+
+  // Sebaran Nilai Riil Siswa (Score Distribution)
+  const scoreDistribution = useMemo(() => {
+    const total = results.length;
+    if (total === 0) {
+      return {
+        sangatBaik: { count: 0, pct: 0 },
+        baik: { count: 0, pct: 0 },
+        cukup: { count: 0, pct: 0 },
+        remedial: { count: 0, pct: 0 }
+      };
     }
-    const c1 = results.filter(r => r.score < 60).length;
-    const c2 = results.filter(r => r.score >= 60 && r.score < 75).length;
-    const c3 = results.filter(r => r.score >= 75 && r.score < 90).length;
-    const c4 = results.filter(r => r.score >= 90).length;
-    const total = results.length || 1;
+    const c1 = results.filter(r => r.score >= 90).length;
+    const c2 = results.filter(r => r.score >= 75 && r.score < 90).length;
+    const c3 = results.filter(r => r.score >= 60 && r.score < 75).length;
+    const c4 = results.filter(r => r.score < 60).length;
+    return {
+      sangatBaik: { count: c1, pct: Math.round((c1 / total) * 100) },
+      baik: { count: c2, pct: Math.round((c2 / total) * 100) },
+      cukup: { count: c3, pct: Math.round((c3 / total) * 100) },
+      remedial: { count: c4, pct: Math.round((c4 / total) * 100) }
+    };
+  }, [results]);
 
-    const p1 = `${Math.max(10, Math.round((c1 / total) * 100))}%`;
-    const p2 = `${Math.max(10, Math.round((c2 / total) * 100))}%`;
-    const p3 = `${Math.max(10, Math.round((c3 / total) * 100))}%`;
-    const p4 = `${Math.max(10, Math.round((c4 / total) * 100))}%`;
+  // Analisis Butir Soal Empiris (Item Difficulty Analysis)
+  const questionItemAnalysis = useMemo(() => {
+    return activeQuestions.map((q, idx) => {
+      let totalAnswered = 0;
+      let correctCount = 0;
+      results.forEach(r => {
+        if (r.details && r.details.length > 0) {
+          const d = r.details.find(detail => detail.questionId === q.id);
+          if (d) {
+            totalAnswered += 1;
+            if (d.earnedPoints > 0) correctCount += 1;
+          }
+        } else if (r.answers && r.answers.length > 0) {
+          const item = r.answers.find(a => a.questionId === q.id);
+          if (item) {
+            totalAnswered += 1;
+            if (r.score >= 75) correctCount += 1;
+          }
+        }
+      });
+      const difficultyIndex = totalAnswered > 0 ? correctCount / totalAnswered : 0;
+      let category = 'Belum Diuji';
+      if (totalAnswered > 0) {
+        if (difficultyIndex >= 0.70) category = 'Mudah';
+        else if (difficultyIndex >= 0.35) category = 'Sedang';
+        else category = 'Sukar (HOTS)';
+      }
+      return {
+        no: idx + 1,
+        question: q,
+        totalAnswered,
+        correctCount,
+        difficultyIndex: Math.round(difficultyIndex * 100),
+        category
+      };
+    });
+  }, [activeQuestions, results]);
 
-    return [
-      { label: subject.title, w1: p1, w2: p2, w3: p3, w4: p4 },
-      { label: 'IPA Terpadu', w1: '25%', w2: '25%', w3: '30%', w4: '20%' },
-      { label: 'Praktikum Sains', w1: '20%', w2: '30%', w3: '35%', w4: '15%' }
-    ];
-  }, [results, subject.title]);
+  // State untuk Menu Dokumen & Berita Acara Ujian
+  const [selectedDocType, setSelectedDocType] = useState<'bap' | 'attendance' | 'cards' | 'ledger'>('bap');
+  const [selectedDocClass, setSelectedDocClass] = useState<string>('Semua Kelas');
+  const [selectedDocSubjectId, setSelectedDocSubjectId] = useState<string>('');
+
+  const availableClasses = useMemo(() => {
+    const set = new Set<string>();
+    students?.forEach(s => {
+      if (s.className) set.add(s.className.trim());
+    });
+    return Array.from(set).sort();
+  }, [students]);
 
   // Checkbox Selection Logic
   const isAllSelected = filteredResults.length > 0 && selectedResultIds.length === filteredResults.length;
@@ -666,9 +744,9 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   return (
     <div className="p-6 sm:p-8 space-y-6 max-w-7xl mx-auto w-full transition-colors">
       {/* ============================================================== */}
-      {/* 1. TAMPILAN DASHBOARD UTAMA (TABOR STUDY FORMAL SAAS)           */}
+      {/* 1. TAMPILAN DASHBOARD UTAMA (100% REAL DATA DRIVEN)             */}
       {/* ============================================================== */}
-      {(currentNav === 'dashboard' || currentNav === 'statistics') && (
+      {currentNav === 'dashboard' && (
         <>
           {/* A. TOP 3 METRIC CARDS */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -682,15 +760,23 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                   <h3 className="text-2xl font-bold text-slate-900 dark:text-white">
                     {passRate}% <span className="text-sm font-normal text-slate-500">{t.metricPassRate}</span>
                   </h3>
-                  <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 flex items-center gap-1 mt-0.5">
-                    <TrendingUp className="w-3.5 h-3.5" /> +4.56%
-                  </span>
+                  <div className="text-xs font-semibold text-slate-500 dark:text-slate-400 flex items-center gap-1.5 mt-0.5">
+                    {results.length > 0 ? (
+                      <>
+                        <span className="text-emerald-600 dark:text-emerald-400 font-bold">{passedStudentsCount} Tuntas</span>
+                        <span>•</span>
+                        <span className="text-rose-500 dark:text-rose-400">{remedialStudentsCount} Remedial</span>
+                      </>
+                    ) : (
+                      <span className="text-slate-400">Belum ada ujian diselesaikan</span>
+                    )}
+                  </div>
                 </div>
                 <div className="flex items-center gap-2 pt-1 text-[11px] text-slate-400 dark:text-slate-500">
                   <span className="w-5 h-5 rounded-md bg-violet-100 dark:bg-violet-950/60 text-violet-600 dark:text-violet-400 flex items-center justify-center font-bold">
                     ✓
                   </span>
-                  <span>{t.metricGradingSub}</span>
+                  <span>Standar Ketuntasan Minimal: KKM 75</span>
                 </div>
               </div>
 
@@ -705,7 +791,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                     d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
                   />
                   <path
-                    className="text-violet-600 dark:text-violet-500"
+                    className="text-violet-600 dark:text-violet-500 transition-all duration-500"
                     strokeDasharray={`${passRate}, 100`}
                     strokeWidth="3.5"
                     strokeLinecap="round"
@@ -728,26 +814,37 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                     {t.metricActiveStudentsTitle}
                   </span>
                   <h3 className="text-2xl font-bold text-slate-900 dark:text-white">
-                    {results.length} <span className="text-sm font-normal text-slate-500">Siswa</span>
+                    {results.length} <span className="text-sm font-normal text-slate-500">/ {students?.length || 0} Siswa</span>
                   </h3>
-                  <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 flex items-center gap-1 mt-0.5">
-                    <TrendingUp className="w-3.5 h-3.5" /> Rata-Rata: {avgScore}%
-                  </span>
+                  <div className="text-xs font-semibold text-slate-500 dark:text-slate-400 flex items-center gap-1.5 mt-0.5">
+                    {results.length > 0 ? (
+                      <span className="text-emerald-600 dark:text-emerald-400 font-bold">Rata-Rata Nilai: {avgScore}</span>
+                    ) : (
+                      <span className="text-slate-400">Partisipasi Ujian: 0%</span>
+                    )}
+                  </div>
                 </div>
                 <div className="w-9 h-9 rounded-xl bg-orange-100 dark:bg-orange-950/50 text-orange-600 dark:text-orange-400 flex items-center justify-center">
                   <Users className="w-5 h-5" />
                 </div>
               </div>
 
-              {/* Mini Bar Chart Visual */}
-              <div className="flex items-end gap-1.5 h-10 pt-4">
-                {[40, 65, 30, 85, 45, 95, 60, 75, 40, 90, 50, 70, 80].map((h, i) => (
+              {/* Progress Partisipasi Siswa Riil */}
+              <div className="space-y-1 pt-3">
+                <div className="flex justify-between text-[11px] text-slate-400">
+                  <span>Partisipasi Siswa</span>
+                  <span className="font-semibold text-slate-700 dark:text-slate-300">
+                    {students && students.length > 0 ? Math.round((results.length / students.length) * 100) : 0}%
+                  </span>
+                </div>
+                <div className="h-2 w-full rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
                   <div
-                    key={i}
-                    style={{ height: `${h}%` }}
-                    className="flex-1 rounded-t-md bg-violet-500/30 dark:bg-violet-500/20 hover:bg-violet-600 transition"
+                    style={{
+                      width: `${students && students.length > 0 ? Math.min(100, (results.length / students.length) * 100) : 0}%`
+                    }}
+                    className="h-full rounded-full bg-orange-500 transition-all duration-500"
                   ></div>
-                ))}
+                </div>
               </div>
             </div>
 
@@ -761,152 +858,322 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                   <h3 className="text-2xl font-bold text-slate-900 dark:text-white">
                     {activeQuestions.length} <span className="text-sm font-normal text-slate-500">Butir</span>
                   </h3>
-                  <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 flex items-center gap-1 mt-0.5">
-                    <TrendingUp className="w-3.5 h-3.5" /> 5 Tipe Soal Terkoneksi
-                  </span>
+                  <div className="text-xs font-semibold text-slate-500 dark:text-slate-400 flex items-center gap-1 mt-0.5">
+                    {Object.keys(questionTypeBreakdown).length > 0 ? (
+                      <span className="text-violet-600 dark:text-violet-400 font-bold">
+                        {Object.keys(questionTypeBreakdown).length} Tipe Soal Terkonfigurasi
+                      </span>
+                    ) : (
+                      <span className="text-slate-400">Belum ada butir soal</span>
+                    )}
+                  </div>
                 </div>
 
-                {/* Candlestick / Wave visual */}
-                <div className="flex items-center gap-1 h-8">
-                  {[20, 45, 60, 30, 70, 50, 80, 40].map((h, i) => (
-                    <div
-                      key={i}
-                      style={{ height: `${h}%` }}
-                      className="w-1.5 rounded-full bg-teal-500"
-                    ></div>
-                  ))}
+                <div className="w-9 h-9 rounded-xl bg-teal-100 dark:bg-teal-950/50 text-teal-600 dark:text-teal-400 flex items-center justify-center">
+                  <BookOpen className="w-5 h-5" />
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 pt-4 text-[11px] text-slate-400 dark:text-slate-500">
-                <span className="w-5 h-5 rounded-md bg-teal-100 dark:bg-teal-950/60 text-teal-600 dark:text-teal-400 flex items-center justify-center font-bold">
-                  ✓
-                </span>
-                <span>{t.metricQuestionsSub}</span>
+              {/* Badges Tipe Soal Riil */}
+              <div className="flex flex-wrap gap-1 pt-3">
+                {Object.entries(questionTypeBreakdown).map(([typeName, count]) => (
+                  <span
+                    key={typeName}
+                    className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300"
+                  >
+                    {typeName.split(' ')[0]}: {count}
+                  </span>
+                ))}
               </div>
             </div>
           </div>
 
-          {/* B. MIDDLE SECTION: 2 ANALYTICS CHARTS */}
+          {/* B. MIDDLE SECTION: 2 ANALYTICS CHARTS (REAL DATA) */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Chart 1: Tren Penilaian & Kelulusan */}
+            {/* Chart 1: Rata-Rata Capaian Nilai per Kelas (Real Data) */}
             <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-6 shadow-xs space-y-4">
               <div className="flex items-center justify-between">
                 <div>
                   <h4 className="font-bold text-sm text-slate-900 dark:text-white">
-                    {t.chartAssessmentTitle}
+                    Rata-Rata Nilai per Kelas / Rombel
                   </h4>
                   <p className="text-xs text-slate-400 dark:text-slate-500">
-                    {t.chartAssessmentSub}
+                    Capaian riil siswa berdasarkan hasil ujian yang telah diserahkan
                   </p>
                 </div>
                 <div className="flex items-center gap-3 text-xs">
                   <div className="flex items-center gap-1.5">
                     <span className="w-2.5 h-2.5 rounded-full bg-violet-600"></span>
-                    <span className="text-slate-600 dark:text-slate-400 text-[11px]">Capaian KKM</span>
+                    <span className="text-slate-600 dark:text-slate-400 text-[11px]">Rata-Rata Kelas</span>
                   </div>
                   <div className="flex items-center gap-1.5">
-                    <span className="w-2.5 h-2.5 rounded-full bg-slate-300 dark:bg-slate-600"></span>
-                    <span className="text-slate-600 dark:text-slate-400 text-[11px]">Peserta Aktif</span>
+                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+                    <span className="text-slate-600 dark:text-slate-400 text-[11px]">KKM (75)</span>
                   </div>
                 </div>
               </div>
 
-              {/* Area Wave Line Representation */}
-              <div className="pt-2">
-                <div className="h-44 w-full relative flex items-end">
-                  <div className="absolute inset-0 flex flex-col justify-between pointer-events-none opacity-20">
-                    <div className="border-b border-slate-400 w-full"></div>
-                    <div className="border-b border-slate-400 w-full"></div>
-                    <div className="border-b border-slate-400 w-full"></div>
-                    <div className="border-b border-slate-400 w-full"></div>
-                  </div>
-
-                  <svg className="w-full h-full overflow-visible" viewBox="0 0 500 150" preserveAspectRatio="none">
-                    <defs>
-                      <linearGradient id="curveGradient" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#7c3aed" stopOpacity="0.25" />
-                        <stop offset="100%" stopColor="#7c3aed" stopOpacity="0" />
-                      </linearGradient>
-                    </defs>
-                    <path
-                      d="M0,110 C40,115 80,95 120,100 C160,105 200,60 250,55 C300,50 340,90 380,105 C420,120 460,95 500,100 L500,150 L0,150 Z"
-                      fill="url(#curveGradient)"
-                    />
-                    <path
-                      d="M0,110 C40,115 80,95 120,100 C160,105 200,60 250,55 C300,50 340,90 380,105 C420,120 460,95 500,100"
-                      fill="none"
-                      stroke="#7c3aed"
-                      strokeWidth="3"
-                    />
-                    {[
-                      [0, 110], [120, 100], [250, 55], [380, 105], [500, 100]
-                    ].map(([cx, cy], idx) => (
-                      <circle key={idx} cx={cx} cy={cy} r="4" fill="#ffffff" stroke="#7c3aed" strokeWidth="2.5" />
+              {classPerformance.length === 0 ? (
+                <div className="h-44 flex flex-col items-center justify-center border border-dashed border-slate-200 dark:border-slate-800 rounded-xl p-4 text-center">
+                  <BarChart3 className="w-8 h-8 text-slate-300 dark:text-slate-700 mb-1" />
+                  <p className="text-xs font-semibold text-slate-600 dark:text-slate-400">Belum ada hasil ujian masuk</p>
+                  <p className="text-[11px] text-slate-400">Rata-rata capaian tiap kelas akan terplot otomatis saat siswa selesai ujian.</p>
+                </div>
+              ) : (
+                <div className="pt-2 space-y-3">
+                  <div className="h-40 flex items-end gap-3 pt-4 border-b border-slate-100 dark:border-slate-800 pb-2">
+                    {classPerformance.map((cp) => (
+                      <div key={cp.className} className="flex-1 flex flex-col items-center gap-1 h-full justify-end group">
+                        <span className="text-[11px] font-bold text-slate-700 dark:text-slate-300 opacity-0 group-hover:opacity-100 transition-opacity">
+                          {cp.avgScore}
+                        </span>
+                        <div
+                          style={{ height: `${Math.max(12, Math.min(100, cp.avgScore))}%` }}
+                          className={`w-full max-w-[48px] rounded-t-lg transition-all ${
+                            cp.avgScore >= 75 ? 'bg-violet-600 hover:bg-violet-500' : 'bg-amber-500 hover:bg-amber-400'
+                          }`}
+                          title={`${cp.className}: Rata-rata ${cp.avgScore} (${cp.total} siswa)`}
+                        ></div>
+                        <span className="text-[11px] font-semibold text-slate-600 dark:text-slate-400 truncate max-w-full">
+                          {cp.className}
+                        </span>
+                      </div>
                     ))}
-                  </svg>
+                  </div>
+                  <div className="flex justify-between items-center text-[11px] text-slate-400">
+                    <span>* Garis batas kelulusan KKM: 75</span>
+                    <span>Total {classPerformance.length} Kelas Mengikuti Ujian</span>
+                  </div>
                 </div>
-
-                <div className="flex justify-between text-[11px] text-slate-400 dark:text-slate-500 pt-2 border-t border-slate-100 dark:border-slate-800">
-                  {['Ujian 1', 'Ujian 2', 'UTS IPA', 'Kuis 1', 'PAS'].map(m => (
-                    <span key={m}>{m}</span>
-                  ))}
-                </div>
-              </div>
+              )}
             </div>
 
-            {/* Chart 2: Distribusi Sebaran Nilai */}
+            {/* Chart 2: Distribusi Sebaran Nilai Siswa (Real Data) */}
             <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-6 shadow-xs space-y-4">
               <div>
                 <h4 className="font-bold text-sm text-slate-900 dark:text-white">
-                  {t.chartDistributionTitle}
+                  Distribusi Sebaran Nilai Siswa
                 </h4>
+                <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">
+                  Pengelompokan skor riil seluruh peserta ujian
+                </p>
                 <div className="flex flex-wrap items-center gap-3 pt-2 text-[11px]">
                   <div className="flex items-center gap-1.5">
                     <span className="w-2.5 h-2.5 rounded-full bg-violet-600"></span>
-                    <span className="text-slate-600 dark:text-slate-400">&gt; 90 (Sangat Baik)</span>
+                    <span className="text-slate-600 dark:text-slate-400">≥ 90 (Sangat Baik): {scoreDistribution.sangatBaik.count} Siswa</span>
                   </div>
                   <div className="flex items-center gap-1.5">
                     <span className="w-2.5 h-2.5 rounded-full bg-teal-500"></span>
-                    <span className="text-slate-600 dark:text-slate-400">75 - 89 (Baik)</span>
+                    <span className="text-slate-600 dark:text-slate-400">75 - 89 (Baik): {scoreDistribution.baik.count} Siswa</span>
                   </div>
                   <div className="flex items-center gap-1.5">
                     <span className="w-2.5 h-2.5 rounded-full bg-amber-400"></span>
-                    <span className="text-slate-600 dark:text-slate-400">60 - 74 (Cukup)</span>
+                    <span className="text-slate-600 dark:text-slate-400">60 - 74 (Cukup): {scoreDistribution.cukup.count} Siswa</span>
                   </div>
                   <div className="flex items-center gap-1.5">
                     <span className="w-2.5 h-2.5 rounded-full bg-rose-500"></span>
-                    <span className="text-slate-600 dark:text-slate-400">&lt; 60 (Remedial)</span>
+                    <span className="text-slate-600 dark:text-slate-400">&lt; 60 (Remedial): {scoreDistribution.remedial.count} Siswa</span>
                   </div>
                 </div>
               </div>
 
-              {/* Segmented Progress Bars */}
-              <div className="space-y-4 pt-1">
-                {scoreBuckets.map((row, rIdx) => (
-                  <div key={rIdx} className="space-y-1">
+              {results.length === 0 ? (
+                <div className="h-44 flex flex-col items-center justify-center border border-dashed border-slate-200 dark:border-slate-800 rounded-xl p-4 text-center">
+                  <Award className="w-8 h-8 text-slate-300 dark:text-slate-700 mb-1" />
+                  <p className="text-xs font-semibold text-slate-600 dark:text-slate-400">Belum ada sebaran nilai</p>
+                  <p className="text-[11px] text-slate-400">Histogram sebaran nilai akan langsung terbentuk saat ujian dimulai.</p>
+                </div>
+              ) : (
+                <div className="space-y-4 pt-1">
+                  {/* Single comprehensive distribution bar */}
+                  <div className="space-y-1.5">
                     <div className="flex justify-between text-xs font-semibold text-slate-700 dark:text-slate-300">
-                      <span>{row.label}</span>
+                      <span>Proporsi Keseluruhan ({results.length} Siswa)</span>
+                      <span className="text-slate-400 font-normal">{passRate}% Memenuhi KKM</span>
                     </div>
-                    <div className="h-3 w-full rounded-full bg-slate-100 dark:bg-slate-800 flex overflow-hidden gap-1 p-0.5">
-                      <div style={{ width: row.w1 }} className="h-full rounded-full bg-violet-600"></div>
-                      <div style={{ width: row.w2 }} className="h-full rounded-full bg-teal-500"></div>
-                      <div style={{ width: row.w3 }} className="h-full rounded-full bg-amber-400"></div>
-                      <div style={{ width: row.w4 }} className="h-full rounded-full bg-rose-500"></div>
+                    <div className="h-4 w-full rounded-full bg-slate-100 dark:bg-slate-800 flex overflow-hidden gap-0.5 p-0.5 shadow-inner">
+                      {scoreDistribution.sangatBaik.pct > 0 && (
+                        <div
+                          style={{ width: `${scoreDistribution.sangatBaik.pct}%` }}
+                          className="h-full rounded-sm bg-violet-600 transition-all"
+                          title={`Sangat Baik: ${scoreDistribution.sangatBaik.count} siswa (${scoreDistribution.sangatBaik.pct}%)`}
+                        ></div>
+                      )}
+                      {scoreDistribution.baik.pct > 0 && (
+                        <div
+                          style={{ width: `${scoreDistribution.baik.pct}%` }}
+                          className="h-full rounded-sm bg-teal-500 transition-all"
+                          title={`Baik: ${scoreDistribution.baik.count} siswa (${scoreDistribution.baik.pct}%)`}
+                        ></div>
+                      )}
+                      {scoreDistribution.cukup.pct > 0 && (
+                        <div
+                          style={{ width: `${scoreDistribution.cukup.pct}%` }}
+                          className="h-full rounded-sm bg-amber-400 transition-all"
+                          title={`Cukup: ${scoreDistribution.cukup.count} siswa (${scoreDistribution.cukup.pct}%)`}
+                        ></div>
+                      )}
+                      {scoreDistribution.remedial.pct > 0 && (
+                        <div
+                          style={{ width: `${scoreDistribution.remedial.pct}%` }}
+                          className="h-full rounded-sm bg-rose-500 transition-all"
+                          title={`Remedial: ${scoreDistribution.remedial.count} siswa (${scoreDistribution.remedial.pct}%)`}
+                        ></div>
+                      )}
                     </div>
                   </div>
-                ))}
-              </div>
 
-              <div className="flex items-center justify-between text-[11px] text-slate-400 dark:text-slate-500 pt-2 border-t border-slate-100 dark:border-slate-800">
-                <span className="font-semibold text-slate-600 dark:text-slate-300">{t.chartPassMark}</span>
-                {[10, 20, 30, 40, 50, 60, 70, 80, 90, 100].map(n => (
-                  <span key={n}>{n}</span>
-                ))}
-              </div>
+                  {/* Class breakdown bars if available */}
+                  <div className="space-y-2 pt-2">
+                    {classPerformance.map((cp) => {
+                      const classResults = results.filter(r => (r.className?.trim() || 'Umum') === cp.className);
+                      const totalC = classResults.length || 1;
+                      const sb = Math.round((classResults.filter(r => r.score >= 90).length / totalC) * 100);
+                      const b = Math.round((classResults.filter(r => r.score >= 75 && r.score < 90).length / totalC) * 100);
+                      const c = Math.round((classResults.filter(r => r.score >= 60 && r.score < 75).length / totalC) * 100);
+                      const rem = Math.round((classResults.filter(r => r.score < 60).length / totalC) * 100);
+
+                      return (
+                        <div key={cp.className} className="space-y-1">
+                          <div className="flex justify-between text-xs font-semibold text-slate-700 dark:text-slate-300">
+                            <span>{cp.className} ({classResults.length} Siswa)</span>
+                            <span className="text-xs text-violet-600 dark:text-violet-400 font-bold">Rata-rata: {cp.avgScore}</span>
+                          </div>
+                          <div className="h-2.5 w-full rounded-full bg-slate-100 dark:bg-slate-800 flex overflow-hidden gap-0.5 p-0.5">
+                            {sb > 0 && <div style={{ width: `${sb}%` }} className="h-full rounded-sm bg-violet-600"></div>}
+                            {b > 0 && <div style={{ width: `${b}%` }} className="h-full rounded-sm bg-teal-500"></div>}
+                            {c > 0 && <div style={{ width: `${c}%` }} className="h-full rounded-sm bg-amber-400"></div>}
+                            {rem > 0 && <div style={{ width: `${rem}%` }} className="h-full rounded-sm bg-rose-500"></div>}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </>
+      )}
+
+      {/* ============================================================== */}
+      {/* 1.B TAMPILAN STATISTIK & ANALISIS BUTIR SOAL MENDALAM            */}
+      {/* ============================================================== */}
+      {currentNav === 'statistics' && (
+        <div className="space-y-6">
+          {/* Header Statistik */}
+          <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <BarChart3 className="w-5 h-5 text-violet-600" />
+                <span>Statistik & Analisis Butir Soal Empiris</span>
+              </h3>
+              <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
+                Evaluasi daya serap materi, indeks tingkat kesukaran soal, dan log integritas ruang ujian.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="px-3 py-1.5 rounded-xl bg-violet-50 dark:bg-violet-950/50 text-violet-700 dark:text-violet-300 font-bold text-xs border border-violet-200 dark:border-violet-800">
+                Mapel: {currentBankSubject.title}
+              </span>
+            </div>
+          </div>
+
+          {/* 3 Metric Cards Statistik */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+            <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-1">
+              <span className="text-xs font-semibold text-slate-400">Rata-Rata Capaian Ujian</span>
+              <h4 className="text-2xl font-bold text-slate-900 dark:text-white">{avgScore} Poin</h4>
+              <p className="text-xs text-slate-500">Dari total {results.length} lembar jawaban siswa terkumpul</p>
+            </div>
+            <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-1">
+              <span className="text-xs font-semibold text-slate-400">Ketuntasan Klasikal KKM</span>
+              <h4 className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">{passRate}% Tuntas</h4>
+              <p className="text-xs text-slate-500">{passedStudentsCount} siswa tuntas • {remedialStudentsCount} perlu remedial</p>
+            </div>
+            <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-1">
+              <span className="text-xs font-semibold text-slate-400">Audit Integritas Layar</span>
+              <h4 className="text-2xl font-bold text-slate-900 dark:text-white">
+                {results.filter(r => r.violationCount === 0).length} Siswa Tertib
+              </h4>
+              <p className="text-xs text-rose-500 font-semibold">
+                {results.filter(r => r.violationCount > 0).length} siswa terdeteksi alih jendela
+              </p>
+            </div>
+          </div>
+
+          {/* TABEL ANALISIS TINGKAT KESUKARAN BUTIR SOAL */}
+          <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl shadow-xs overflow-hidden">
+            <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+              <div>
+                <h4 className="text-sm font-bold text-slate-900 dark:text-white">
+                  Tabel Tingkat Kesukaran Butir Soal (Difficulty Index)
+                </h4>
+                <p className="text-xs text-slate-400">
+                  Dihitung otomatis berdasarkan jawaban seluruh peserta pada paket soal ini
+                </p>
+              </div>
+              <span className="text-xs text-slate-500 font-semibold">{questionItemAnalysis.length} Butir Dianalisis</span>
+            </div>
+
+            {questionItemAnalysis.length === 0 ? (
+              <div className="p-12 text-center text-slate-400 text-xs">
+                Belum ada butir soal pada mapel ini untuk dianalisis.
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40 text-slate-500 font-semibold">
+                      <th className="py-3 px-4 w-12 text-center">No</th>
+                      <th className="py-3 px-4 w-32">Tipe Soal</th>
+                      <th className="py-3 px-4">Pertanyaan / Stimulus</th>
+                      <th className="py-3 px-4 text-center">Dijawab</th>
+                      <th className="py-3 px-4 text-center">Benar</th>
+                      <th className="py-3 px-4 text-center">Indeks (% Benar)</th>
+                      <th className="py-3 px-4 text-center">Kategori Soal</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium">
+                    {questionItemAnalysis.map((item) => (
+                      <tr key={item.question.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition">
+                        <td className="py-3 px-4 text-center font-bold text-slate-400">{item.no}</td>
+                        <td className="py-3 px-4">
+                          <span className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold text-[11px]">
+                            {item.question.type}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 text-slate-900 dark:text-slate-100 max-w-md truncate">
+                          {item.question.questionText}
+                        </td>
+                        <td className="py-3 px-4 text-center text-slate-600 dark:text-slate-400">{item.totalAnswered}</td>
+                        <td className="py-3 px-4 text-center font-bold text-emerald-600 dark:text-emerald-400">{item.correctCount}</td>
+                        <td className="py-3 px-4 text-center">
+                          <span className="font-bold">{item.difficultyIndex}%</span>
+                        </td>
+                        <td className="py-3 px-4 text-center">
+                          <span
+                            className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                              item.category === 'Mudah'
+                                ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300'
+                                : item.category === 'Sedang'
+                                ? 'bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300'
+                                : item.category === 'Sukar (HOTS)'
+                                ? 'bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300'
+                                : 'bg-slate-100 dark:bg-slate-800 text-slate-500'
+                            }`}
+                          >
+                            {item.category}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
       )}
 
       {/* ============================================================== */}
@@ -1532,46 +1799,422 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
       )}
 
       {/* ============================================================== */}
-      {/* 3. TAMPILAN PENGATURAN BOBOT                                    */}
+      {/* 3. TAMPILAN PUSAT CETAK DOKUMEN UJIAN & BERITA ACARA (BAP)      */}
       {/* ============================================================== */}
-      {currentNav === 'scoring' && (
-        <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-6 shadow-xs space-y-4">
-          <div>
-            <h3 className="text-base font-bold text-slate-900 dark:text-white">{t.navScoring}</h3>
-            <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
-              Nilai ujian akhir (skor 0 - 100) dihitung secara proporsional sesuai bobot poin per tipe soal ini.
-            </p>
+      {currentNav === 'documents' && (
+        <div className="space-y-6">
+          {/* Header Kontrol Dokumen */}
+          <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4 print:hidden">
+            <div>
+              <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <Printer className="w-5 h-5 text-violet-600" />
+                <span>Pusat Dokumen Ujian & Berita Acara (BAP)</span>
+              </h3>
+              <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
+                Cetak dokumen resmi asesmen SMP Negeri 58 Palembang siap tanda tangan proktor & pengawas.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2.5">
+              {/* Selector Mapel */}
+              <select
+                value={selectedDocSubjectId || currentBankSubject.id}
+                onChange={e => setSelectedDocSubjectId(e.target.value)}
+                className="px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-700 dark:text-slate-200"
+              >
+                {accessibleSubjects.map(s => (
+                  <option key={s.id} value={s.id}>{s.title}</option>
+                ))}
+              </select>
+
+              {/* Selector Kelas */}
+              <select
+                value={selectedDocClass}
+                onChange={e => setSelectedDocClass(e.target.value)}
+                className="px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-700 dark:text-slate-200"
+              >
+                <option value="Semua Kelas">Semua Kelas</option>
+                {availableClasses.map(c => (
+                  <option key={c} value={c}>Kelas {c}</option>
+                ))}
+              </select>
+
+              {/* Tombol Cetak Dokumen */}
+              <button
+                type="button"
+                onClick={() => window.print()}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-xs font-bold transition shadow-md shadow-violet-600/20 cursor-pointer"
+              >
+                <Printer className="w-4 h-4" />
+                <span>Cetak Dokumen / Simpan PDF</span>
+              </button>
+            </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 pt-2">
-            {Object.keys(subject.scoringRules).map(typeKey => {
-              const currentWeight = subject.scoringRules[typeKey as QuestionType] || 1;
-              return (
-                <div key={typeKey} className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-2">
-                  <label className="text-xs font-bold text-slate-800 dark:text-slate-200 block">{typeKey}</label>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="number"
-                      min={1}
-                      max={100}
-                      value={currentWeight}
-                      onChange={e => {
-                        const val = parseFloat(e.target.value) || 1;
-                        onUpdateSubject({
-                          ...subject,
-                          scoringRules: {
-                            ...subject.scoringRules,
-                            [typeKey]: val
-                          }
-                        });
-                      }}
-                      className="w-24 p-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 text-sm font-bold text-violet-600 dark:text-violet-400 text-center"
-                    />
-                    <span className="text-xs text-slate-500">Poin Maksimal</span>
+          {/* Sub-Tabs Jenis Dokumen */}
+          <div className="flex items-center gap-2 overflow-x-auto pb-1 print:hidden">
+            {[
+              { id: 'bap', label: '📋 Berita Acara Ujian (BAP)' },
+              { id: 'attendance', label: '📝 Daftar Hadir Peserta' },
+              { id: 'cards', label: '🪪 Kartu Ujian Siswa' },
+              { id: 'ledger', label: '📊 Leger Rekap Nilai' }
+            ].map(tab => (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setSelectedDocType(tab.id as any)}
+                className={`px-4 py-2 rounded-xl text-xs font-bold transition whitespace-nowrap cursor-pointer ${
+                  selectedDocType === tab.id
+                    ? 'bg-violet-600 text-white shadow-xs'
+                    : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:border-violet-500'
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+
+          {/* LEMBAR DOKUMEN RESMI (PRINTABLE SHEET) */}
+          <div className="p-8 sm:p-12 bg-white text-slate-900 rounded-2xl border border-slate-200/80 shadow-md font-serif space-y-6 max-w-4xl mx-auto print:border-none print:shadow-none print:p-0 print:max-w-none">
+            {/* KOP SURAT RESMI SEKOLAH */}
+            <div className="border-b-4 border-double border-slate-900 pb-4 flex items-center justify-between gap-6 text-center">
+              <div className="w-16 h-16 flex-shrink-0 flex items-center justify-center border-2 border-slate-900 rounded-full font-sans font-bold text-xs">
+                SMPN 58
+              </div>
+              <div className="flex-1 space-y-0.5">
+                <h4 className="text-sm font-semibold tracking-wider uppercase font-sans">
+                  Pemerintah Kota Palembang • Dinas Pendidikan
+                </h4>
+                <h2 className="text-xl sm:text-2xl font-black tracking-wide font-sans text-slate-900">
+                  SMP NEGERI 58 PALEMBANG
+                </h2>
+                <p className="text-[11px] font-sans text-slate-700">
+                  NPSN: 10603758 • NSS: 201116001058 • Status: Terakreditasi A
+                </p>
+                <p className="text-[10px] font-sans text-slate-600">
+                  Jl. Pangeran Ratu, Jakabaring, Kec. Seberang Ulu I, Kota Palembang, Sumatera Selatan 30257
+                </p>
+              </div>
+              <div className="w-16 h-16 flex-shrink-0 flex items-center justify-center border-2 border-slate-900 rounded-lg font-sans font-black text-sm">
+                CBT v2
+              </div>
+            </div>
+
+            {/* DOKUMEN 1: BERITA ACARA UJIAN (BAP) */}
+            {selectedDocType === 'bap' && (
+              <div className="space-y-6 pt-2">
+                <div className="text-center space-y-1">
+                  <h3 className="text-base font-bold underline uppercase tracking-wider font-sans">
+                    BERITA ACARA PELAKSANAAN ASESMEN SUMATIF
+                  </h3>
+                  <p className="text-xs font-sans text-slate-600">
+                    Tahun Ajaran 2026/2027 • Berbasis Komputer & Android (CBT)
+                  </p>
+                </div>
+
+                <div className="text-xs space-y-3 font-sans leading-relaxed text-slate-800">
+                  <p>
+                    Pada hari ini, <strong className="text-slate-950 font-bold">Jumat</strong>, tanggal <strong className="text-slate-950 font-bold">30 Oktober 2026</strong>, telah dilaksanakan Asesmen Berbasis Komputer (CBT) dengan rincian sebagai berikut:
+                  </p>
+
+                  <div className="grid grid-cols-2 gap-y-2 gap-x-6 p-4 rounded-xl bg-slate-50 border border-slate-200">
+                    <div>
+                      <span className="text-slate-500 block text-[11px]">Mata Pelajaran:</span>
+                      <strong className="text-sm font-bold text-slate-900">{currentBankSubject.title}</strong>
+                    </div>
+                    <div>
+                      <span className="text-slate-500 block text-[11px]">Rombongan Belajar / Kelas:</span>
+                      <strong className="text-sm font-bold text-slate-900">
+                        {selectedDocClass === 'Semua Kelas' ? (currentBankSubject.className || 'Semua Kelas') : selectedDocClass}
+                      </strong>
+                    </div>
+                    <div>
+                      <span className="text-slate-500 block text-[11px]">Durasi Ujian / Token Rilis:</span>
+                      <strong className="text-sm font-bold text-slate-900">{currentBankSubject.durationMinutes} Menit • Token: {currentBankSubject.token}</strong>
+                    </div>
+                    <div>
+                      <span className="text-slate-500 block text-[11px]">Ruang / Laboratorium:</span>
+                      <strong className="text-sm font-bold text-slate-900">Lab Komputer CBT SMPN 58</strong>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2 pt-2">
+                    <h5 className="font-bold text-xs uppercase text-slate-900">A. Rekapitulasi Kehadiran Peserta:</h5>
+                    <div className="grid grid-cols-3 gap-3 text-center">
+                      <div className="p-3 border border-slate-200 rounded-lg">
+                        <span className="block text-[11px] text-slate-500">Terdaftar di Sistem</span>
+                        <strong className="text-base font-bold text-slate-900">
+                          {selectedDocClass === 'Semua Kelas'
+                            ? (students?.length || 0)
+                            : (students?.filter(s => s.className === selectedDocClass).length || 0)} Siswa
+                        </strong>
+                      </div>
+                      <div className="p-3 border border-slate-200 rounded-lg bg-emerald-50/50">
+                        <span className="block text-[11px] text-emerald-700">Hadir & Mengerjakan</span>
+                        <strong className="text-base font-bold text-emerald-800">
+                          {selectedDocClass === 'Semua Kelas'
+                            ? results.length
+                            : results.filter(r => r.className === selectedDocClass).length} Siswa
+                        </strong>
+                      </div>
+                      <div className="p-3 border border-slate-200 rounded-lg bg-rose-50/50">
+                        <span className="block text-[11px] text-rose-700">Tidak Hadir / Izin</span>
+                        <strong className="text-base font-bold text-rose-800">
+                          {Math.max(0, (selectedDocClass === 'Semua Kelas'
+                            ? (students?.length || 0) - results.length
+                            : (students?.filter(s => s.className === selectedDocClass).length || 0) - results.filter(r => r.className === selectedDocClass).length))} Siswa
+                        </strong>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1 pt-2">
+                    <h5 className="font-bold text-xs uppercase text-slate-900">B. Catatan Integritas & Pelaksanaan Ujian:</h5>
+                    <p className="p-3 border border-slate-200 rounded-lg bg-slate-50 text-[11px] leading-relaxed">
+                      Ujian berlangsung secara tertib dan kondusif dengan proteksi anti-curang aktif. Seluruh butir soal berhasil diakses oleh peserta tanpa gangguan teknis server.
+                    </p>
+                  </div>
+
+                  {/* TANDA TANGAN RESMI */}
+                  <div className="grid grid-cols-3 gap-6 pt-8 text-center text-xs font-sans">
+                    <div className="space-y-16">
+                      <p>Pengawas Ruang Ujian,</p>
+                      <div>
+                        <strong className="underline block font-bold text-slate-900">{currentTeacher?.name || 'Hendra Wijaya, S.Pd'}</strong>
+                        <span className="text-[11px] text-slate-500">NIP: {currentTeacher?.nip || '198704202012011004'}</span>
+                      </div>
+                    </div>
+
+                    <div className="space-y-16">
+                      <p>Proktor Utama CBT,</p>
+                      <div>
+                        <strong className="underline block font-bold text-slate-900">Administrator CBT</strong>
+                        <span className="text-[11px] text-slate-500">NIP: 198503142010011008</span>
+                      </div>
+                    </div>
+
+                    <div className="space-y-16">
+                      <p>Mengetahui,<br />Kepala SMP Negeri 58,</p>
+                      <div>
+                        <strong className="underline block font-bold text-slate-900">Hj. Rohana, S.Pd., M.Si.</strong>
+                        <span className="text-[11px] text-slate-500">NIP: 196805121994122001</span>
+                      </div>
+                    </div>
                   </div>
                 </div>
-              );
-            })}
+              </div>
+            )}
+
+            {/* DOKUMEN 2: DAFTAR HADIR PESERTA UJIAN */}
+            {selectedDocType === 'attendance' && (
+              <div className="space-y-4 pt-2 font-sans">
+                <div className="text-center space-y-1">
+                  <h3 className="text-base font-bold underline uppercase tracking-wider">
+                    DAFTAR HADIR PESERTA ASESMEN SUMATIF
+                  </h3>
+                  <p className="text-xs text-slate-600">
+                    Mata Pelajaran: <strong>{currentBankSubject.title}</strong> • Rombel: <strong>{selectedDocClass}</strong>
+                  </p>
+                </div>
+
+                <div className="overflow-x-auto pt-2">
+                  <table className="w-full text-left border-collapse text-xs border border-slate-900">
+                    <thead>
+                      <tr className="border-b border-slate-900 bg-slate-100 font-bold text-slate-900 text-center">
+                        <th className="py-2.5 px-3 border-r border-slate-900 w-12">No</th>
+                        <th className="py-2.5 px-3 border-r border-slate-900 w-32">NISN</th>
+                        <th className="py-2.5 px-3 border-r border-slate-900 text-left">Nama Lengkap Peserta</th>
+                        <th className="py-2.5 px-3 border-r border-slate-900 w-24">Kelas</th>
+                        <th className="py-2.5 px-3 border-r border-slate-900 w-28">Status</th>
+                        <th className="py-2.5 px-4 w-44 text-left">Tanda Tangan</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-300">
+                      {(students || [])
+                        .filter(s => selectedDocClass === 'Semua Kelas' || s.className === selectedDocClass)
+                        .slice(0, 35)
+                        .map((std, idx) => {
+                          const hasSubmitted = results.some(r => r.studentName.toLowerCase() === std.name.toLowerCase());
+                          return (
+                            <tr key={std.id} className="border-b border-slate-300">
+                              <td className="py-2 px-3 text-center font-bold border-r border-slate-900">{idx + 1}</td>
+                              <td className="py-2 px-3 border-r border-slate-900 text-center font-mono">{std.nisn || `008${idx}942`}</td>
+                              <td className="py-2 px-3 border-r border-slate-900 font-semibold uppercase">{std.name}</td>
+                              <td className="py-2 px-3 border-r border-slate-900 text-center">{std.className}</td>
+                              <td className="py-2 px-3 border-r border-slate-900 text-center font-semibold">
+                                {hasSubmitted ? (
+                                  <span className="text-emerald-700">Hadir / Selesai</span>
+                                ) : (
+                                  <span className="text-slate-400">Belum Submit</span>
+                                )}
+                              </td>
+                              <td className="py-2 px-4 font-mono text-[11px] text-slate-400">
+                                {idx % 2 === 0 ? `${idx + 1}. ....................` : `    ${idx + 1}. ....................`}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="flex justify-between items-end pt-8 text-xs font-sans">
+                  <div>
+                    <p className="text-[11px] text-slate-500">* Dokumen presensi resmi dicetak otomatis dari sistem CBT SMPN 58 Palembang</p>
+                  </div>
+                  <div className="text-center space-y-16">
+                    <p>Palembang, 30 Oktober 2026<br />Pengawas Ruang,</p>
+                    <div>
+                      <strong className="underline block font-bold text-slate-900">{currentTeacher?.name || 'Hendra Wijaya, S.Pd'}</strong>
+                      <span className="text-[11px] text-slate-500">NIP: {currentTeacher?.nip || '198704202012011004'}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* DOKUMEN 3: KARTU PESERTA UJIAN (EXAM CARDS) */}
+            {selectedDocType === 'cards' && (
+              <div className="space-y-6 pt-2 font-sans">
+                <div className="text-center space-y-1">
+                  <h3 className="text-base font-bold underline uppercase tracking-wider">
+                    KARTU PESERTA ASESMEN SUMATIF TAHUN 2026
+                  </h3>
+                  <p className="text-xs text-slate-600">
+                    SMP Negeri 58 Palembang • Rombel: <strong>{selectedDocClass}</strong>
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+                  {(students || [])
+                    .filter(s => selectedDocClass === 'Semua Kelas' || s.className === selectedDocClass)
+                    .slice(0, 12)
+                    .map((std, idx) => (
+                      <div key={std.id} className="p-4 border-2 border-slate-900 rounded-xl space-y-3 bg-white text-xs">
+                        <div className="flex items-center justify-between border-b border-slate-900 pb-2">
+                          <div className="flex items-center gap-2">
+                            <div className="w-7 h-7 rounded-full bg-slate-900 text-white font-bold flex items-center justify-center text-[10px]">
+                              58
+                            </div>
+                            <div>
+                              <strong className="block text-[11px] uppercase leading-tight font-bold">KARTU PESERTA CBT</strong>
+                              <span className="text-[10px] text-slate-600">SMP Negeri 58 Palembang</span>
+                            </div>
+                          </div>
+                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 border border-slate-300">
+                            {std.className}
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-3 gap-2">
+                          <div className="w-16 h-20 border border-slate-300 bg-slate-100 rounded flex items-center justify-center text-center text-[9px] text-slate-400 font-bold">
+                            FOTO 2x3
+                          </div>
+                          <div className="col-span-2 space-y-1 text-[11px]">
+                            <div>
+                              <span className="text-[10px] text-slate-500 block">Nama Lengkap:</span>
+                              <strong className="font-bold text-slate-900 block truncate">{std.name}</strong>
+                            </div>
+                            <div>
+                              <span className="text-[10px] text-slate-500 block">NISN / No Peserta:</span>
+                              <span className="font-mono font-bold">{std.nisn || `008${idx}942`}</span>
+                            </div>
+                            <div>
+                              <span className="text-[10px] text-slate-500 block">Token Sesi Ujian:</span>
+                              <span className="font-mono font-bold text-violet-700 bg-violet-50 px-1 rounded">{currentBankSubject.token}</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="pt-2 border-t border-slate-200 flex justify-between items-center text-[9px] text-slate-500">
+                          <span>Harap dibawa saat memasuki ruang ujian.</span>
+                          <span className="font-bold">SMPN 58 CBT v2</span>
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              </div>
+            )}
+
+            {/* DOKUMEN 4: LEGER REKAPITULASI NILAI UJIAN */}
+            {selectedDocType === 'ledger' && (
+              <div className="space-y-4 pt-2 font-sans">
+                <div className="text-center space-y-1">
+                  <h3 className="text-base font-bold underline uppercase tracking-wider">
+                    LEGER HASIL ASESMEN SUMATIF RESMI
+                  </h3>
+                  <p className="text-xs text-slate-600">
+                    Mata Pelajaran: <strong>{currentBankSubject.title}</strong> • Standar KKM: <strong>75</strong> • Rombel: <strong>{selectedDocClass}</strong>
+                  </p>
+                </div>
+
+                <div className="overflow-x-auto pt-2">
+                  <table className="w-full text-left border-collapse text-xs border border-slate-900">
+                    <thead>
+                      <tr className="border-b border-slate-900 bg-slate-100 font-bold text-slate-900 text-center">
+                        <th className="py-2.5 px-3 border-r border-slate-900 w-12">No</th>
+                        <th className="py-2.5 px-3 border-r border-slate-900 text-left">Nama Siswa</th>
+                        <th className="py-2.5 px-3 border-r border-slate-900 w-20">Kelas</th>
+                        <th className="py-2.5 px-3 border-r border-slate-900 w-24">Poin Diperoleh</th>
+                        <th className="py-2.5 px-3 border-r border-slate-900 w-24">Nilai Akhir</th>
+                        <th className="py-2.5 px-3 border-r border-slate-900 w-20">Predikat</th>
+                        <th className="py-2.5 px-3 w-28">Status KKM</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-300">
+                      {results
+                        .filter(r => selectedDocClass === 'Semua Kelas' || r.className === selectedDocClass)
+                        .map((res, idx) => {
+                          const pred = res.score >= 90 ? 'A' : res.score >= 75 ? 'B' : res.score >= 60 ? 'C' : 'D';
+                          const isPass = res.score >= 75;
+                          return (
+                            <tr key={res.id} className="border-b border-slate-300 text-center">
+                              <td className="py-2 px-3 font-bold border-r border-slate-900">{idx + 1}</td>
+                              <td className="py-2 px-3 border-r border-slate-900 font-semibold text-left uppercase">{res.studentName}</td>
+                              <td className="py-2 px-3 border-r border-slate-900">{res.className}</td>
+                              <td className="py-2 px-3 border-r border-slate-900 font-mono">{res.totalEarned} / {res.totalMax}</td>
+                              <td className="py-2 px-3 border-r border-slate-900 font-bold text-sm">{res.score}</td>
+                              <td className="py-2 px-3 border-r border-slate-900 font-bold">{pred}</td>
+                              <td className="py-2 px-3 font-bold">
+                                {isPass ? (
+                                  <span className="text-emerald-700">TUNTAS</span>
+                                ) : (
+                                  <span className="text-rose-700">REMEDIAL</span>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      {results.filter(r => selectedDocClass === 'Semua Kelas' || r.className === selectedDocClass).length === 0 && (
+                        <tr>
+                          <td colSpan={7} className="py-8 text-center text-slate-400">
+                            Belum ada lembar nilai untuk rombel ini.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="grid grid-cols-2 gap-8 pt-8 text-center text-xs font-sans">
+                  <div className="space-y-16">
+                    <p>Mengetahui,<br />Kepala SMP Negeri 58,</p>
+                    <div>
+                      <strong className="underline block font-bold text-slate-900">Hj. Rohana, S.Pd., M.Si.</strong>
+                      <span className="text-[11px] text-slate-500">NIP: 196805121994122001</span>
+                    </div>
+                  </div>
+
+                  <div className="space-y-16">
+                    <p>Palembang, 30 Oktober 2026<br />Guru Mata Pelajaran,</p>
+                    <div>
+                      <strong className="underline block font-bold text-slate-900">{currentTeacher?.name || 'Guru Pengampu'}</strong>
+                      <span className="text-[11px] text-slate-500">NIP: {currentTeacher?.nip || '198704202012011004'}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

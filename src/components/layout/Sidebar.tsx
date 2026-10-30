@@ -16,7 +16,8 @@ import {
   Search,
   ChevronRight,
   Sparkles,
-  LogOut
+  LogOut,
+  Printer
 } from 'lucide-react';
 
 export type NavItem =
@@ -26,7 +27,7 @@ export type NavItem =
   | 'students'
   | 'results'
   | 'statistics'
-  | 'scoring'
+  | 'documents'
   | 'settings';
 
 interface SidebarProps {
@@ -201,16 +202,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </button>
 
             <button
-              onClick={() => onSelectNav('scoring')}
+              onClick={() => onSelectNav('documents')}
               className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl font-medium transition ${
-                currentNav === 'scoring'
+                currentNav === 'documents'
                   ? 'bg-violet-50 dark:bg-violet-950/40 text-violet-700 dark:text-violet-300 font-semibold'
                   : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-slate-100'
               }`}
             >
               <div className="flex items-center gap-2.5">
-                <SlidersHorizontal className="w-4 h-4" />
-                <span>{t.navScoring}</span>
+                <Printer className="w-4 h-4" />
+                <span>{t.navDocuments}</span>
               </div>
             </button>
           </div>

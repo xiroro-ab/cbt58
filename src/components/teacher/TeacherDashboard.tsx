@@ -241,6 +241,34 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
       .trim();
   };
 
+  // Helper pengecekan hak akses mata pelajaran per guru (mencakup pencocokan multi-kata kunci & mapel buatan guru)
+  const isSubjectBelongToTeacher = (s: Subject, teacher: Teacher | null, createdIds: string[] = []): boolean => {
+    if (!teacher || teacher.role === 'admin' || teacher.role === 'pengawas') return true;
+    if (createdIds.includes(s.id)) return true;
+
+    const sLower = s.title.toLowerCase();
+
+    // 1. Cek dari penugasan guru (assignments)
+    if (teacher.assignments && teacher.assignments.length > 0) {
+      for (const asg of teacher.assignments) {
+        const asgLower = asg.subject.toLowerCase();
+        if (sLower.includes(asgLower) || asgLower.includes(sLower)) return true;
+        const keywords = asgLower.split(/[\s&,/]+/).filter(w => w.length >= 3);
+        if (keywords.some(kw => sLower.includes(kw))) return true;
+      }
+    }
+
+    // 2. Cek dari mata pelajaran utama guru (teacher.subject)
+    if (teacher.subject) {
+      const tSubLower = teacher.subject.toLowerCase();
+      if (sLower.includes(tSubLower) || tSubLower.includes(sLower)) return true;
+      const keywords = tSubLower.split(/[\s&,/]+/).filter(w => w.length >= 3);
+      if (keywords.some(kw => sLower.includes(kw))) return true;
+    }
+
+    return false;
+  };
+
   // Daftar mapel yang berhak diakses (Admin & Pengawas: SEMUA mapel; Guru Mapel: HANYA mapel miliknya atau yang baru dibuatnya)
   const accessibleSubjects = useMemo(() => {
     const rawAll = allSubjects !== undefined ? allSubjects : (subject?.id ? [subject] : []);
@@ -250,25 +278,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
       return all;
     }
 
-    const isCreatedBySelf = (s: Subject) => createdSubjectIds.includes(s.id);
-
-    if (currentTeacher.assignments && currentTeacher.assignments.length > 0) {
-      const assignedMapelNames = currentTeacher.assignments.map(a => a.subject.toLowerCase());
-      const filtered = all.filter(s => {
-        if (isCreatedBySelf(s)) return true;
-        const sLower = s.title.toLowerCase();
-        return assignedMapelNames.some(name => sLower.includes(name) || name.includes(sLower));
-      });
-      return filtered;
-    }
-
-    if (currentTeacher.subject) {
-      const tSubjectLower = currentTeacher.subject.toLowerCase();
-      const matched = all.filter(s => isCreatedBySelf(s) || s.title.toLowerCase().includes(tSubjectLower));
-      return matched;
-    }
-
-    return all;
+    return all.filter(s => isSubjectBelongToTeacher(s, currentTeacher, createdSubjectIds));
   }, [allSubjects, subject, currentTeacher, deletedSubjectIds, createdSubjectIds]);
 
   // Sinkronkan selectedBankSubjectId jika belum ada di accessibleSubjects

@@ -73,7 +73,7 @@ export async function fetchActiveSubject(): Promise<Subject> {
 }
 
 /**
- * Mengambil daftar soal berdasarkan ID mata pelajaran
+ * Mengambil daftar soal berdasarkan ID mata pelajaran (Real Data dengan fail-safe localStorage)
  */
 export async function fetchQuestionsBySubject(subjectId: string): Promise<Question[]> {
   try {
@@ -83,31 +83,71 @@ export async function fetchQuestionsBySubject(subjectId: string): Promise<Questi
       .eq('subject_id', subjectId)
       .order('order_index', { ascending: true });
 
-    if (error || !data || data.length === 0) {
-      console.warn('Gagal memuat soal dari Supabase atau tabel masih kosong, menggunakan sample questions:', error?.message);
-      return sampleQuestions;
+    if (!error && data && data.length > 0) {
+      const parsed: Question[] = data.map(row => ({
+        id: row.id,
+        subjectId: row.subject_id,
+        type: row.type,
+        questionText: row.question_text,
+        mediaUrl: row.media_url,
+        options: row.options || [],
+        answer: row.answer,
+        orderIndex: row.order_index
+      }));
+      if (typeof window !== 'undefined') {
+        try {
+          localStorage.setItem(`cbt_questions_${subjectId}`, JSON.stringify(parsed));
+        } catch {}
+      }
+      return parsed;
     }
 
-    return data.map(row => ({
-      id: row.id,
-      subjectId: row.subject_id,
-      type: row.type,
-      questionText: row.question_text,
-      mediaUrl: row.media_url,
-      options: row.options || [],
-      answer: row.answer,
-      orderIndex: row.order_index
-    }));
+    // Jika Supabase belum memiliki soal untuk mapel ini atau sedang terhalang RLS, cek penyimpanan lokal
+    if (typeof window !== 'undefined') {
+      try {
+        const stored = localStorage.getItem(`cbt_questions_${subjectId}`);
+        if (stored) {
+          const localQuestions = JSON.parse(stored);
+          if (Array.isArray(localQuestions) && localQuestions.length > 0) {
+            return localQuestions;
+          }
+        }
+      } catch {}
+    }
+
+    // Mapel baru yang belum memiliki soal murni mengembalikan array kosong [] (Real Data)
+    return [];
   } catch (err) {
     console.error('Error fetchQuestionsBySubject:', err);
-    return sampleQuestions;
+    if (typeof window !== 'undefined') {
+      try {
+        const stored = localStorage.getItem(`cbt_questions_${subjectId}`);
+        if (stored) {
+          const localQuestions = JSON.parse(stored);
+          if (Array.isArray(localQuestions)) return localQuestions;
+        }
+      } catch {}
+    }
+    return [];
   }
 }
 
 /**
- * Menyimpan soal baru ke Supabase
+ * Menyimpan soal baru ke Supabase & fail-safe localStorage
  */
 export async function insertQuestion(q: Question): Promise<boolean> {
+  // Simpan segera ke localStorage agar soal yang baru dibuat guru tidak pernah hilang saat refresh
+  if (typeof window !== 'undefined' && q.subjectId) {
+    try {
+      const stored = localStorage.getItem(`cbt_questions_${q.subjectId}`);
+      const list: Question[] = stored ? JSON.parse(stored) : [];
+      const updated = [...list.filter(item => item.id !== q.id), q];
+      localStorage.setItem(`cbt_questions_${q.subjectId}`, JSON.stringify(updated));
+    } catch (e) {
+      console.warn('Gagal menyimpan backup soal ke localStorage:', e);
+    }
+  }
+
   try {
     const { error } = await supabase.from('questions').insert({
       subject_id: q.subjectId,
@@ -120,7 +160,7 @@ export async function insertQuestion(q: Question): Promise<boolean> {
     });
 
     if (error) {
-      console.error('Error insertQuestion to Supabase:', error);
+      console.warn('Catatan insertQuestion ke Supabase (menggunakan backup lokal):', error.message);
       return false;
     }
     return true;
@@ -131,13 +171,23 @@ export async function insertQuestion(q: Question): Promise<boolean> {
 }
 
 /**
- * Menghapus soal dari Supabase
+ * Menghapus soal dari Supabase & fail-safe localStorage
  */
-export async function removeQuestion(qId: string): Promise<boolean> {
+export async function removeQuestion(qId: string, subjectId?: string): Promise<boolean> {
+  if (typeof window !== 'undefined' && subjectId) {
+    try {
+      const stored = localStorage.getItem(`cbt_questions_${subjectId}`);
+      if (stored) {
+        const list: Question[] = JSON.parse(stored);
+        localStorage.setItem(`cbt_questions_${subjectId}`, JSON.stringify(list.filter(q => q.id !== qId)));
+      }
+    } catch {}
+  }
+
   try {
     const { error } = await supabase.from('questions').delete().eq('id', qId);
     if (error) {
-      console.error('Error removeQuestion from Supabase:', error);
+      console.warn('Error removeQuestion from Supabase:', error);
       return false;
     }
     return true;

@@ -64,6 +64,34 @@ import {
   IdCard
 } from 'lucide-react';
 
+// Helper pengecekan hak akses mata pelajaran per guru (mencakup pencocokan multi-kata kunci & mapel buatan guru)
+export function isSubjectBelongToTeacher(s: Subject, teacher: Teacher | null, createdIds: string[] = []): boolean {
+  if (!teacher || teacher.role === 'admin' || teacher.role === 'pengawas') return true;
+  if (createdIds.includes(s.id)) return true;
+
+  const sLower = s.title.toLowerCase();
+
+  // 1. Cek dari penugasan guru (assignments)
+  if (teacher.assignments && teacher.assignments.length > 0) {
+    for (const asg of teacher.assignments) {
+      const asgLower = asg.subject.toLowerCase();
+      if (sLower.includes(asgLower) || asgLower.includes(sLower)) return true;
+      const keywords = asgLower.split(/[\s&,/]+/).filter(w => w.length >= 3);
+      if (keywords.some(kw => sLower.includes(kw))) return true;
+    }
+  }
+
+  // 2. Cek dari mata pelajaran utama guru (teacher.subject)
+  if (teacher.subject) {
+    const tSubLower = teacher.subject.toLowerCase();
+    if (sLower.includes(tSubLower) || tSubLower.includes(sLower)) return true;
+    const keywords = tSubLower.split(/[\s&,/]+/).filter(w => w.length >= 3);
+    if (keywords.some(kw => sLower.includes(kw))) return true;
+  }
+
+  return false;
+}
+
 export default function Home() {
   const { theme, toggleTheme } = useTheme();
   const { language, toggleLanguage, t } = useLanguage();
@@ -407,7 +435,7 @@ export default function Home() {
   const handleDeleteQuestion = async (qId: string) => {
     setQuestions(prev => prev.filter(q => q.id !== qId));
     try {
-      await removeQuestion(qId);
+      await removeQuestion(qId, subject?.id);
     } catch (err) {
       console.warn('Supabase delete fallback to local state:', err);
     }
@@ -858,20 +886,26 @@ export default function Home() {
     }
   };
 
+  // Ambil daftar ID mapel buatan guru dari localStorage
+  const teacherCreatedSubjectIds = useMemo(() => {
+    if (typeof window !== 'undefined' && currentTeacher?.id) {
+      try {
+        const stored = localStorage.getItem(`cbt_teacher_${currentTeacher.id}_created_subjects`);
+        return stored ? JSON.parse(stored) : [];
+      } catch {
+        return [];
+      }
+    }
+    return [];
+  }, [currentTeacher?.id]);
+
   // Hitung jumlah paket ujian riil yang berhak diakses guru / pengawas
   const teacherExamsCount = useMemo(() => {
     if (!currentTeacher || currentTeacher.role === 'admin' || currentTeacher.role === 'pengawas') {
       return subjects.length;
     }
-    const assignedNames = currentTeacher.assignments?.map(a => a.subject.toLowerCase()) || [];
-    return subjects.filter(s => {
-      const sLower = s.title.toLowerCase();
-      return (
-        assignedNames.some(name => sLower.includes(name) || name.includes(sLower)) ||
-        (currentTeacher.subject && sLower.includes(currentTeacher.subject.toLowerCase()))
-      );
-    }).length;
-  }, [subjects, currentTeacher]);
+    return subjects.filter(s => isSubjectBelongToTeacher(s, currentTeacher, teacherCreatedSubjectIds)).length;
+  }, [subjects, currentTeacher, teacherCreatedSubjectIds]);
 
   // =========================================================================
   // VIEW 0: LAYAR LOGIN GURU & PENGAWAS (PORTAL RESMI & PENDAFTARAN AKUN GURU)

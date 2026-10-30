@@ -42,9 +42,16 @@ export const QuestionRenderer: React.FC<QuestionRendererProps> = ({
                 onChange={() => onAnswerChange(letter)}
                 className="mt-1 mr-3 h-4 w-4 accent-violet-600"
               />
-              <div className="text-sm sm:text-base leading-relaxed">
+              <div className="text-sm sm:text-base leading-relaxed flex-1">
                 <span className="font-bold text-violet-600 dark:text-violet-400 mr-2">{letter}.</span>
                 <span>{opt.text}</span>
+                {opt.img && (
+                  <img
+                    src={opt.img}
+                    alt={`Gambar Opsi ${letter}`}
+                    className="max-h-48 rounded-xl mt-2 border border-slate-200 dark:border-slate-700 object-contain block"
+                  />
+                )}
               </div>
             </label>
           );
@@ -89,9 +96,16 @@ export const QuestionRenderer: React.FC<QuestionRendererProps> = ({
                 onChange={() => handleToggle(letter)}
                 className="mt-1 mr-3 h-4 w-4 accent-violet-600 rounded"
               />
-              <div className="text-sm sm:text-base leading-relaxed">
+              <div className="text-sm sm:text-base leading-relaxed flex-1">
                 <span className="font-bold text-violet-600 dark:text-violet-400 mr-2">{letter}.</span>
                 <span>{opt.text}</span>
+                {opt.img && (
+                  <img
+                    src={opt.img}
+                    alt={`Gambar Opsi ${letter}`}
+                    className="max-h-48 rounded-xl mt-2 border border-slate-200 dark:border-slate-700 object-contain block"
+                  />
+                )}
               </div>
             </label>
           );
@@ -138,7 +152,14 @@ export const QuestionRenderer: React.FC<QuestionRendererProps> = ({
                       {idx + 1}
                     </td>
                     <td className="py-3.5 px-4 leading-relaxed text-slate-800 dark:text-slate-200 align-top">
-                      {opt.text}
+                      <div>{opt.text}</div>
+                      {opt.img && (
+                        <img
+                          src={opt.img}
+                          alt={`Pernyataan ${idx + 1}`}
+                          className="max-h-36 rounded-xl mt-2 border border-slate-200 dark:border-slate-700 object-contain block"
+                        />
+                      )}
                     </td>
                     <td className="py-3.5 px-4 text-center align-middle">
                       <div className="flex items-center justify-center gap-2.5">
@@ -256,7 +277,7 @@ export const QuestionRenderer: React.FC<QuestionRendererProps> = ({
           {/* Kolom Kiri */}
           <div className="space-y-2">
             <h4 className="text-xs font-semibold text-violet-600 dark:text-violet-400 uppercase tracking-wider mb-2">Pernyataan</h4>
-            {leftItems.map((text, idx) => {
+            {pairs.map((pair, idx) => {
               const letter = String.fromCharCode(65 + idx);
               const isSelected = selectedLeft === idx;
               const paired = userPairs.find(p => p.questionItem === letter);
@@ -272,9 +293,14 @@ export const QuestionRenderer: React.FC<QuestionRendererProps> = ({
                       : 'bg-slate-50/70 dark:bg-slate-900/60 border-slate-200 dark:border-slate-800 hover:border-slate-300'
                   }`}
                 >
-                  <div className="flex items-center gap-2">
-                    <span className="font-bold text-violet-600 dark:text-violet-400">{letter}.</span>
-                    <span className="text-slate-800 dark:text-slate-200">{text}</span>
+                  <div className="flex flex-col gap-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-violet-600 dark:text-violet-400">{letter}.</span>
+                      <span className="text-slate-800 dark:text-slate-200">{pair.q?.text}</span>
+                    </div>
+                    {pair.q?.img && (
+                      <img src={pair.q.img} alt={`Pernyataan ${letter}`} className="max-h-24 rounded-lg mt-1 border border-slate-200 dark:border-slate-700 object-contain" />
+                    )}
                   </div>
                   {paired && (
                     <span className="text-xs px-2 py-0.5 rounded bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 font-medium truncate max-w-[120px]">
@@ -289,7 +315,8 @@ export const QuestionRenderer: React.FC<QuestionRendererProps> = ({
           {/* Kolom Kanan */}
           <div className="space-y-2">
             <h4 className="text-xs font-semibold text-violet-600 dark:text-violet-400 uppercase tracking-wider mb-2">Pasangan Jawaban</h4>
-            {rightItems.map((text, idx) => {
+            {pairs.map((pair, idx) => {
+              const text = pair.a?.text || '';
               return (
                 <div
                   key={idx}
@@ -304,7 +331,12 @@ export const QuestionRenderer: React.FC<QuestionRendererProps> = ({
                       : 'bg-slate-50/50 dark:bg-slate-900/30 border-slate-200 dark:border-slate-800/80 opacity-80'
                   }`}
                 >
-                  <span className="text-slate-800 dark:text-slate-200">{text}</span>
+                  <div className="flex flex-col gap-1">
+                    <span className="text-slate-800 dark:text-slate-200">{text}</span>
+                    {pair.a?.img && (
+                      <img src={pair.a.img} alt={`Pasangan ${text}`} className="max-h-24 rounded-lg mt-1 border border-slate-200 dark:border-slate-700 object-contain" />
+                    )}
+                  </div>
                   {selectedLeft !== null && (
                     <ArrowRightLeft className="w-4 h-4 text-violet-600 dark:text-violet-400 animate-pulse" />
                   )}

@@ -43,7 +43,10 @@ import {
   GraduationCap,
   SlidersHorizontal,
   ChevronRight,
-  School
+  School,
+  Image as ImageIcon,
+  Upload,
+  X
 } from 'lucide-react';
 
 interface TeacherDashboardProps {
@@ -144,32 +147,51 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   const [editSubScoringRules, setEditSubScoringRules] = useState<ScoringRules>({});
 
   // Form State untuk Tambah Soal
-  const [modalType, setModalType] = useState<QuestionType>('Benar/Salah');
+  const [modalType, setModalType] = useState<QuestionType>('Pilihan Ganda');
   const [modalText, setModalText] = useState('');
   const [modalMediaUrl, setModalMediaUrl] = useState('');
 
-  // State Benar/Salah
+  // State PG / PGK dengan dukungan Teks & Gambar per Opsi
+  const [pgOptions, setPgOptions] = useState<Array<{ text: string; img?: string }>>([
+    { text: '' },
+    { text: '' },
+    { text: '' },
+    { text: '' }
+  ]);
+  const [pgAnswer, setPgAnswer] = useState<string>('A');
+  const [pgkAnswer, setPgkAnswer] = useState<string[]>(['A']);
+
+  // State Benar/Salah dengan dukungan Teks & Gambar per Pernyataan
   const [bsMode, setBsMode] = useState<'multiple' | 'single'>('multiple');
-  const [bsStatements, setBsStatements] = useState<Array<{ text: string; answer: 'Benar' | 'Salah' }>>([
-    { text: 'Planet Venus merupakan planet terpanas di tata surya.', answer: 'Benar' },
-    { text: 'Bumi memiliki dua satelit alami permanen.', answer: 'Salah' },
-    { text: 'Bulan tidak memiliki atmosfer.', answer: 'Benar' }
+  const [bsStatements, setBsStatements] = useState<Array<{ text: string; img?: string; answer: 'Benar' | 'Salah' }>>([
+    { text: '', answer: 'Benar' },
+    { text: '', answer: 'Salah' },
+    { text: '', answer: 'Benar' }
   ]);
   const [bsSingleAnswer, setBsSingleAnswer] = useState<'Benar' | 'Salah'>('Benar');
 
-  // State PG / PGK
-  const [pgOptions, setPgOptions] = useState<string[]>([
-    'Venus',
-    'Merkurius',
-    'Mars',
-    'Jupiter'
+  // State Menjodohkan dengan dukungan Teks & Gambar
+  const [matchingPairs, setMatchingPairs] = useState<Array<{ qText: string; qImg?: string; aText: string; aImg?: string }>>([
+    { qText: '', aText: '' },
+    { qText: '', aText: '' },
+    { qText: '', aText: '' }
   ]);
-  const [pgAnswer, setPgAnswer] = useState<string>('A');
-  const [pgkAnswer, setPgkAnswer] = useState<string[]>(['A', 'C']);
 
   // State Isian / Esai
   const [shortAnswer, setShortAnswer] = useState('');
   const [essayKey, setEssayKey] = useState('');
+
+  // Helper konversi file gambar lokal ke Base64 Data URL
+  const handleFileToDataUrl = (file: File, callback: (url: string) => void) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      if (e.target?.result) {
+        callback(e.target.result as string);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
 
   // Live Filtering dari Search Bar
   const filteredResults = useMemo(() => {
@@ -441,11 +463,19 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
     setNewSubToken('SMP58' + Math.floor(100 + Math.random() * 900));
   };
 
-  // Konfirmasi Hapus Jadwal
+  // Konfirmasi Hapus Jadwal / Mapel
   const handleConfirmDeleteSchedule = () => {
     if (!subjectToDelete) return;
+    const deletedId = subjectToDelete.id;
     if (onDeleteSubject) {
-      onDeleteSubject(subjectToDelete.id);
+      onDeleteSubject(deletedId);
+    }
+    if (selectedBankSubjectId === deletedId) {
+      setBankView('catalog');
+      const remaining = accessibleSubjects.filter(s => s.id !== deletedId);
+      if (remaining.length > 0) {
+        setSelectedBankSubjectId(remaining[0].id);
+      }
     }
     setSubjectToDelete(null);
   };
@@ -459,25 +489,39 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
     let finalAnswer: any = null;
 
     if (modalType === 'Pilihan Ganda') {
-      finalOptions = pgOptions.map(t => ({ text: t }));
+      finalOptions = pgOptions
+        .filter(opt => opt.text.trim() || opt.img)
+        .map(opt => ({ text: opt.text.trim(), img: opt.img || undefined }));
       finalAnswer = pgAnswer;
     } else if (modalType === 'Pilihan Ganda Kompleks') {
-      finalOptions = pgOptions.map(t => ({ text: t }));
+      finalOptions = pgOptions
+        .filter(opt => opt.text.trim() || opt.img)
+        .map(opt => ({ text: opt.text.trim(), img: opt.img || undefined }));
       finalAnswer = pgkAnswer;
     } else if (modalType === 'Benar/Salah') {
       if (bsMode === 'multiple') {
-        finalOptions = bsStatements.map(s => ({ text: s.text }));
+        finalOptions = bsStatements
+          .filter(s => s.text.trim() || s.img)
+          .map(s => ({ text: s.text.trim(), img: s.img || undefined }));
         finalAnswer = bsStatements.map(s => s.answer);
       } else {
         finalOptions = [];
         finalAnswer = bsSingleAnswer;
       }
+    } else if (modalType === 'Menjodohkan') {
+      finalOptions = matchingPairs
+        .filter(p => p.qText.trim() || p.qImg || p.aText.trim() || p.aImg)
+        .map(p => ({
+          q: { text: p.qText.trim(), img: p.qImg || undefined },
+          a: { text: p.aText.trim(), img: p.aImg || undefined }
+        }));
+      finalAnswer = 'Otomatis';
     } else if (modalType === 'Isian Singkat') {
       finalOptions = [];
       finalAnswer = shortAnswer.split(/[;,]/).map(s => s.trim().toLowerCase()).filter(Boolean);
     } else if (modalType === 'Esai') {
       finalOptions = [];
-      finalAnswer = essayKey;
+      finalAnswer = essayKey.trim();
     }
 
     const targetSubId = selectedBankSubjectId || subject.id;
@@ -485,8 +529,8 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
       id: `q-${Date.now()}`,
       subjectId: targetSubId,
       type: modalType,
-      questionText: modalText,
-      mediaUrl: modalMediaUrl || undefined,
+      questionText: modalText.trim(),
+      mediaUrl: modalMediaUrl.trim() || undefined,
       options: finalOptions,
       answer: finalAnswer,
       orderIndex: bankSubjectQuestions.length + 1
@@ -496,6 +540,21 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
     onCloseAddModal();
     setModalText('');
     setModalMediaUrl('');
+    setPgOptions([{ text: '' }, { text: '' }, { text: '' }, { text: '' }]);
+    setPgAnswer('A');
+    setPgkAnswer(['A']);
+    setBsStatements([
+      { text: '', answer: 'Benar' },
+      { text: '', answer: 'Salah' },
+      { text: '', answer: 'Benar' }
+    ]);
+    setMatchingPairs([
+      { qText: '', aText: '' },
+      { qText: '', aText: '' },
+      { qText: '', aText: '' }
+    ]);
+    setShortAnswer('');
+    setEssayKey('');
   };
 
   // Real Metric Calculations
@@ -1141,20 +1200,34 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                           </div>
                         </div>
 
-                        {/* Footer Card: Kelola Button */}
+                        {/* Footer Card: Kelola Button & Hapus Button */}
                         <div className="pt-4 mt-2 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between">
                           <span className={`text-[11px] font-semibold flex items-center gap-1.5 ${subItem.isActive ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400'}`}>
                             <span className={`w-1.5 h-1.5 rounded-full ${subItem.isActive ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}`}></span>
                             {subItem.isActive ? 'Ujian Aktif' : 'Draft'}
                           </span>
 
-                          <button
-                            type="button"
-                            className="inline-flex items-center gap-1 text-xs font-bold text-violet-600 dark:text-violet-400 group-hover:translate-x-1 transition-transform"
-                          >
-                            <span>Kelola Butir Soal</span>
-                            <ChevronRight className="w-3.5 h-3.5" />
-                          </button>
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSubjectToDelete(subItem);
+                              }}
+                              className="p-1.5 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition cursor-pointer"
+                              title="Hapus Paket Mata Pelajaran Ini"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+
+                            <button
+                              type="button"
+                              className="inline-flex items-center gap-1 text-xs font-bold text-violet-600 dark:text-violet-400 group-hover:translate-x-1 transition-transform"
+                            >
+                              <span>Kelola Butir Soal</span>
+                              <ChevronRight className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
                         </div>
                       </div>
                     );
@@ -1191,13 +1264,24 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                   </div>
                 </div>
 
-                <button
-                  onClick={onOpenAddModal}
-                  className="flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-semibold text-xs shadow-md shadow-violet-600/20 transition cursor-pointer flex-shrink-0"
-                >
-                  <PlusCircle className="w-4 h-4" />
-                  <span>{t.addQuestionBtn}</span>
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setSubjectToDelete(currentBankSubject)}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 border border-rose-200 dark:border-rose-900/40 text-xs font-semibold transition cursor-pointer"
+                    title="Hapus Paket Mata Pelajaran Ini"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    <span className="hidden sm:inline">Hapus Mapel</span>
+                  </button>
+
+                  <button
+                    onClick={onOpenAddModal}
+                    className="flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-semibold text-xs shadow-md shadow-violet-600/20 transition cursor-pointer flex-shrink-0"
+                  >
+                    <PlusCircle className="w-4 h-4" />
+                    <span>{t.addQuestionBtn}</span>
+                  </button>
+                </div>
               </div>
 
               {/* Filter Tipe Soal */}
@@ -1278,6 +1362,17 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                           {q.questionText}
                         </p>
 
+                        {/* Stimulus / Media Gambar Soal */}
+                        {q.mediaUrl && (
+                          <div className="pt-1">
+                            <img
+                              src={q.mediaUrl}
+                              alt="Gambar Stimulus Soal"
+                              className="max-h-56 rounded-xl border border-slate-200 dark:border-slate-700 object-contain block bg-white dark:bg-slate-950 p-1"
+                            />
+                          </div>
+                        )}
+
                         {/* Pilihan Ganda & PG Kompleks */}
                         {(q.type === 'Pilihan Ganda' || q.type === 'Pilihan Ganda Kompleks') && Array.isArray(q.options) && (
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs pt-1">
@@ -1289,21 +1384,30 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                               return (
                                 <div
                                   key={oIdx}
-                                  className={`p-2.5 rounded-xl border flex items-center gap-2 ${
+                                  className={`p-2.5 rounded-xl border flex items-start gap-2 ${
                                     isKey
                                       ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-700 text-emerald-900 dark:text-emerald-200 font-medium'
                                       : 'bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300'
                                   }`}
                                 >
-                                  <span className={`w-5 h-5 rounded-md flex items-center justify-center font-bold text-xs ${
+                                  <span className={`w-5 h-5 rounded-md flex items-center justify-center font-bold text-xs flex-shrink-0 mt-0.5 ${
                                     isKey
                                       ? 'bg-emerald-600 text-white'
                                       : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
                                   }`}>
                                     {letter}
                                   </span>
-                                  <span className="flex-1">{opt.text}</span>
-                                  {isKey && <Check className="w-4 h-4 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />}
+                                  <div className="flex-1 space-y-1">
+                                    <span>{opt.text}</span>
+                                    {opt.img && (
+                                      <img
+                                        src={opt.img}
+                                        alt={`Gambar Opsi ${letter}`}
+                                        className="max-h-32 rounded-lg border border-slate-200 dark:border-slate-700 object-contain block bg-white dark:bg-slate-900 p-1 mt-1"
+                                      />
+                                    )}
+                                  </div>
+                                  {isKey && <Check className="w-4 h-4 text-emerald-600 dark:text-emerald-400 flex-shrink-0 mt-0.5" />}
                                 </div>
                               );
                             })}
@@ -1318,10 +1422,19 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                               return (
                                 <div
                                   key={oIdx}
-                                  className="flex items-center justify-between py-1.5 px-3 rounded-lg bg-slate-50 dark:bg-slate-800/60"
+                                  className="flex items-start justify-between py-1.5 px-3 rounded-lg bg-slate-50 dark:bg-slate-800/60 gap-2"
                                 >
-                                  <span className="text-slate-700 dark:text-slate-300">{oIdx + 1}. {opt.text}</span>
-                                  <span className={`font-bold ${ans === 'Benar' ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+                                  <div className="space-y-1 flex-1">
+                                    <span className="text-slate-700 dark:text-slate-300">{oIdx + 1}. {opt.text}</span>
+                                    {opt.img && (
+                                      <img
+                                        src={opt.img}
+                                        alt={`Gambar Pernyataan ${oIdx + 1}`}
+                                        className="max-h-24 rounded-lg border border-slate-200 dark:border-slate-700 object-contain block bg-white dark:bg-slate-900 p-1"
+                                      />
+                                    )}
+                                  </div>
+                                  <span className={`font-bold flex-shrink-0 ${ans === 'Benar' ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
                                     {ans}
                                   </span>
                                 </div>
@@ -1334,9 +1447,19 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                         {q.type === 'Menjodohkan' && Array.isArray(q.options) && (
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs pt-1">
                             {q.options.map((pair: any, pIdx: number) => (
-                              <div key={pIdx} className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 flex items-center justify-between">
-                                <span className="font-semibold text-slate-800 dark:text-slate-200">{pair.q?.text}</span>
-                                <span className="text-violet-600 dark:text-violet-400 font-bold">➔ {pair.a?.text}</span>
+                              <div key={pIdx} className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 flex items-center justify-between gap-2">
+                                <div className="space-y-1">
+                                  <span className="font-semibold text-slate-800 dark:text-slate-200">{pair.q?.text}</span>
+                                  {pair.q?.img && (
+                                    <img src={pair.q.img} alt="Gambar Kiri" className="max-h-20 rounded border object-contain block" />
+                                  )}
+                                </div>
+                                <div className="space-y-1 text-right">
+                                  <span className="text-violet-600 dark:text-violet-400 font-bold">➔ {pair.a?.text}</span>
+                                  {pair.a?.img && (
+                                    <img src={pair.a.img} alt="Gambar Kanan" className="max-h-20 rounded border object-contain block ml-auto" />
+                                  )}
+                                </div>
                               </div>
                             ))}
                           </div>
@@ -1626,16 +1749,14 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                       </button>
                     </div>
 
-                    {accessibleSubjects.length > 1 && (
-                      <button
-                        onClick={() => setSubjectToDelete(subItem)}
-                        className="flex items-center gap-1 px-3 py-1.5 rounded-xl text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 text-xs font-semibold transition cursor-pointer"
-                        title="Hapus Jadwal Ujian"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                        <span>Hapus Jadwal</span>
-                      </button>
-                    )}
+                    <button
+                      onClick={() => setSubjectToDelete(subItem)}
+                      className="flex items-center gap-1 px-3 py-1.5 rounded-xl text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 text-xs font-semibold transition cursor-pointer"
+                      title="Hapus Jadwal Ujian"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>Hapus Jadwal</span>
+                    </button>
                   </div>
                 </div>
               );
@@ -1727,33 +1848,55 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
       )}
 
       {/* ============================================================== */}
-      {/* 7. MODAL TAMBAH SOAL BARU (Benar/Salah Multi-Pernyataan)        */}
+      {/* 7. MODAL TAMBAH SOAL BARU                                       */}
       {/* ============================================================== */}
       {isAddModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6 space-y-5 shadow-2xl animate-in zoom-in-95">
-            <h3 className="text-lg font-bold text-slate-900 dark:text-white">{t.addQuestionTitle}</h3>
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-violet-100 dark:bg-violet-950/60 text-violet-600 dark:text-violet-400 flex items-center justify-center font-bold">
+                  <PlusCircle className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900 dark:text-white">{t.addQuestionTitle}</h3>
+                  <p className="text-xs text-slate-400">
+                    Paket: <strong className="text-slate-700 dark:text-slate-300">{formatSubjectTitle(currentBankSubject.title)}</strong> (ID: {selectedBankSubjectId || subject.id})
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={onCloseAddModal}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
 
-            <form onSubmit={handleSaveQuestion} className="space-y-4 text-xs">
+            <form onSubmit={handleSaveQuestion} className="space-y-4 text-xs font-medium">
+              {/* Tipe Soal Terurut Proporsional */}
               <div>
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
                   {t.questionTypeLabel}
                 </label>
                 <select
                   value={modalType}
                   onChange={e => setModalType(e.target.value as QuestionType)}
-                  className="w-full p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white font-medium"
+                  className="w-full p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white font-semibold cursor-pointer"
                 >
-                  <option value="Benar/Salah">Benar/Salah (Banyak Pernyataan & 1 Pernyataan)</option>
-                  <option value="Pilihan Ganda">Pilihan Ganda (Single Choice)</option>
-                  <option value="Pilihan Ganda Kompleks">Pilihan Ganda Kompleks (Multi Choice)</option>
-                  <option value="Isian Singkat">Isian Singkat</option>
-                  <option value="Esai">Esai</option>
+                  <option value="Pilihan Ganda">1. Pilihan Ganda (Single Choice)</option>
+                  <option value="Pilihan Ganda Kompleks">2. Pilihan Ganda Kompleks (Multi Choice)</option>
+                  <option value="Benar/Salah">3. Benar / Salah (Banyak Pernyataan & 1 Pernyataan)</option>
+                  <option value="Menjodohkan">4. Menjodohkan (Matching Pairs)</option>
+                  <option value="Isian Singkat">5. Isian Singkat</option>
+                  <option value="Esai">6. Esai (Uraian)</option>
                 </select>
               </div>
 
+              {/* Teks Soal / Stimulus */}
               <div>
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
                   {t.stimulusLabel}
                 </label>
                 <textarea
@@ -1762,11 +1905,288 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                   value={modalText}
                   onChange={e => setModalText(e.target.value)}
                   placeholder={t.stimulusPlaceholder}
-                  className="w-full p-3 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white"
+                  className="w-full p-3 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500/20"
                 />
               </div>
 
-              {/* KHUSUS BENAR / SALAH */}
+              {/* Fitur Tambah Gambar pada Soal */}
+              <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-700 dark:text-slate-300 font-semibold flex items-center gap-1.5">
+                    <ImageIcon className="w-3.5 h-3.5 text-violet-600" />
+                    <span>Gambar / Media Soal (Opsional)</span>
+                  </span>
+                  {modalMediaUrl && (
+                    <button
+                      type="button"
+                      onClick={() => setModalMediaUrl('')}
+                      className="text-rose-500 hover:text-rose-600 font-bold text-[11px] flex items-center gap-1 cursor-pointer"
+                    >
+                      <X className="w-3 h-3" />
+                      <span>Hapus Gambar</span>
+                    </button>
+                  )}
+                </div>
+
+                <div className="flex flex-col sm:flex-row items-center gap-2">
+                  <label className="flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200 font-semibold cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition text-xs flex-shrink-0">
+                    <Upload className="w-3.5 h-3.5 text-violet-600" />
+                    <span>Unggah Gambar dari Perangkat</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={e => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          handleFileToDataUrl(file, url => setModalMediaUrl(url));
+                        }
+                      }}
+                    />
+                  </label>
+
+                  <input
+                    type="text"
+                    value={modalMediaUrl}
+                    onChange={e => setModalMediaUrl(e.target.value)}
+                    placeholder="atau masukkan URL/Link gambar (https://...)"
+                    className="flex-1 w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs"
+                  />
+                </div>
+
+                {modalMediaUrl && (
+                  <div className="pt-2 border-t border-slate-200 dark:border-slate-700">
+                    <span className="text-[10px] text-slate-400 block mb-1">Pratinjau Gambar Soal:</span>
+                    <img
+                      src={modalMediaUrl}
+                      alt="Pratinjau Soal"
+                      className="max-h-40 rounded-xl border border-slate-200 dark:border-slate-700 object-contain bg-white dark:bg-slate-900 p-1"
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* 1. KHUSUS PILIHAN GANDA (SINGLE CHOICE) */}
+              {modalType === 'Pilihan Ganda' && (
+                <div className="space-y-3.5 p-4 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-violet-500/20">
+                  <div className="flex items-center justify-between">
+                    <label className="block text-slate-700 dark:text-slate-300 font-bold">
+                      Opsi Pilihan Jawaban (Pilih Kunci Radio di Kiri):
+                    </label>
+                    <span className="text-[11px] text-slate-400">Kunci Aktif: <strong>Opsi {pgAnswer}</strong></span>
+                  </div>
+
+                  <div className="space-y-3">
+                    {pgOptions.map((opt, idx) => {
+                      const letter = String.fromCharCode(65 + idx);
+                      const isKey = pgAnswer === letter;
+                      return (
+                        <div key={idx} className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 space-y-2">
+                          <div className="flex items-center gap-2.5">
+                            <input
+                              type="radio"
+                              name="pg-modal-key"
+                              checked={isKey}
+                              onChange={() => setPgAnswer(letter)}
+                              className="accent-violet-600 w-4 h-4 cursor-pointer"
+                              title={`Pilih Opsi ${letter} sebagai Kunci Jawaban`}
+                            />
+                            <span className="font-bold text-violet-600 dark:text-violet-400 text-xs w-5">{letter}.</span>
+
+                            <input
+                              type="text"
+                              value={opt.text}
+                              onChange={e => {
+                                const next = [...pgOptions];
+                                next[idx].text = e.target.value;
+                                setPgOptions(next);
+                              }}
+                              placeholder={`Tulis teks pilihan jawaban ${letter}...`}
+                              className="flex-1 px-3 py-1.5 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs"
+                            />
+
+                            <label className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-violet-100 hover:text-violet-600 text-slate-600 dark:text-slate-300 cursor-pointer transition flex items-center gap-1 text-[11px] font-semibold" title="Unggah Gambar untuk Opsi ini">
+                              <ImageIcon className="w-3.5 h-3.5 text-violet-600" />
+                              <span className="hidden sm:inline">Gambar</span>
+                              <input
+                                type="file"
+                                accept="image/*"
+                                className="hidden"
+                                onChange={e => {
+                                  const file = e.target.files?.[0];
+                                  if (file) {
+                                    handleFileToDataUrl(file, url => {
+                                      const next = [...pgOptions];
+                                      next[idx].img = url;
+                                      setPgOptions(next);
+                                    });
+                                  }
+                                }}
+                              />
+                            </label>
+
+                            {pgOptions.length > 2 && (
+                              <button
+                                type="button"
+                                onClick={() => setPgOptions(prev => prev.filter((_, i) => i !== idx))}
+                                className="text-rose-500 hover:text-rose-700 p-1 cursor-pointer"
+                                title="Hapus Opsi ini"
+                              >
+                                ✕
+                              </button>
+                            )}
+                          </div>
+
+                          {/* Thumbnail Gambar Opsi */}
+                          {opt.img && (
+                            <div className="flex items-center gap-2 pl-9 pt-1">
+                              <img
+                                src={opt.img}
+                                alt={`Gambar Opsi ${letter}`}
+                                className="max-h-20 rounded-lg border border-slate-200 dark:border-slate-700 object-contain bg-slate-50 dark:bg-slate-800 p-1"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const next = [...pgOptions];
+                                  next[idx].img = undefined;
+                                  setPgOptions(next);
+                                }}
+                                className="text-rose-500 hover:text-rose-600 text-[10px] font-bold p-1"
+                              >
+                                ✕ Hapus
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setPgOptions(prev => [...prev, { text: '' }])}
+                    className="text-xs text-violet-600 dark:text-violet-400 font-bold hover:underline cursor-pointer flex items-center gap-1 pt-1"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Tambah Opsi Pilihan ({String.fromCharCode(65 + pgOptions.length)})</span>
+                  </button>
+                </div>
+              )}
+
+              {/* 2. KHUSUS PILIHAN GANDA KOMPLEKS (MULTI CHOICE) */}
+              {modalType === 'Pilihan Ganda Kompleks' && (
+                <div className="space-y-3.5 p-4 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-violet-500/20">
+                  <div className="flex items-center justify-between">
+                    <label className="block text-slate-700 dark:text-slate-300 font-bold">
+                      Centang Opsi yang Menjadi Kunci Jawaban (&gt; 1):
+                    </label>
+                    <span className="text-[11px] text-slate-400">Kunci: <strong>{pgkAnswer.join(', ') || '-'}</strong></span>
+                  </div>
+
+                  <div className="space-y-3">
+                    {pgOptions.map((opt, idx) => {
+                      const letter = String.fromCharCode(65 + idx);
+                      const isChecked = pgkAnswer.includes(letter);
+                      return (
+                        <div key={idx} className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 space-y-2">
+                          <div className="flex items-center gap-2.5">
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={() => {
+                                if (isChecked) {
+                                  setPgkAnswer(prev => prev.filter(l => l !== letter));
+                                } else {
+                                  setPgkAnswer(prev => [...prev, letter]);
+                                }
+                              }}
+                              className="accent-violet-600 w-4 h-4 rounded cursor-pointer"
+                              title={`Centang jika Opsi ${letter} merupakan jawaban benar`}
+                            />
+                            <span className="font-bold text-violet-600 dark:text-violet-400 text-xs w-5">{letter}.</span>
+
+                            <input
+                              type="text"
+                              value={opt.text}
+                              onChange={e => {
+                                const next = [...pgOptions];
+                                next[idx].text = e.target.value;
+                                setPgOptions(next);
+                              }}
+                              placeholder={`Tulis teks pilihan jawaban ${letter}...`}
+                              className="flex-1 px-3 py-1.5 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs"
+                            />
+
+                            <label className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-violet-100 hover:text-violet-600 text-slate-600 dark:text-slate-300 cursor-pointer transition flex items-center gap-1 text-[11px] font-semibold" title="Unggah Gambar untuk Opsi ini">
+                              <ImageIcon className="w-3.5 h-3.5 text-violet-600" />
+                              <span className="hidden sm:inline">Gambar</span>
+                              <input
+                                type="file"
+                                accept="image/*"
+                                className="hidden"
+                                onChange={e => {
+                                  const file = e.target.files?.[0];
+                                  if (file) {
+                                    handleFileToDataUrl(file, url => {
+                                      const next = [...pgOptions];
+                                      next[idx].img = url;
+                                      setPgOptions(next);
+                                    });
+                                  }
+                                }}
+                              />
+                            </label>
+
+                            {pgOptions.length > 2 && (
+                              <button
+                                type="button"
+                                onClick={() => setPgOptions(prev => prev.filter((_, i) => i !== idx))}
+                                className="text-rose-500 hover:text-rose-700 p-1 cursor-pointer"
+                              >
+                                ✕
+                              </button>
+                            )}
+                          </div>
+
+                          {/* Thumbnail Gambar Opsi */}
+                          {opt.img && (
+                            <div className="flex items-center gap-2 pl-9 pt-1">
+                              <img
+                                src={opt.img}
+                                alt={`Gambar Opsi ${letter}`}
+                                className="max-h-20 rounded-lg border border-slate-200 dark:border-slate-700 object-contain bg-slate-50 dark:bg-slate-800 p-1"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const next = [...pgOptions];
+                                  next[idx].img = undefined;
+                                  setPgOptions(next);
+                                }}
+                                className="text-rose-500 hover:text-rose-600 text-[10px] font-bold p-1"
+                              >
+                                ✕ Hapus
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setPgOptions(prev => [...prev, { text: '' }])}
+                    className="text-xs text-violet-600 dark:text-violet-400 font-bold hover:underline cursor-pointer flex items-center gap-1 pt-1"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Tambah Opsi Pilihan ({String.fromCharCode(65 + pgOptions.length)})</span>
+                  </button>
+                </div>
+              )}
+
+              {/* 3. KHUSUS BENAR / SALAH */}
               {modalType === 'Benar/Salah' && (
                 <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-violet-500/30 space-y-4">
                   <div className="flex gap-4">
@@ -1777,7 +2197,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                         onChange={() => setBsMode('multiple')}
                         className="accent-violet-600"
                       />
-                      <span>{t.bsModeMultiple}</span>
+                      <span>Banyak Pernyataan (&gt; 1 Jawaban)</span>
                     </label>
                     <label className="flex items-center gap-2 cursor-pointer font-medium text-slate-800 dark:text-slate-200">
                       <input
@@ -1786,69 +2206,116 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                         onChange={() => setBsMode('single')}
                         className="accent-violet-600"
                       />
-                      <span>{t.bsModeSingle}</span>
+                      <span>1 Pernyataan Saja</span>
                     </label>
                   </div>
 
                   {bsMode === 'multiple' ? (
                     <div className="space-y-3">
                       <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                        Tiap pernyataan memiliki pilihan Benar / Salah masing-masing:
+                        Tiap baris pernyataan memiliki kunci Benar / Salah dan gambar masing-masing:
                       </p>
                       {bsStatements.map((stmt, sIdx) => (
-                        <div key={sIdx} className="flex items-center gap-2 bg-white dark:bg-slate-900 p-2.5 rounded-xl border border-slate-200 dark:border-slate-700">
-                          <span className="font-bold text-violet-600">{sIdx + 1}.</span>
-                          <input
-                            type="text"
-                            value={stmt.text}
-                            onChange={e => {
-                              const newArr = [...bsStatements];
-                              newArr[sIdx].text = e.target.value;
-                              setBsStatements(newArr);
-                            }}
-                            className="flex-1 bg-transparent border-none text-xs text-slate-900 dark:text-white focus:outline-none"
-                            placeholder={`Tulis pernyataan #${sIdx + 1}`}
-                          />
-                          <select
-                            value={stmt.answer}
-                            onChange={e => {
-                              const newArr = [...bsStatements];
-                              newArr[sIdx].answer = e.target.value as 'Benar' | 'Salah';
-                              setBsStatements(newArr);
-                            }}
-                            className="p-1 rounded-lg bg-slate-100 dark:bg-slate-800 font-bold text-xs"
-                          >
-                            <option value="Benar">Benar</option>
-                            <option value="Salah">Salah</option>
-                          </select>
-                          {bsStatements.length > 1 && (
-                            <button
-                              type="button"
-                              onClick={() => setBsStatements(prev => prev.filter((_, idx) => idx !== sIdx))}
-                              className="text-rose-500 hover:text-rose-700 px-1"
+                        <div key={sIdx} className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 space-y-2">
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-violet-600">{sIdx + 1}.</span>
+                            <input
+                              type="text"
+                              value={stmt.text}
+                              onChange={e => {
+                                const newArr = [...bsStatements];
+                                newArr[sIdx].text = e.target.value;
+                                setBsStatements(newArr);
+                              }}
+                              className="flex-1 px-3 py-1.5 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs"
+                              placeholder={`Tulis pernyataan #${sIdx + 1}`}
+                            />
+
+                            <label className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-violet-100 hover:text-violet-600 text-slate-600 dark:text-slate-300 cursor-pointer transition flex items-center gap-1 text-[11px] font-semibold" title="Unggah Gambar Pernyataan">
+                              <ImageIcon className="w-3.5 h-3.5 text-violet-600" />
+                              <span className="hidden sm:inline">Gambar</span>
+                              <input
+                                type="file"
+                                accept="image/*"
+                                className="hidden"
+                                onChange={e => {
+                                  const file = e.target.files?.[0];
+                                  if (file) {
+                                    handleFileToDataUrl(file, url => {
+                                      const next = [...bsStatements];
+                                      next[sIdx].img = url;
+                                      setBsStatements(next);
+                                    });
+                                  }
+                                }}
+                              />
+                            </label>
+
+                            <select
+                              value={stmt.answer}
+                              onChange={e => {
+                                const newArr = [...bsStatements];
+                                newArr[sIdx].answer = e.target.value as 'Benar' | 'Salah';
+                                setBsStatements(newArr);
+                              }}
+                              className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 font-bold text-xs"
                             >
-                              ✕
-                            </button>
+                              <option value="Benar">Benar</option>
+                              <option value="Salah">Salah</option>
+                            </select>
+
+                            {bsStatements.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={() => setBsStatements(prev => prev.filter((_, idx) => idx !== sIdx))}
+                                className="text-rose-500 hover:text-rose-700 px-1 cursor-pointer"
+                              >
+                                ✕
+                              </button>
+                            )}
+                          </div>
+
+                          {stmt.img && (
+                            <div className="flex items-center gap-2 pl-6 pt-1">
+                              <img
+                                src={stmt.img}
+                                alt={`Pernyataan #${sIdx + 1}`}
+                                className="max-h-20 rounded-lg border border-slate-200 dark:border-slate-700 object-contain bg-slate-50 dark:bg-slate-800 p-1"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const next = [...bsStatements];
+                                  next[sIdx].img = undefined;
+                                  setBsStatements(next);
+                                }}
+                                className="text-rose-500 hover:text-rose-600 text-[10px] font-bold p-1"
+                              >
+                                ✕ Hapus
+                              </button>
+                            </div>
                           )}
                         </div>
                       ))}
+
                       <button
                         type="button"
                         onClick={() => setBsStatements(prev => [...prev, { text: '', answer: 'Benar' }])}
-                        className="text-xs text-violet-600 dark:text-violet-400 font-bold hover:underline"
+                        className="text-xs text-violet-600 dark:text-violet-400 font-bold hover:underline cursor-pointer flex items-center gap-1"
                       >
-                        {t.addStatementBtn}
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>Tambah Pernyataan Baru</span>
                       </button>
                     </div>
                   ) : (
                     <div>
                       <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1">
-                        {t.singleAnswerKey}
+                        Kunci Jawaban Tunggal:
                       </label>
                       <select
                         value={bsSingleAnswer}
                         onChange={e => setBsSingleAnswer(e.target.value as 'Benar' | 'Salah')}
-                        className="p-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 font-bold"
+                        className="p-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 font-bold cursor-pointer"
                       >
                         <option value="Benar">Benar</option>
                         <option value="Salah">Salah</option>
@@ -1858,112 +2325,176 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                 </div>
               )}
 
-              {/* KHUSUS PILIHAN GANDA */}
-              {modalType === 'Pilihan Ganda' && (
-                <div className="space-y-3">
-                  <label className="block text-slate-700 dark:text-slate-300 font-semibold">Opsi Pilihan Jawaban</label>
-                  {pgOptions.map((opt, idx) => (
-                    <div key={idx} className="flex items-center gap-2">
-                      <span className="w-6 font-bold text-center text-slate-500">
-                        {String.fromCharCode(65 + idx)}
-                      </span>
-                      <input
-                        type="text"
-                        value={opt}
-                        onChange={e => {
-                          const updated = [...pgOptions];
-                          updated[idx] = e.target.value;
-                          setPgOptions(updated);
-                        }}
-                        className="flex-1 p-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white"
-                      />
-                    </div>
-                  ))}
-                  <div className="pt-2">
-                    <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1">Kunci Jawaban</label>
-                    <select
-                      value={pgAnswer}
-                      onChange={e => setPgAnswer(e.target.value)}
-                      className="p-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 font-bold text-violet-600"
-                    >
-                      {pgOptions.map((_, idx) => (
-                        <option key={idx} value={String.fromCharCode(65 + idx)}>
-                          Opsi {String.fromCharCode(65 + idx)}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-              )}
-
-              {/* KHUSUS PILIHAN GANDA KOMPLEKS */}
-              {modalType === 'Pilihan Ganda Kompleks' && (
-                <div className="space-y-3">
-                  <label className="block text-slate-700 dark:text-slate-300 font-semibold">
-                    Centang Opsi yang Menjadi Kunci Jawaban (&gt; 1):
+              {/* 4. KHUSUS MENJODOHKAN */}
+              {modalType === 'Menjodohkan' && (
+                <div className="space-y-3.5 p-4 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-violet-500/20">
+                  <label className="block text-slate-700 dark:text-slate-300 font-bold">
+                    Pasangan Menjodohkan (Kiri: Pertanyaan/Pernyataan ➔ Kanan: Jawaban Tepat):
                   </label>
-                  {pgOptions.map((opt, idx) => {
-                    const letter = String.fromCharCode(65 + idx);
-                    const isChecked = pgkAnswer.includes(letter);
-                    return (
-                      <div key={idx} className="flex items-center gap-2">
-                        <input
-                          type="checkbox"
-                          checked={isChecked}
-                          onChange={() => {
-                            if (isChecked) {
-                              setPgkAnswer(prev => prev.filter(l => l !== letter));
-                            } else {
-                              setPgkAnswer(prev => [...prev, letter]);
-                            }
-                          }}
-                          className="accent-violet-600 w-4 h-4 rounded cursor-pointer"
-                        />
-                        <span className="w-5 font-bold text-slate-500">{letter}</span>
-                        <input
-                          type="text"
-                          value={opt}
-                          onChange={e => {
-                            const updated = [...pgOptions];
-                            updated[idx] = e.target.value;
-                            setPgOptions(updated);
-                          }}
-                          className="flex-1 p-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white"
-                        />
+
+                  <div className="space-y-3">
+                    {matchingPairs.map((pair, pIdx) => (
+                      <div key={pIdx} className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 space-y-2">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 items-center">
+                          {/* Sisi Kiri */}
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-bold text-violet-600 text-xs">{pIdx + 1}A.</span>
+                              <input
+                                type="text"
+                                value={pair.qText}
+                                onChange={e => {
+                                  const next = [...matchingPairs];
+                                  next[pIdx].qText = e.target.value;
+                                  setMatchingPairs(next);
+                                }}
+                                placeholder="Pernyataan/Soal Kiri..."
+                                className="flex-1 px-3 py-1.5 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-white"
+                              />
+                              <label className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-violet-100 text-slate-600 cursor-pointer" title="Unggah Gambar Kiri">
+                                <ImageIcon className="w-3.5 h-3.5 text-violet-600" />
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  className="hidden"
+                                  onChange={e => {
+                                    const file = e.target.files?.[0];
+                                    if (file) {
+                                      handleFileToDataUrl(file, url => {
+                                        const next = [...matchingPairs];
+                                        next[pIdx].qImg = url;
+                                        setMatchingPairs(next);
+                                      });
+                                    }
+                                  }}
+                                />
+                              </label>
+                            </div>
+                            {pair.qImg && (
+                              <div className="flex items-center gap-1 pl-6">
+                                <img src={pair.qImg} alt="Kiri" className="max-h-16 rounded border object-contain" />
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const next = [...matchingPairs];
+                                    next[pIdx].qImg = undefined;
+                                    setMatchingPairs(next);
+                                  }}
+                                  className="text-rose-500 text-[10px] font-bold"
+                                >
+                                  ✕
+                                </button>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Sisi Kanan */}
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-bold text-emerald-600 text-xs">➔</span>
+                              <input
+                                type="text"
+                                value={pair.aText}
+                                onChange={e => {
+                                  const next = [...matchingPairs];
+                                  next[pIdx].aText = e.target.value;
+                                  setMatchingPairs(next);
+                                }}
+                                placeholder="Pasangan Jawaban Kanan..."
+                                className="flex-1 px-3 py-1.5 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-white"
+                              />
+                              <label className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-violet-100 text-slate-600 cursor-pointer" title="Unggah Gambar Kanan">
+                                <ImageIcon className="w-3.5 h-3.5 text-emerald-600" />
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  className="hidden"
+                                  onChange={e => {
+                                    const file = e.target.files?.[0];
+                                    if (file) {
+                                      handleFileToDataUrl(file, url => {
+                                        const next = [...matchingPairs];
+                                        next[pIdx].aImg = url;
+                                        setMatchingPairs(next);
+                                      });
+                                    }
+                                  }}
+                                />
+                              </label>
+                              {matchingPairs.length > 2 && (
+                                <button
+                                  type="button"
+                                  onClick={() => setMatchingPairs(prev => prev.filter((_, i) => i !== pIdx))}
+                                  className="text-rose-500 hover:text-rose-700 p-1 cursor-pointer"
+                                >
+                                  ✕
+                                </button>
+                              )}
+                            </div>
+                            {pair.aImg && (
+                              <div className="flex items-center gap-1 pl-4">
+                                <img src={pair.aImg} alt="Kanan" className="max-h-16 rounded border object-contain" />
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const next = [...matchingPairs];
+                                    next[pIdx].aImg = undefined;
+                                    setMatchingPairs(next);
+                                  }}
+                                  className="text-rose-500 text-[10px] font-bold"
+                                >
+                                  ✕
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        </div>
                       </div>
-                    );
-                  })}
+                    ))}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setMatchingPairs(prev => [...prev, { qText: '', aText: '' }])}
+                    className="text-xs text-violet-600 dark:text-violet-400 font-bold hover:underline cursor-pointer flex items-center gap-1"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Tambah Pasangan Menjodohkan</span>
+                  </button>
                 </div>
               )}
 
-              {/* KHUSUS ISIAN SINGKAT */}
+              {/* 5. KHUSUS ISIAN SINGKAT */}
               {modalType === 'Isian Singkat' && (
-                <div>
+                <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-violet-500/20 space-y-2">
                   <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1">
-                    Kunci Jawaban (Pisahkan dengan tanda koma jika ada alternatif ejaan)
+                    Kunci Jawaban Singkat (Pisahkan dengan tanda koma untuk variasi jawaban)
                   </label>
                   <input
                     type="text"
                     value={shortAnswer}
                     onChange={e => setShortAnswer(e.target.value)}
                     placeholder="Contoh: karbondioksida, co2, karbon dioksida"
-                    className="w-full p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white"
+                    className="w-full p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white"
                   />
+                  <p className="text-[11px] text-slate-400">
+                    Siswa dianggap benar jika jawabannya cocok dengan salah satu kata kunci di atas (tidak sensitif huruf besar/kecil).
+                  </p>
                 </div>
               )}
 
-              {/* KHUSUS ESAI */}
+              {/* 6. KHUSUS ESAI */}
               {modalType === 'Esai' && (
-                <div>
+                <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-violet-500/20 space-y-2">
                   <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1">
                     Pedoman / Rubrik Penilaian Guru
                   </label>
                   <textarea
-                    rows={2}
+                    rows={3}
                     value={essayKey}
                     onChange={e => setEssayKey(e.target.value)}
-                    placeholder="Tulis kata kunci utama yang wajib muncul dalam jawaban siswa..."
-                    className="w-full p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white"
+                    placeholder="Tuliskan kata kunci utama dan poin penting yang harus ada dalam jawaban siswa..."
+                    className="w-full p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white"
                   />
                 </div>
               )}
@@ -1972,13 +2503,13 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                 <button
                   type="button"
                   onClick={onCloseAddModal}
-                  className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold"
+                  className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold cursor-pointer"
                 >
                   {t.cancel}
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-semibold transition"
+                  className="px-5 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-semibold transition cursor-pointer shadow-md shadow-violet-600/20"
                 >
                   {t.saveQuestionBtn}
                 </button>

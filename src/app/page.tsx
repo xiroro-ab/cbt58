@@ -142,7 +142,7 @@ export default function Home() {
   const { theme, toggleTheme } = useTheme();
   const { language, toggleLanguage, t } = useLanguage();
 
-  // Sesi 30 Guru & Pengawas CBT (Diinisialisasi instan dari cache lokal agar tidak ada jeda login)
+  // Sesi Dewan Guru & Pengawas CBT Resmi (Diinisialisasi dari cache lokal / initialTeachers tanpa placeholder)
   const [teachers, setTeachers] = useState<Teacher[]>(() => {
     if (typeof window !== 'undefined') {
       try {
@@ -150,7 +150,8 @@ export default function Home() {
         if (cached) {
           const parsed = JSON.parse(cached);
           if (Array.isArray(parsed) && parsed.length > 0) {
-            return mergeTeachers(parsed, initialTeachers);
+            const cleaned = parsed.filter(t => !t.id?.match(/^tea-\d{2}$/) && t.id !== '__cbt_school_settings__');
+            if (cleaned.length > 0) return cleaned;
           }
         }
       } catch (e) {
@@ -318,15 +319,16 @@ export default function Home() {
     async function loadData() {
       setIsLoading(true);
       try {
-        // Ambil data guru dari Supabase & deteksi sesi aktif
+        // Ambil data guru resmi dari Supabase & deteksi sesi aktif
         const tList = await fetchTeachers();
         let loadedTeachers = initialTeachers;
         if (tList && tList.length > 0) {
-          loadedTeachers = tList;
-          setTeachers(tList);
+          const cleaned = tList.filter(t => !t.id?.match(/^tea-\d{2}$/) && t.id !== '__cbt_school_settings__');
+          loadedTeachers = cleaned.length > 0 ? cleaned : initialTeachers;
+          setTeachers(loadedTeachers);
           if (typeof window !== 'undefined') {
             try {
-              localStorage.setItem('cbt_cached_teachers', JSON.stringify(tList));
+              localStorage.setItem('cbt_cached_teachers', JSON.stringify(loadedTeachers));
             } catch (e) {}
           }
         }
@@ -1274,6 +1276,19 @@ export default function Home() {
     return subjects.filter(s => isSubjectBelongToTeacher(s, currentTeacher, teacherCreatedSubjectIds)).length;
   }, [subjects, currentTeacher, teacherCreatedSubjectIds]);
 
+  // Hitung jumlah butir soal riil yang berhak diakses guru / pengawas
+  const teacherQuestionsCount = useMemo(() => {
+    if (!currentTeacher || currentTeacher.role === 'admin' || currentTeacher.role === 'pengawas') {
+      return questions.length;
+    }
+    const mySubjectIds = new Set(
+      subjects
+        .filter(s => isSubjectBelongToTeacher(s, currentTeacher, teacherCreatedSubjectIds))
+        .map(s => s.id)
+    );
+    return questions.filter(q => q.subjectId && mySubjectIds.has(q.subjectId)).length;
+  }, [questions, subjects, currentTeacher, teacherCreatedSubjectIds]);
+
   // =========================================================================
   // VIEW 0: LAYAR LOGIN GURU & PENGAWAS (PORTAL RESMI & PENDAFTARAN AKUN GURU)
   // =========================================================================
@@ -1721,7 +1736,7 @@ export default function Home() {
         currentNav={currentNav}
         onSelectNav={setCurrentNav}
         examsCount={teacherExamsCount}
-        questionsCount={questions.length}
+        questionsCount={teacherQuestionsCount}
         studentsCount={students.length}
         resultsCount={results.length}
         searchQuery={searchQuery}

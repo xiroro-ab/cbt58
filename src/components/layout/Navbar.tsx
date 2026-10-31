@@ -119,17 +119,9 @@ export const Navbar: React.FC<NavbarProps> = ({
     setTimeout(() => setBroadcastSentStatus(false), 2500);
   };
 
-  // 30 Guru Roster Data SMPN 58 Palembang
-  const teachersList = [
-    { name: 'Ahmad Fauzi, S.Pd', subject: 'Ilmu Pengetahuan Alam (IPA)', status: 'Aktif Mengawas' },
-    { name: 'Siti Rahmawati, M.Pd', subject: 'Matematika', status: 'Aktif Mengawas' },
-    { name: 'Budi Santoso, S.Kom', subject: 'Informatika & TIK', status: 'Standby' },
-    { name: 'Dra. Endang Susanti', subject: 'Bahasa Indonesia', status: 'Aktif Mengawas' },
-    { name: 'Muhammad Rizki, S.Pd', subject: 'Bahasa Inggris', status: 'Standby' },
-    { name: 'Hj. Nuraini, M.Pd', subject: 'Pendidikan Agama Islam', status: 'Standby' },
-    { name: 'Hendra Wijaya, S.Pd', subject: 'Ilmu Pengetahuan Sosial (IPS)', status: 'Aktif Mengawas' },
-    { name: 'Dewi Lestari, S.Pd', subject: 'Pendidikan Pancasila (PPKn)', status: 'Standby' }
-  ];
+  const realTeachers = (teachers || []).filter(
+    tea => tea.id !== '__cbt_school_settings__' && !tea.id?.match(/^tea-\d{2}$/)
+  );
 
   return (
     <header className="sticky top-0 z-20 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b border-slate-200/80 dark:border-slate-800/80 px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between transition-colors gap-2 print:hidden">
@@ -637,10 +629,10 @@ export const Navbar: React.FC<NavbarProps> = ({
               {/* Direktori Informasi Guru & Pengawas */}
               <div className="space-y-1.5 pt-1">
                 <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
-                  Direktori Pengawas & Guru SMPN 58 ({teachers.length})
+                  Direktori Dewan Guru & Pengawas ({realTeachers.length})
                 </span>
                 <div className="space-y-2 max-h-[35vh] overflow-y-auto pr-1">
-                  {teachers.map((tea) => (
+                  {realTeachers.map((tea) => (
                     <div
                       key={tea.id}
                       className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 flex items-center justify-between gap-3 text-xs"

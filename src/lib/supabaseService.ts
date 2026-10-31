@@ -144,7 +144,7 @@ export async function fetchQuestionsBySubject(subjectId: string): Promise<Questi
                 .eq('subject_id', subjectId)
                 .order('order_index', { ascending: true });
 
-              if (!error && data && data.length > 0) {
+              if (!error && data) {
                 const parsed: Question[] = data.map(row => ({
                   id: row.id,
                   subjectId: row.subject_id,
@@ -156,7 +156,11 @@ export async function fetchQuestionsBySubject(subjectId: string): Promise<Questi
                   orderIndex: row.order_index
                 }));
                 try {
-                  localStorage.setItem(`cbt_questions_${subjectId}`, JSON.stringify(parsed));
+                  if (parsed.length === 0) {
+                    localStorage.removeItem(`cbt_questions_${subjectId}`);
+                  } else {
+                    localStorage.setItem(`cbt_questions_${subjectId}`, JSON.stringify(parsed));
+                  }
                 } catch {}
               }
             } catch {}
@@ -175,7 +179,7 @@ export async function fetchQuestionsBySubject(subjectId: string): Promise<Questi
       .eq('subject_id', subjectId)
       .order('order_index', { ascending: true });
 
-    if (!error && data && data.length > 0) {
+    if (!error && data) {
       const parsed: Question[] = data.map(row => ({
         id: row.id,
         subjectId: row.subject_id,
@@ -188,7 +192,11 @@ export async function fetchQuestionsBySubject(subjectId: string): Promise<Questi
       }));
       if (typeof window !== 'undefined') {
         try {
-          localStorage.setItem(`cbt_questions_${subjectId}`, JSON.stringify(parsed));
+          if (parsed.length === 0) {
+            localStorage.removeItem(`cbt_questions_${subjectId}`);
+          } else {
+            localStorage.setItem(`cbt_questions_${subjectId}`, JSON.stringify(parsed));
+          }
         } catch {}
       }
       return parsed;
@@ -237,7 +245,7 @@ export async function fetchAllQuestions(): Promise<Question[]> {
       .select('*')
       .order('order_index', { ascending: true });
 
-    if (!error && data && data.length > 0) {
+    if (!error && data) {
       const parsed: Question[] = data.map(row => ({
         id: row.id,
         subjectId: row.subject_id,
@@ -250,18 +258,38 @@ export async function fetchAllQuestions(): Promise<Question[]> {
       }));
 
       if (typeof window !== 'undefined') {
-        const bySubject: Record<string, Question[]> = {};
-        parsed.forEach(q => {
-          if (q.subjectId) {
-            if (!bySubject[q.subjectId]) bySubject[q.subjectId] = [];
-            bySubject[q.subjectId].push(q);
+        if (parsed.length === 0) {
+          // Bersihkan seluruh cache soal lokal jika database Supabase kosong
+          const keysToRemove: string[] = [];
+          for (let i = 0; i < localStorage.length; i++) {
+            const k = localStorage.key(i);
+            if (k && k.startsWith('cbt_questions_')) keysToRemove.push(k);
           }
-        });
-        Object.entries(bySubject).forEach(([sId, qList]) => {
-          try {
-            localStorage.setItem('cbt_questions_' + sId, JSON.stringify(qList));
-          } catch {}
-        });
+          keysToRemove.forEach(k => localStorage.removeItem(k));
+        } else {
+          const bySubject: Record<string, Question[]> = {};
+          parsed.forEach(q => {
+            if (q.subjectId) {
+              if (!bySubject[q.subjectId]) bySubject[q.subjectId] = [];
+              bySubject[q.subjectId].push(q);
+            }
+          });
+          const validKeys = new Set(Object.keys(bySubject).map(sId => 'cbt_questions_' + sId));
+          const keysToRemove: string[] = [];
+          for (let i = 0; i < localStorage.length; i++) {
+            const k = localStorage.key(i);
+            if (k && k.startsWith('cbt_questions_') && !validKeys.has(k)) {
+              keysToRemove.push(k);
+            }
+          }
+          keysToRemove.forEach(k => localStorage.removeItem(k));
+
+          Object.entries(bySubject).forEach(([sId, qList]) => {
+            try {
+              localStorage.setItem('cbt_questions_' + sId, JSON.stringify(qList));
+            } catch {}
+          });
+        }
       }
 
       return parsed;
@@ -1743,7 +1771,7 @@ export function mergeTeachers(supabaseTeachers: Teacher[], fallbackTeachers: Tea
 }
 
 /**
- * Mengambil daftar 30 Guru & Pengawas dari Supabase (fallback ke initialTeachers)
+ * Mengambil daftar Akun Guru & Pengawas Resmi dari Supabase (fallback ke initialTeachers)
  */
 export async function fetchTeachers(): Promise<Teacher[]> {
   try {
@@ -1753,28 +1781,34 @@ export async function fetchTeachers(): Promise<Teacher[]> {
       .neq('id', '__cbt_school_settings__')
       .order('name', { ascending: true });
 
-    if (error || !data || data.length === 0) {
-      return initialTeachers;
+    if (!error && data && data.length > 0) {
+      const supabaseTeachers: Teacher[] = data
+        .filter(t => t.id !== '__cbt_school_settings__' && t.nip !== 'CFG-SCHOOL-SETTINGS' && !t.id?.match(/^tea-\d{2}$/))
+        .map(t => ({
+          id: t.id,
+          nip: t.nip,
+          name: t.name,
+          email: t.email,
+          subject: t.subject,
+          classes: t.classes || [],
+          assignments: t.assignments || [],
+          role: t.role || 'guru_mapel',
+          pin: t.pin || '123456',
+          avatarColor: t.avatar_color || 'bg-violet-600',
+          status: t.status || 'Standby',
+          lastLogin: t.last_login
+        }));
+
+      if (typeof window !== 'undefined') {
+        try {
+          localStorage.setItem('cbt_cached_teachers', JSON.stringify(supabaseTeachers));
+        } catch {}
+      }
+
+      return supabaseTeachers;
     }
 
-    const supabaseTeachers: Teacher[] = data
-      .filter(t => t.id !== '__cbt_school_settings__' && t.nip !== 'CFG-SCHOOL-SETTINGS')
-      .map(t => ({
-      id: t.id,
-      nip: t.nip,
-      name: t.name,
-      email: t.email,
-      subject: t.subject,
-      classes: t.classes || [],
-      assignments: t.assignments || [],
-      role: t.role || 'guru_mapel',
-      pin: t.pin || '123456',
-      avatarColor: t.avatar_color || 'bg-violet-600',
-      status: t.status || 'Standby',
-      lastLogin: t.last_login
-    }));
-
-    return mergeTeachers(supabaseTeachers, initialTeachers);
+    return initialTeachers;
   } catch (err) {
     console.warn('Error fetchTeachers from Supabase, using initialTeachers:', err);
     return initialTeachers;

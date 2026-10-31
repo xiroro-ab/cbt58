@@ -186,7 +186,8 @@ export const TeacherLogin: React.FC<TeacherLoginProps> = ({
           if (cached) {
             const parsed = JSON.parse(cached);
             if (Array.isArray(parsed) && parsed.length > 0) {
-              currentList = mergeTeachers(parsed, currentList);
+              const cleaned = parsed.filter(t => !t.id?.match(/^tea-\d{2}$/) && t.id !== '__cbt_school_settings__');
+              if (cleaned.length > 0) currentList = mergeTeachers(cleaned, currentList);
             }
           }
         } catch (e) {}
@@ -558,7 +559,7 @@ export const TeacherLogin: React.FC<TeacherLoginProps> = ({
                 required
                 value={regName}
                 onChange={e => setRegName(e.target.value)}
-                placeholder="Contoh: Ahmad Fauzi, S.Pd"
+                placeholder="Nama Lengkap & Gelar (misal: S.Pd, S.Kom)"
                 className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white placeholder-slate-400 text-xs focus:outline-none focus:ring-2 focus:ring-violet-500 transition"
               />
             </div>

@@ -10,6 +10,165 @@ interface QuestionRendererProps {
   onAnswerChange: (newAnswer: QuestionAnswer) => void;
 }
 
+// 4. SUB-KOMPONEN MENJODOHKAN (DENGAN PENGACAKAN PASANGAN JAWABAN SISI KANAN)
+interface MenjodohkanRendererProps {
+  question: Question;
+  currentAnswer: QuestionAnswer;
+  onAnswerChange: (newAnswer: QuestionAnswer) => void;
+}
+
+const MenjodohkanRenderer: React.FC<MenjodohkanRendererProps> = ({
+  question,
+  currentAnswer,
+  onAnswerChange
+}) => {
+  const pairs = (question.options as MatchingPair[]) || [];
+  const userPairs: Array<{ questionItem: string; answerItem: string }> = Array.isArray(
+    currentAnswer
+  )
+    ? (currentAnswer as any)
+    : [];
+
+  const [selectedLeft, setSelectedLeft] = useState<number | null>(null);
+
+  // Acak urutan tampilan Kolom Kanan (Pasangan Jawaban) agar siswa tidak melihat pasangan yang sejajar
+  const shuffledRightPairs = React.useMemo(() => {
+    const items = pairs.map((pair, originalIdx) => ({
+      pair,
+      originalIdx
+    }));
+
+    if (items.length <= 1) return items;
+
+    // Fisher-Yates shuffle dengan jaminan urutan berbeda dari aslinya (derangement)
+    let shuffled = [...items];
+    let isDifferent = false;
+
+    for (let attempt = 0; attempt < 20; attempt++) {
+      for (let i = shuffled.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+      }
+      const isIdentical = shuffled.every((item, idx) => item.originalIdx === idx);
+      if (!isIdentical) {
+        isDifferent = true;
+        break;
+      }
+    }
+
+    // Jika random belum menggeser (misal hanya 2 item), putar manual 1 posisi
+    if (!isDifferent && items.length > 1) {
+      shuffled = [items[items.length - 1], ...items.slice(0, items.length - 1)];
+    }
+
+    return shuffled;
+  }, [question.id, pairs.length]);
+
+  const handlePairClick = (leftIdx: number, rightText: string) => {
+    const letter = String.fromCharCode(65 + leftIdx);
+    const exists = userPairs.find(p => p.questionItem === letter);
+    let updated: Array<{ questionItem: string; answerItem: string }>;
+    if (exists && exists.answerItem === rightText) {
+      updated = userPairs.filter(p => p.questionItem !== letter);
+    } else {
+      updated = [...userPairs.filter(p => p.questionItem !== letter), { questionItem: letter, answerItem: rightText }];
+    }
+    onAnswerChange(updated.length > 0 ? (updated as any) : null);
+    setSelectedLeft(null);
+  };
+
+  return (
+    <div className="mt-4 space-y-4">
+      <p className="text-xs text-slate-500 dark:text-slate-400 italic">
+        *Pilih salah satu item di sisi kiri, kemudian klik pasangannya di sisi kanan.
+      </p>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Kolom Kiri: Pernyataan */}
+        <div className="space-y-2">
+          <h4 className="text-xs font-semibold text-violet-600 dark:text-violet-400 uppercase tracking-wider mb-2">
+            Pernyataan
+          </h4>
+          {pairs.map((pair, idx) => {
+            const letter = String.fromCharCode(65 + idx);
+            const isSelected = selectedLeft === idx;
+            const paired = userPairs.find(p => p.questionItem === letter);
+            return (
+              <div
+                key={idx}
+                onClick={() => setSelectedLeft(isSelected ? null : idx)}
+                className={`p-3 rounded-xl border cursor-pointer transition-all flex items-center justify-between text-sm ${
+                  isSelected
+                    ? 'bg-violet-100/60 dark:bg-violet-950/40 border-violet-500 ring-2 ring-violet-500/20'
+                    : paired
+                    ? 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-300 dark:border-emerald-700/50'
+                    : 'bg-slate-50/70 dark:bg-slate-900/60 border-slate-200 dark:border-slate-800 hover:border-slate-300'
+                }`}
+              >
+                <div className="flex flex-col gap-1">
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-violet-600 dark:text-violet-400">{letter}.</span>
+                    <span className="text-slate-800 dark:text-slate-200">{pair.q?.text}</span>
+                  </div>
+                  {pair.q?.img && (
+                    <img src={pair.q.img} alt={`Pernyataan ${letter}`} className="max-h-24 rounded-lg mt-1 border border-slate-200 dark:border-slate-700 object-contain" />
+                  )}
+                </div>
+                {paired && (
+                  <span className="text-xs px-2.5 py-1 rounded-lg bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 font-semibold truncate max-w-[140px] flex items-center gap-1 shadow-2xs">
+                    <span>➔</span> {paired.answerItem}
+                  </span>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Kolom Kanan: Pasangan Jawaban (Telah Diacak) */}
+        <div className="space-y-2">
+          <h4 className="text-xs font-semibold text-violet-600 dark:text-violet-400 uppercase tracking-wider mb-2">
+            Pasangan Jawaban
+          </h4>
+          {shuffledRightPairs.map((item, idx) => {
+            const text = item.pair.a?.text || '';
+            const isPairedWithAny = userPairs.some(p => p.answerItem === text);
+            return (
+              <div
+                key={idx}
+                onClick={() => {
+                  if (selectedLeft !== null) {
+                    handlePairClick(selectedLeft, text);
+                  }
+                }}
+                className={`p-3 rounded-xl border text-sm transition-all flex items-center justify-between ${
+                  selectedLeft !== null
+                    ? 'cursor-pointer hover:border-violet-500 bg-white dark:bg-slate-900 border-violet-400 dark:border-violet-600 shadow-xs ring-1 ring-violet-500/20'
+                    : isPairedWithAny
+                    ? 'bg-emerald-50/60 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800/40 text-slate-700 dark:text-slate-300'
+                    : 'bg-slate-50/50 dark:bg-slate-900/30 border-slate-200 dark:border-slate-800/80 opacity-90'
+                }`}
+              >
+                <div className="flex flex-col gap-1">
+                  <span className="text-slate-800 dark:text-slate-200 font-medium">{text}</span>
+                  {item.pair.a?.img && (
+                    <img src={item.pair.a.img} alt={`Pasangan ${text}`} className="max-h-24 rounded-lg mt-1 border border-slate-200 dark:border-slate-700 object-contain" />
+                  )}
+                </div>
+                {selectedLeft !== null ? (
+                  <ArrowRightLeft className="w-4 h-4 text-violet-600 dark:text-violet-400 animate-pulse flex-shrink-0 ml-2" />
+                ) : isPairedWithAny ? (
+                  <span className="text-[11px] font-bold px-2 py-0.5 rounded bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 flex-shrink-0 ml-2">
+                    Terpasang
+                  </span>
+                ) : null}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 export const QuestionRenderer: React.FC<QuestionRendererProps> = ({
   question,
   currentAnswer,
@@ -241,111 +400,14 @@ export const QuestionRenderer: React.FC<QuestionRendererProps> = ({
     );
   }
 
-  // 4. MENJODOHKAN (Interactive Matching)
+  // 4. MENJODOHKAN (Interactive Matching dengan Kolom Pasangan Kanan yang Diacak)
   if (type === 'Menjodohkan') {
-    const pairs = (options as MatchingPair[]) || [];
-    const userPairs: Array<{ questionItem: string; answerItem: string }> = Array.isArray(
-      currentAnswer
-    )
-      ? (currentAnswer as any)
-      : [];
-
-    const [selectedLeft, setSelectedLeft] = useState<number | null>(null);
-
-    const leftItems = pairs.map(p => p.q?.text || '');
-    const rightItems = pairs.map(p => p.a?.text || '');
-
-    const handlePairClick = (leftIdx: number, rightText: string) => {
-      const letter = String.fromCharCode(65 + leftIdx);
-      const exists = userPairs.find(p => p.questionItem === letter);
-      let updated: Array<{ questionItem: string; answerItem: string }>;
-      if (exists && exists.answerItem === rightText) {
-        updated = userPairs.filter(p => p.questionItem !== letter);
-      } else {
-        updated = [...userPairs.filter(p => p.questionItem !== letter), { questionItem: letter, answerItem: rightText }];
-      }
-      onAnswerChange(updated.length > 0 ? (updated as any) : null);
-      setSelectedLeft(null);
-    };
-
     return (
-      <div className="mt-4 space-y-4">
-        <p className="text-xs text-slate-500 dark:text-slate-400 italic">
-          *Pilih salah satu item di sisi kiri, kemudian klik pasangannya di sisi kanan.
-        </p>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* Kolom Kiri */}
-          <div className="space-y-2">
-            <h4 className="text-xs font-semibold text-violet-600 dark:text-violet-400 uppercase tracking-wider mb-2">Pernyataan</h4>
-            {pairs.map((pair, idx) => {
-              const letter = String.fromCharCode(65 + idx);
-              const isSelected = selectedLeft === idx;
-              const paired = userPairs.find(p => p.questionItem === letter);
-              return (
-                <div
-                  key={idx}
-                  onClick={() => setSelectedLeft(isSelected ? null : idx)}
-                  className={`p-3 rounded-xl border cursor-pointer transition-all flex items-center justify-between text-sm ${
-                    isSelected
-                      ? 'bg-violet-100/60 dark:bg-violet-950/40 border-violet-500 ring-2 ring-violet-500/20'
-                      : paired
-                      ? 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-300 dark:border-emerald-700/50'
-                      : 'bg-slate-50/70 dark:bg-slate-900/60 border-slate-200 dark:border-slate-800 hover:border-slate-300'
-                  }`}
-                >
-                  <div className="flex flex-col gap-1">
-                    <div className="flex items-center gap-2">
-                      <span className="font-bold text-violet-600 dark:text-violet-400">{letter}.</span>
-                      <span className="text-slate-800 dark:text-slate-200">{pair.q?.text}</span>
-                    </div>
-                    {pair.q?.img && (
-                      <img src={pair.q.img} alt={`Pernyataan ${letter}`} className="max-h-24 rounded-lg mt-1 border border-slate-200 dark:border-slate-700 object-contain" />
-                    )}
-                  </div>
-                  {paired && (
-                    <span className="text-xs px-2 py-0.5 rounded bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 font-medium truncate max-w-[120px]">
-                      ➔ {paired.answerItem}
-                    </span>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Kolom Kanan */}
-          <div className="space-y-2">
-            <h4 className="text-xs font-semibold text-violet-600 dark:text-violet-400 uppercase tracking-wider mb-2">Pasangan Jawaban</h4>
-            {pairs.map((pair, idx) => {
-              const text = pair.a?.text || '';
-              return (
-                <div
-                  key={idx}
-                  onClick={() => {
-                    if (selectedLeft !== null) {
-                      handlePairClick(selectedLeft, text);
-                    }
-                  }}
-                  className={`p-3 rounded-xl border text-sm transition-all flex items-center justify-between ${
-                    selectedLeft !== null
-                      ? 'cursor-pointer hover:border-violet-500 bg-white dark:bg-slate-900 border-slate-300 dark:border-slate-700'
-                      : 'bg-slate-50/50 dark:bg-slate-900/30 border-slate-200 dark:border-slate-800/80 opacity-80'
-                  }`}
-                >
-                  <div className="flex flex-col gap-1">
-                    <span className="text-slate-800 dark:text-slate-200">{text}</span>
-                    {pair.a?.img && (
-                      <img src={pair.a.img} alt={`Pasangan ${text}`} className="max-h-24 rounded-lg mt-1 border border-slate-200 dark:border-slate-700 object-contain" />
-                    )}
-                  </div>
-                  {selectedLeft !== null && (
-                    <ArrowRightLeft className="w-4 h-4 text-violet-600 dark:text-violet-400 animate-pulse" />
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </div>
+      <MenjodohkanRenderer
+        question={question}
+        currentAnswer={currentAnswer}
+        onAnswerChange={onAnswerChange}
+      />
     );
   }
 

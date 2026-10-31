@@ -293,66 +293,150 @@ export const QuestionRenderer: React.FC<QuestionRendererProps> = ({
       };
 
       return (
-        <div className="mt-4 overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 shadow-xs">
-          <table className="w-full text-left text-sm min-w-[380px] sm:min-w-full">
-            <thead className="bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-400 uppercase text-xs">
-              <tr>
-                <th className="py-3 px-4 w-12 text-center">No</th>
-                <th className="py-3 px-4">Pernyataan</th>
-                <th className="py-3 px-4 w-48 text-center">Pilihan</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80">
-              {rawOptions.map((opt, idx) => {
-                const choice = answersArr[idx];
-                return (
-                  <tr key={idx} className="hover:bg-slate-50 dark:hover:bg-slate-900/40 transition-colors">
-                    <td className="py-3.5 px-4 text-center font-bold text-violet-600 dark:text-violet-400 align-top">
-                      {idx + 1}
-                    </td>
-                    <td className="py-3.5 px-4 leading-relaxed text-slate-800 dark:text-slate-200 align-top">
-                      <div>{opt.text}</div>
-                      {opt.img && (
-                        <img
-                          src={opt.img}
-                          alt={`Pernyataan ${idx + 1}`}
-                          className="max-h-36 rounded-xl mt-2 border border-slate-200 dark:border-slate-700 object-contain block"
-                        />
-                      )}
-                    </td>
-                    <td className="py-3.5 px-4 text-center align-middle">
-                      <div className="flex items-center justify-center gap-2.5">
-                        <button
-                          type="button"
-                          onClick={() => handleSelectStatement(idx, 'Benar')}
-                          className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
-                            choice === 'Benar'
-                              ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500 shadow-xs font-bold'
-                              : 'bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:border-slate-300'
-                          }`}
-                        >
-                          <CheckCircle2 className="w-3.5 h-3.5" />
-                          Benar
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleSelectStatement(idx, 'Salah')}
-                          className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
-                            choice === 'Salah'
-                              ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500 shadow-xs font-bold'
-                              : 'bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:border-slate-300'
-                          }`}
-                        >
-                          <XCircle className="w-3.5 h-3.5" />
-                          Salah
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+        <div className="mt-4 space-y-4">
+          {/* TAMPILAN MOBILE (< 640px): TATA LETAK KARTU RESPONSIF FULL-WIDTH (Sangat Rapi & Nyaman di HP) */}
+          <div className="space-y-3 sm:hidden">
+            {rawOptions.map((opt, idx) => {
+              const choice = answersArr[idx];
+              return (
+                <div
+                  key={idx}
+                  className={`p-4 rounded-2xl border transition-all ${
+                    choice === 'Benar'
+                      ? 'border-emerald-500/60 bg-emerald-50/40 dark:bg-emerald-950/20 shadow-xs ring-1 ring-emerald-500/30'
+                      : choice === 'Salah'
+                      ? 'border-rose-500/60 bg-rose-50/40 dark:bg-rose-950/20 shadow-xs ring-1 ring-rose-500/30'
+                      : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60'
+                  }`}
+                >
+                  {/* Header Pernyataan: Nomor & Status Jawaban */}
+                  <div className="flex items-center justify-between gap-2 mb-2.5 pb-2 border-b border-slate-100 dark:border-slate-800/80">
+                    <span className="text-xs font-bold px-2 py-0.5 rounded-md bg-violet-100 dark:bg-violet-950/60 text-violet-700 dark:text-violet-300">
+                      Pernyataan #{idx + 1}
+                    </span>
+                    {choice ? (
+                      <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 ${
+                        choice === 'Benar'
+                          ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300'
+                          : 'bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300'
+                      }`}>
+                        {choice === 'Benar' ? <CheckCircle2 className="w-3 h-3" /> : <XCircle className="w-3 h-3" />}
+                        <span>Dipilih: {choice}</span>
+                      </span>
+                    ) : (
+                      <span className="text-[10px] text-slate-400 dark:text-slate-500 italic">
+                        Belum dijawab
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Teks Pernyataan (Lebar Penuh, Tidak Tergencet, Sangat Nyaman Dibaca) */}
+                  <div className="text-sm leading-relaxed text-slate-800 dark:text-slate-200 font-medium">
+                    {opt.text}
+                  </div>
+
+                  {opt.img && (
+                    <img
+                      src={opt.img}
+                      alt={`Pernyataan ${idx + 1}`}
+                      className="max-h-48 w-full rounded-xl mt-3 border border-slate-200 dark:border-slate-700 object-contain block bg-slate-50 dark:bg-slate-800/40"
+                    />
+                  )}
+
+                  {/* Tombol Pilihan Jawaban (Besar, Ramah Jempol Siswa) */}
+                  <div className="grid grid-cols-2 gap-2.5 mt-3.5 pt-3 border-t border-slate-100 dark:border-slate-800/80">
+                    <button
+                      type="button"
+                      onClick={() => handleSelectStatement(idx, 'Benar')}
+                      className={`py-2.5 px-3 rounded-xl text-xs font-bold border flex items-center justify-center gap-1.5 transition-all active:scale-[0.98] cursor-pointer ${
+                        choice === 'Benar'
+                          ? 'bg-emerald-600 text-white border-emerald-600 shadow-md shadow-emerald-600/20'
+                          : 'bg-slate-50 dark:bg-slate-800/80 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-emerald-400'
+                      }`}
+                    >
+                      <CheckCircle2 className="w-4 h-4" />
+                      <span>Benar</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleSelectStatement(idx, 'Salah')}
+                      className={`py-2.5 px-3 rounded-xl text-xs font-bold border flex items-center justify-center gap-1.5 transition-all active:scale-[0.98] cursor-pointer ${
+                        choice === 'Salah'
+                          ? 'bg-rose-600 text-white border-rose-600 shadow-md shadow-rose-600/20'
+                          : 'bg-slate-50 dark:bg-slate-800/80 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-rose-400'
+                      }`}
+                    >
+                      <XCircle className="w-4 h-4" />
+                      <span>Salah</span>
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* TAMPILAN DESKTOP/TABLET (>= 640px): TABEL STRUKTUR KLASIK (Leluasa di Layar Lebar) */}
+          <div className="hidden sm:block overflow-x-auto rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 shadow-xs">
+            <table className="w-full text-left text-sm min-w-full">
+              <thead className="bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-400 uppercase text-xs">
+                <tr>
+                  <th className="py-3 px-4 w-12 text-center">No</th>
+                  <th className="py-3 px-4">Pernyataan</th>
+                  <th className="py-3 px-4 w-52 text-center">Pilihan Jawaban</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80">
+                {rawOptions.map((opt, idx) => {
+                  const choice = answersArr[idx];
+                  return (
+                    <tr key={idx} className="hover:bg-slate-50 dark:hover:bg-slate-900/40 transition-colors">
+                      <td className="py-3.5 px-4 text-center font-bold text-violet-600 dark:text-violet-400 align-top">
+                        {idx + 1}
+                      </td>
+                      <td className="py-3.5 px-4 leading-relaxed text-slate-800 dark:text-slate-200 align-top">
+                        <div>{opt.text}</div>
+                        {opt.img && (
+                          <img
+                            src={opt.img}
+                            alt={`Pernyataan ${idx + 1}`}
+                            className="max-h-36 rounded-xl mt-2 border border-slate-200 dark:border-slate-700 object-contain block"
+                          />
+                        )}
+                      </td>
+                      <td className="py-3.5 px-4 text-center align-middle">
+                        <div className="flex items-center justify-center gap-2.5">
+                          <button
+                            type="button"
+                            onClick={() => handleSelectStatement(idx, 'Benar')}
+                            className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
+                              choice === 'Benar'
+                                ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500 shadow-xs font-bold'
+                                : 'bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:border-slate-300'
+                            }`}
+                          >
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            Benar
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleSelectStatement(idx, 'Salah')}
+                            className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
+                              choice === 'Salah'
+                                ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500 shadow-xs font-bold'
+                                : 'bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:border-slate-300'
+                            }`}
+                          >
+                            <XCircle className="w-3.5 h-3.5" />
+                            Salah
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
       );
     }

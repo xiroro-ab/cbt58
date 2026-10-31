@@ -5,11 +5,13 @@
 :root {
   --background: #f8fafc;
   --foreground: #0f172a;
+  color-scheme: light;
 }
 
 .dark {
   --background: #090d16;
   --foreground: #f8fafc;
+  color-scheme: dark;
 }
 
 body {
@@ -17,6 +19,26 @@ body {
   color: var(--foreground);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+/* Fix dropdown option background & text in dark theme on Windows/Mac */
+select {
+  color-scheme: light;
+}
+
+select option {
+  background-color: #ffffff;
+  color: #0f172a;
+}
+
+.dark select {
+  color-scheme: dark;
+}
+
+.dark select option,
+.dark option {
+  background-color: #0f172a !important;
+  color: #f8fafc !important;
 }
 
 /* Custom subtle scrollbar */

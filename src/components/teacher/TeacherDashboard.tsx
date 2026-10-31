@@ -3349,7 +3349,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                 <select
                   value={resultsSubjectFilter}
                   onChange={e => setResultsSubjectFilter(e.target.value)}
-                  className="bg-transparent text-xs font-semibold text-slate-700 dark:text-slate-200 focus:outline-none cursor-pointer pr-1"
+                  className="bg-white dark:bg-slate-900 text-xs font-semibold text-slate-800 dark:text-slate-100 focus:outline-none cursor-pointer pr-1 [color-scheme:light] dark:[color-scheme:dark] [&>option]:bg-white [&>option]:text-slate-900 [&>option]:dark:bg-slate-900 [&>option]:dark:text-slate-100"
                 >
                   <option value="ALL">Semua Mapel (1 Sekolah) • {results.length} Siswa</option>
                   {(allSubjects || []).map(s => {
@@ -3369,7 +3369,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                 <select
                   value={resultsGradeFilter}
                   onChange={e => setResultsGradeFilter(e.target.value)}
-                  className="bg-transparent text-xs font-semibold text-slate-700 dark:text-slate-200 focus:outline-none cursor-pointer pr-1"
+                  className="bg-white dark:bg-slate-900 text-xs font-semibold text-slate-800 dark:text-slate-100 focus:outline-none cursor-pointer pr-1 [color-scheme:light] dark:[color-scheme:dark] [&>option]:bg-white [&>option]:text-slate-900 [&>option]:dark:bg-slate-900 [&>option]:dark:text-slate-100"
                 >
                   <option value="ALL">Semua Jenjang (Kelas 7, 8, 9)</option>
                   <option value="VII">Jenjang Kelas 7 (VII)</option>
@@ -3384,7 +3384,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                 <select
                   value={resultsClassFilter}
                   onChange={e => setResultsClassFilter(e.target.value)}
-                  className="bg-transparent text-xs font-semibold text-slate-700 dark:text-slate-200 focus:outline-none cursor-pointer pr-1"
+                  className="bg-white dark:bg-slate-900 text-xs font-semibold text-slate-800 dark:text-slate-100 focus:outline-none cursor-pointer pr-1 [color-scheme:light] dark:[color-scheme:dark] [&>option]:bg-white [&>option]:text-slate-900 [&>option]:dark:bg-slate-900 [&>option]:dark:text-slate-100"
                 >
                   <option value="ALL">Semua Rombel Kelas</option>
                   {availableRombelsForResults.map(cls => {
@@ -3407,7 +3407,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                 <select
                   value={resultsStatusFilter}
                   onChange={e => setResultsStatusFilter(e.target.value)}
-                  className="bg-transparent text-xs font-semibold text-slate-700 dark:text-slate-200 focus:outline-none cursor-pointer pr-1"
+                  className="bg-white dark:bg-slate-900 text-xs font-semibold text-slate-800 dark:text-slate-100 focus:outline-none cursor-pointer pr-1 [color-scheme:light] dark:[color-scheme:dark] [&>option]:bg-white [&>option]:text-slate-900 [&>option]:dark:bg-slate-900 [&>option]:dark:text-slate-100"
                 >
                   <option value="ALL">Semua Status KKM</option>
                   <option value="PASSED">Tuntas KKM (&ge; 75)</option>
@@ -4143,7 +4143,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
               <select
                 value={selectedDocSubjectId || currentBankSubject.id}
                 onChange={e => setSelectedDocSubjectId(e.target.value)}
-                className="px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-700 dark:text-slate-200"
+                className="px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-700 dark:text-slate-200 [color-scheme:light] dark:[color-scheme:dark] [&>option]:bg-white [&>option]:text-slate-900 [&>option]:dark:bg-slate-900 [&>option]:dark:text-slate-100"
               >
                 {accessibleSubjects.map(s => (
                   <option key={s.id} value={s.id}>{s.title}</option>
@@ -4154,7 +4154,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
               <select
                 value={selectedDocClass}
                 onChange={e => setSelectedDocClass(e.target.value)}
-                className="px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-700 dark:text-slate-200"
+                className="px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-700 dark:text-slate-200 [color-scheme:light] dark:[color-scheme:dark] [&>option]:bg-white [&>option]:text-slate-900 [&>option]:dark:bg-slate-900 [&>option]:dark:text-slate-100"
               >
                 <option value="Semua Kelas">Semua Kelas</option>
                 {availableClasses.map(c => (
@@ -4856,7 +4856,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                   <select
                     value={monitoringFilterSubId}
                     onChange={e => setMonitoringFilterSubId(e.target.value)}
-                    className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-800 dark:text-slate-100 cursor-pointer"
+                    className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-800 dark:text-slate-100 cursor-pointer [color-scheme:light] dark:[color-scheme:dark] [&>option]:bg-white [&>option]:text-slate-900 [&>option]:dark:bg-slate-900 [&>option]:dark:text-slate-100"
                   >
                     <option value="ALL">Semua Paket Ujian</option>
                     {accessibleSubjects.map(s => (
@@ -4872,7 +4872,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                   <select
                     value={monitoringFilterClass}
                     onChange={e => setMonitoringFilterClass(e.target.value)}
-                    className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-800 dark:text-slate-100 cursor-pointer"
+                    className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-800 dark:text-slate-100 cursor-pointer [color-scheme:light] dark:[color-scheme:dark] [&>option]:bg-white [&>option]:text-slate-900 [&>option]:dark:bg-slate-900 [&>option]:dark:text-slate-100"
                   >
                     <option value="ALL">Semua Kelas / Rombel</option>
                     {monitoringClasses.map(cls => (
@@ -5382,7 +5382,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                 <select
                   value={modalType}
                   onChange={e => setModalType(e.target.value as QuestionType)}
-                  className="w-full p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white font-semibold cursor-pointer"
+                  className="w-full p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white font-semibold cursor-pointer [color-scheme:light] dark:[color-scheme:dark] [&>option]:bg-white [&>option]:text-slate-900 [&>option]:dark:bg-slate-900 [&>option]:dark:text-slate-100"
                 >
                   <option value="Pilihan Ganda">1. Pilihan Ganda (Single Choice)</option>
                   <option value="Pilihan Ganda Kompleks">2. Pilihan Ganda Kompleks (Multi Choice)</option>

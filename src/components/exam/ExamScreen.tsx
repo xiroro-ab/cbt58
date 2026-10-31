@@ -86,7 +86,17 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
     return false;
   });
 
-  const [currentIndex, setCurrentIndex] = useState(0);
+  const [currentIndex, setCurrentIndex] = useState<number>(() => {
+    if (
+      savedLocalState &&
+      typeof savedLocalState.currentIndex === 'number' &&
+      savedLocalState.currentIndex >= 0 &&
+      savedLocalState.currentIndex < questions.length
+    ) {
+      return savedLocalState.currentIndex;
+    }
+    return 0;
+  });
   const [answers, setAnswers] = useState<StudentAnswerItem[]>(() => {
     if (savedLocalState && Array.isArray(savedLocalState.answers) && savedLocalState.answers.length > 0) {
       const map = new Map<string, StudentAnswerItem>(
@@ -99,6 +109,12 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
 
   const [secondsRemaining, setSecondsRemaining] = useState<number>(() => {
     if (savedLocalState && typeof savedLocalState.secondsRemaining === 'number' && savedLocalState.secondsRemaining > 0) {
+      if (savedLocalState.lastSavedTime && typeof savedLocalState.lastSavedTime === 'number') {
+        const elapsedSinceLastSave = Math.floor((Date.now() - savedLocalState.lastSavedTime) / 1000);
+        if (elapsedSinceLastSave > 0) {
+          return Math.max(0, savedLocalState.secondsRemaining - elapsedSinceLastSave);
+        }
+      }
       return savedLocalState.secondsRemaining;
     }
     return subject.durationMinutes * 60;
@@ -164,6 +180,9 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
 
   const answersRef = useRef(answers);
   answersRef.current = answers;
+
+  const currentIndexRef = useRef(currentIndex);
+  currentIndexRef.current = currentIndex;
 
   const secondsRemainingRef = useRef(secondsRemaining);
   secondsRemainingRef.current = secondsRemaining;
@@ -262,11 +281,13 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
           violationCount,
           isLocked,
           lastViolationReason,
-          startTime: startTimeRef.current
+          startTime: startTimeRef.current,
+          currentIndex,
+          lastSavedTime: Date.now()
         }));
       } catch {}
     }
-  }, [answers, secondsRemaining, violationCount, isLocked, lastViolationReason, isExamCompleted, stateKey]);
+  }, [answers, secondsRemaining, violationCount, isLocked, lastViolationReason, currentIndex, isExamCompleted, stateKey]);
 
   // 3. LISTEN TO PROCTOR COMMANDS (Buka Kunci, Paksa Selesai, Reset)
   useEffect(() => {
@@ -286,7 +307,9 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
               secondsRemaining: secondsRemainingRef.current,
               violationCount: 0,
               isLocked: false,
-              startTime: startTimeRef.current
+              startTime: startTimeRef.current,
+              currentIndex: currentIndexRef.current,
+              lastSavedTime: Date.now()
             }));
           } catch {}
         }
@@ -305,6 +328,7 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
             }));
             localStorage.removeItem(stateKey);
             localStorage.removeItem(blockedKey);
+            localStorage.removeItem(`cbt_exam_questions_${subject.id}_${cleanName}`);
           } catch {}
         }
         removeStudentSession(studentName, subject.id);
@@ -331,15 +355,17 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
       } else if (cmd.action === 'RESET_EXAM') {
         // Pengawas mereset ujian siswa (bersihkan cache dan kembali ke login)
         removeStudentSession(studentName, subject.id);
+        const cleanName = studentName.toLowerCase().trim();
         if (typeof window !== 'undefined') {
           try {
             localStorage.removeItem(stateKey);
             localStorage.removeItem(blockedKey);
-            localStorage.removeItem(`cbt_submitted_${subject.id}_${studentName.toLowerCase().trim()}`);
+            localStorage.removeItem(`cbt_exam_questions_${subject.id}_${cleanName}`);
+            localStorage.removeItem(`cbt_submitted_${subject.id}_${cleanName}`);
             const stored = localStorage.getItem(`cbt_results_${subject.id}`);
             if (stored) {
               const list = JSON.parse(stored);
-              const cleaned = list.filter((r: any) => r.studentName.toLowerCase().trim() !== studentName.toLowerCase().trim());
+              const cleaned = list.filter((r: any) => r.studentName.toLowerCase().trim() !== cleanName);
               localStorage.setItem(`cbt_results_${subject.id}`, JSON.stringify(cleaned));
             }
             localStorage.removeItem(`cbt_answers_${studentName}_${subject.id}`);
@@ -376,7 +402,9 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
                 secondsRemaining: secondsRemainingRef.current,
                 violationCount: 0,
                 isLocked: false,
-                startTime: startTimeRef.current
+                startTime: startTimeRef.current,
+                currentIndex: currentIndexRef.current,
+                lastSavedTime: Date.now()
               }));
             } catch {}
           }
@@ -412,7 +440,9 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
               secondsRemaining: secondsRemainingRef.current,
               violationCount: 0,
               isLocked: false,
-              startTime: startTimeRef.current
+              startTime: startTimeRef.current,
+              currentIndex: currentIndexRef.current,
+              lastSavedTime: Date.now()
             }));
           } catch {}
         }
@@ -476,19 +506,33 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
       remainingSeconds: secondsRemainingRef.current
     });
 
-    if (nextCount >= limit) {
-      // BEKUKAN & KUNCI UJIAN (Layar Merah Mati)
-      setIsLocked(true);
-      setShowWarningModal(false);
-      if (typeof window !== 'undefined') {
-        try {
+    // Segera perbarui snapshot ujian ke localStorage secara sinkron agar tidak hilang jika siswa mematikan aplikasi/browser
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem(stateKey, JSON.stringify({
+          answers: answersRef.current,
+          secondsRemaining: secondsRemainingRef.current,
+          violationCount: nextCount,
+          isLocked: nextCount >= limit,
+          lastViolationReason: reason,
+          startTime: startTimeRef.current,
+          currentIndex: currentIndexRef.current,
+          lastSavedTime: Date.now()
+        }));
+        if (nextCount >= limit) {
           localStorage.setItem(blockedKey, JSON.stringify({
             isBlocked: true,
             violationCount: nextCount,
             lockedAt: Date.now()
           }));
-        } catch {}
-      }
+        }
+      } catch {}
+    }
+
+    if (nextCount >= limit) {
+      // BEKUKAN & KUNCI UJIAN (Layar Merah Mati)
+      setIsLocked(true);
+      setShowWarningModal(false);
     } else {
       // Tampilkan Modal Peringatan dengan Countdown 5 Detik
       setShowWarningModal(true);
@@ -653,6 +697,20 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
         isFocusRef.current = false;
         setIsFocus(false);
         sendDirectHeartbeat(false);
+        if (typeof window !== 'undefined') {
+          try {
+            localStorage.setItem(stateKey, JSON.stringify({
+              answers: answersRef.current,
+              secondsRemaining: secondsRemainingRef.current,
+              violationCount: violationCountRef.current,
+              isLocked: isLockedRef.current,
+              lastViolationReason,
+              startTime: startTimeRef.current,
+              currentIndex: currentIndexRef.current,
+              lastSavedTime: Date.now()
+            }));
+          } catch {}
+        }
         e.preventDefault();
         e.returnValue = 'Ujian sedang berlangsung! Anda tidak diperbolehkan meninggalkan halaman ujian.';
         return e.returnValue;
@@ -664,6 +722,20 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
         isFocusRef.current = false;
         setIsFocus(false);
         sendDirectHeartbeat(false);
+        if (typeof window !== 'undefined') {
+          try {
+            localStorage.setItem(stateKey, JSON.stringify({
+              answers: answersRef.current,
+              secondsRemaining: secondsRemainingRef.current,
+              violationCount: violationCountRef.current,
+              isLocked: isLockedRef.current,
+              lastViolationReason,
+              startTime: startTimeRef.current,
+              currentIndex: currentIndexRef.current,
+              lastSavedTime: Date.now()
+            }));
+          } catch {}
+        }
       }
     };
 
@@ -722,6 +794,20 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
         ...updated[currentIndex],
         answer: newAnswer
       };
+      if (typeof window !== 'undefined') {
+        try {
+          localStorage.setItem(stateKey, JSON.stringify({
+            answers: updated,
+            secondsRemaining: secondsRemainingRef.current,
+            violationCount: violationCountRef.current,
+            isLocked: isLockedRef.current,
+            lastViolationReason,
+            startTime: startTimeRef.current,
+            currentIndex,
+            lastSavedTime: Date.now()
+          }));
+        } catch {}
+      }
       return updated;
     });
   };
@@ -733,6 +819,20 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
         ...updated[currentIndex],
         isDoubtful: !updated[currentIndex].isDoubtful
       };
+      if (typeof window !== 'undefined') {
+        try {
+          localStorage.setItem(stateKey, JSON.stringify({
+            answers: updated,
+            secondsRemaining: secondsRemainingRef.current,
+            violationCount: violationCountRef.current,
+            isLocked: isLockedRef.current,
+            lastViolationReason,
+            startTime: startTimeRef.current,
+            currentIndex,
+            lastSavedTime: Date.now()
+          }));
+        } catch {}
+      }
       return updated;
     });
   };
@@ -802,6 +902,7 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
         }));
         localStorage.removeItem(stateKey);
         localStorage.removeItem(blockedKey);
+        localStorage.removeItem(`cbt_exam_questions_${subject.id}_${cleanName}`);
       } catch {}
     }
 

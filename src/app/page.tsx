@@ -78,7 +78,8 @@ import {
   Play,
   X,
   ShieldAlert,
-  Info
+  Info,
+  Loader2
 } from 'lucide-react';
 
 // Helper pengecekan hak akses mata pelajaran per guru (mencakup pencocokan multi-kata kunci & mapel buatan guru)
@@ -151,6 +152,8 @@ export default function Home() {
   const [inputToken, setInputToken] = useState('');
   const [loginError, setLoginError] = useState('');
   const [isLoading, setIsLoading] = useState(true);
+  const [isVerifyingLogin, setIsVerifyingLogin] = useState(false);
+  const [isStartingExam, setIsStartingExam] = useState(false);
 
   // State Modal Briefing & Informasi Ujian Sebelum Masuk Soal
   const [showBriefModal, setShowBriefModal] = useState(false);
@@ -369,6 +372,7 @@ export default function Home() {
             localStorage.removeItem(`cbt_submitted_${changePayload.subjectId}_${cleanTarget}`);
             localStorage.removeItem(`cbt_blocked_${changePayload.subjectId}_${cleanTarget}`);
             localStorage.removeItem(`cbt_exam_state_${changePayload.subjectId}_${cleanTarget}`);
+            localStorage.removeItem(`cbt_exam_questions_${changePayload.subjectId}_${cleanTarget}`);
             if (changePayload.studentName) {
               localStorage.removeItem(`cbt_answers_${changePayload.studentName}_${changePayload.subjectId}`);
             }
@@ -545,6 +549,7 @@ export default function Home() {
         localStorage.removeItem(`cbt_submitted_${subjectId || subject?.id}_${cleanName}`);
         localStorage.removeItem(`cbt_blocked_${subjectId || subject?.id}_${cleanName}`);
         localStorage.removeItem(`cbt_exam_state_${subjectId || subject?.id}_${cleanName}`);
+        localStorage.removeItem(`cbt_exam_questions_${subjectId || subject?.id}_${cleanName}`);
         if (studentName) {
           localStorage.removeItem(`cbt_answers_${studentName}_${subjectId || subject?.id}`);
         }
@@ -774,79 +779,139 @@ export default function Home() {
       return;
     }
 
-    // 3. Validasi Anti Re-Login Mandiri & Realtime (Cegah Siswa Mengerjakan Ulang Tanpa Izin Pengawas)
-    const submissionStatus = await checkStudentExamSubmission(matchedSub.id, studentName);
-    if (submissionStatus.isSubmitted) {
-      setLoginError(
-        language === 'id'
-          ? `AKSES DITOLAK (ANTI-RELOGIN): Siswa "${studentName}" sudah pernah menyelesaikan dan mengumpulkan ujian "${matchedSub.title}" pada ${submissionStatus.submittedAt || 'sesi sebelumnya'} (Skor: ${submissionStatus.score}%). Anda tidak diperbolehkan mengerjakan ulang kecuali lembar ujian Anda di-reset oleh Guru Pengawas.`
-          : `ACCESS DENIED (ANTI-RELOGIN): Student "${studentName}" has already completed and submitted "${matchedSub.title}" on ${submissionStatus.submittedAt || 'previous session'} (Score: ${submissionStatus.score}%). Retakes are forbidden unless reset by your proctor.`
-      );
-      return;
-    }
-
-    // 3b. Validasi Anti-Cheat Lock (Cegah Siswa Terkunci Mengulang dari Awal dengan Me-refresh Browser)
-    const lockStatus = await checkStudentLockStatus(matchedSub.id, studentName, matchedSub.violationLimit || 3);
-    if (lockStatus.isBlocked) {
-      setLoginError(
-        language === 'id'
-          ? `AKSES DITOLAK (UJIAN DIBLOKIR): Akun siswa "${studentName}" saat ini sedang DIBLOKIR oleh sistem anti-cheat karena telah melampaui batas toleransi pelanggaran (${matchedSub.violationLimit || 3}x). Anda TIDAK DAPAT mengerjakan ujian dari awal. Silakan hubungi Guru Pengawas untuk membuka kunci ("Buka Kunci") atau mereset ujian Anda.`
-          : `ACCESS DENIED (EXAM LOCKED): Student "${studentName}" is currently BLOCKED by the anti-cheat system for exceeding the violation limit (${matchedSub.violationLimit || 3}x). Retakes are forbidden. Please contact your proctor to unlock or reset your exam.`
-      );
-      return;
-    }
-
-    // 4. Muat butir soal riil untuk paket ujian ini sebelum masuk ke layar ujian
-    let loadedQuestions: Question[] = [];
-    try {
-      loadedQuestions = await fetchQuestionsBySubject(matchedSub.id);
-    } catch (err) {
-      console.warn('Gagal memuat soal ujian:', err);
-    }
-
-    if (!loadedQuestions || loadedQuestions.length === 0) {
-      setLoginError(
-        language === 'id'
-          ? `Paket ujian "${matchedSub.title}" belum memiliki butir soal yang diunggah oleh guru pengawas. Silakan hubungi guru yang bersangkutan.`
-          : `No questions found for "${matchedSub.title}". Please contact your teacher or proctor.`
-      );
-      return;
-    }
-
-    // Acak butir soal secara proporsional per kelompok tipe soal
-    const randomizedQuestions = shuffleQuestionsGroupedByType(loadedQuestions);
-
-    // Pasang otomatis mata pelajaran & butir soal yang terdeteksi
-    setSubject(matchedSub);
-    setQuestions(randomizedQuestions);
+    setIsVerifyingLogin(true);
     setLoginError('');
 
-    // Suguhkan Modal Informasi Ujian sebelum masuk ke lembar soal ujian
-    setBriefingData({
-      subject: matchedSub,
-      student: matchedStudent || null,
-      questions: randomizedQuestions
-    });
-    setAgreedBriefingRules(true);
-    setShowBriefModal(true);
-  };
+    try {
+      // 3. Verifikasi Paralel Cepat (Anti Re-Login, Anti-Cheat Lock & Muat Butir Soal serentak)
+      const [submissionStatus, lockStatus, loadedQuestions] = await Promise.all([
+        checkStudentExamSubmission(matchedSub.id, studentName),
+        checkStudentLockStatus(matchedSub.id, studentName, matchedSub.violationLimit || 3),
+        fetchQuestionsBySubject(matchedSub.id).catch(err => {
+          console.warn('Gagal memuat soal ujian:', err);
+          return [] as Question[];
+        })
+      ]);
 
-  const handleConfirmStartExam = async () => {
-    if (briefingData) {
-      const submissionStatus = await checkStudentExamSubmission(briefingData.subject.id, studentName);
       if (submissionStatus.isSubmitted) {
-        setShowBriefModal(false);
-        setBriefingData(null);
         setLoginError(
           language === 'id'
-            ? `AKSES DITOLAK (ANTI-RELOGIN): Siswa "${studentName}" sudah pernah menyelesaikan dan mengumpulkan ujian "${briefingData.subject.title}" pada ${submissionStatus.submittedAt || 'sesi sebelumnya'} (Skor: ${submissionStatus.score}%). Anda tidak diperbolehkan mengerjakan ulang.`
-            : `ACCESS DENIED (ANTI-RELOGIN): Student "${studentName}" has already completed "${briefingData.subject.title}". Retakes are not allowed.`
+            ? `AKSES DITOLAK (ANTI-RELOGIN): Siswa "${studentName}" sudah pernah menyelesaikan dan mengumpulkan ujian "${matchedSub.title}" pada ${submissionStatus.submittedAt || 'sesi sebelumnya'} (Skor: ${submissionStatus.score}%). Anda tidak diperbolehkan mengerjakan ulang kecuali lembar ujian Anda di-reset oleh Guru Pengawas.`
+            : `ACCESS DENIED (ANTI-RELOGIN): Student "${studentName}" has already completed and submitted "${matchedSub.title}" on ${submissionStatus.submittedAt || 'previous session'} (Score: ${submissionStatus.score}%). Retakes are forbidden unless reset by your proctor.`
         );
         return;
       }
+
+      if (lockStatus.isBlocked) {
+        setLoginError(
+          language === 'id'
+            ? `AKSES DITOLAK (UJIAN DIBLOKIR): Akun siswa "${studentName}" saat ini sedang DIBLOKIR oleh sistem anti-cheat karena telah melampaui batas toleransi pelanggaran (${matchedSub.violationLimit || 3}x). Anda TIDAK DAPAT mengerjakan ujian dari awal. Silakan hubungi Guru Pengawas untuk membuka kunci ("Buka Kunci") atau mereset ujian Anda.`
+            : `ACCESS DENIED (EXAM LOCKED): Student "${studentName}" is currently BLOCKED by the anti-cheat system for exceeding the violation limit (${matchedSub.violationLimit || 3}x). Retakes are forbidden. Please contact your proctor to unlock or reset your exam.`
+        );
+        return;
+      }
+
+      if (!loadedQuestions || loadedQuestions.length === 0) {
+        setLoginError(
+          language === 'id'
+            ? `Paket ujian "${matchedSub.title}" belum memiliki butir soal yang diunggah oleh guru pengawas. Silakan hubungi guru yang bersangkutan.`
+            : `No questions found for "${matchedSub.title}". Please contact your teacher or proctor.`
+        );
+        return;
+      }
+
+      // 4. Persistensi Susunan Butir Soal Siswa (Cegah reshuffle jika siswa melanjutkan ujian di tengah jalan setelah HP lag/kill task)
+      const cleanName = studentName.toLowerCase().trim();
+      const questionsStorageKey = `cbt_exam_questions_${matchedSub.id}_${cleanName}`;
+      let finalQuestions: Question[] = [];
+
+      if (typeof window !== 'undefined') {
+        try {
+          const savedQ = localStorage.getItem(questionsStorageKey);
+          if (savedQ) {
+            const parsed: Question[] = JSON.parse(savedQ);
+            if (Array.isArray(parsed) && parsed.length === loadedQuestions.length) {
+              const loadedIdSet = new Set(loadedQuestions.map(q => q.id));
+              const allMatch = parsed.every(q => loadedIdSet.has(q.id));
+              if (allMatch) {
+                finalQuestions = parsed;
+              }
+            }
+          }
+        } catch {}
+      }
+
+      if (finalQuestions.length === 0) {
+        finalQuestions = shuffleQuestionsGroupedByType(loadedQuestions);
+        if (typeof window !== 'undefined') {
+          try {
+            localStorage.setItem(questionsStorageKey, JSON.stringify(finalQuestions));
+          } catch {}
+        }
+      }
+
+      // Pasang otomatis mata pelajaran & butir soal yang terdeteksi
+      setSubject(matchedSub);
+      setQuestions(finalQuestions);
+      setLoginError('');
+
+      // Suguhkan Modal Informasi Ujian sebelum masuk ke lembar soal ujian
+      setBriefingData({
+        subject: matchedSub,
+        student: matchedStudent || null,
+        questions: finalQuestions
+      });
+      setAgreedBriefingRules(true);
+      setShowBriefModal(true);
+    } catch (err) {
+      console.error('Error verifikasi ujian:', err);
+      setLoginError(
+        language === 'id'
+          ? 'Terjadi kendala saat memverifikasi akses ujian. Silakan coba klik Mulai Ujian sekali lagi.'
+          : 'Failed to verify exam access. Please try again.'
+      );
+    } finally {
+      setIsVerifyingLogin(false);
     }
-    setShowBriefModal(false);
-    setViewMode('student_exam');
+  };
+
+  const handleConfirmStartExam = async () => {
+    if (isStartingExam) return;
+    setIsStartingExam(true);
+    try {
+      if (briefingData) {
+        const [submissionStatus, lockStatus] = await Promise.all([
+          checkStudentExamSubmission(briefingData.subject.id, studentName),
+          checkStudentLockStatus(briefingData.subject.id, studentName, briefingData.subject.violationLimit || 3)
+        ]);
+
+        if (submissionStatus.isSubmitted) {
+          setShowBriefModal(false);
+          setBriefingData(null);
+          setLoginError(
+            language === 'id'
+              ? `AKSES DITOLAK (ANTI-RELOGIN): Siswa "${studentName}" sudah pernah menyelesaikan dan mengumpulkan ujian "${briefingData.subject.title}" pada ${submissionStatus.submittedAt || 'sesi sebelumnya'} (Skor: ${submissionStatus.score}%). Anda tidak diperbolehkan mengerjakan ulang.`
+              : `ACCESS DENIED (ANTI-RELOGIN): Student "${studentName}" has already completed "${briefingData.subject.title}". Retakes are not allowed.`
+          );
+          return;
+        }
+
+        if (lockStatus.isBlocked) {
+          setShowBriefModal(false);
+          setBriefingData(null);
+          setLoginError(
+            language === 'id'
+              ? `AKSES DITOLAK (UJIAN DIBLOKIR): Akun siswa "${studentName}" saat ini sedang DIBLOKIR oleh sistem anti-cheat karena telah melampaui batas toleransi pelanggaran (${briefingData.subject.violationLimit || 3}x). Silakan hubungi Guru Pengawas.`
+              : `ACCESS DENIED (EXAM LOCKED): Student "${studentName}" is currently BLOCKED by the anti-cheat system. Please contact your proctor.`
+          );
+          return;
+        }
+      }
+      setShowBriefModal(false);
+      setViewMode('student_exam');
+    } finally {
+      setIsStartingExam(false);
+    }
   };
 
   const handleFinishExam = async (resultData: any) => {
@@ -857,6 +922,7 @@ export default function Home() {
           score: resultData.score,
           submittedAt: resultData.submittedAt
         }));
+        localStorage.removeItem(`cbt_exam_questions_${subject.id}_${cleanName}`);
       } catch {}
     }
 
@@ -1310,10 +1376,20 @@ export default function Home() {
             <div className="pt-2">
               <button
                 type="submit"
-                className="w-full py-3 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-bold text-xs shadow-md shadow-violet-600/20 flex items-center justify-center gap-2 transition active:scale-[0.99] cursor-pointer"
+                disabled={isVerifyingLogin || !selectedStudentClass || !studentName || !inputToken}
+                className="w-full py-3 rounded-xl bg-violet-600 hover:bg-violet-500 disabled:opacity-75 disabled:cursor-wait text-white font-bold text-xs shadow-md shadow-violet-600/20 flex items-center justify-center gap-2 transition active:scale-[0.99] cursor-pointer"
               >
-                <span>{t.startExamBtn}</span>
-                <ArrowRight className="w-4 h-4" />
+                {isVerifyingLogin ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin text-white" />
+                    <span>Memverifikasi Akses Ujian...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>{t.startExamBtn}</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </>
+                )}
               </button>
             </div>
           </form>
@@ -1461,12 +1537,21 @@ export default function Home() {
                 </button>
                 <button
                   type="button"
-                  disabled={!agreedBriefingRules}
+                  disabled={!agreedBriefingRules || isStartingExam}
                   onClick={handleConfirmStartExam}
                   className="px-6 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold text-xs shadow-md shadow-violet-600/20 flex items-center gap-2 transition active:scale-[0.99] cursor-pointer"
                 >
-                  <Play className="w-3.5 h-3.5 fill-current" />
-                  <span>Saya Mengerti & Mulai Mengerjakan Ujian</span>
+                  {isStartingExam ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin text-white" />
+                      <span>Menyiapkan Lembar Ujian...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Play className="w-3.5 h-3.5 fill-current" />
+                      <span>Saya Mengerti & Mulai Mengerjakan Ujian</span>
+                    </>
+                  )}
                 </button>
               </div>
             </div>

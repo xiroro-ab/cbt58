@@ -342,6 +342,7 @@ export function sendProctorCommand(cmd: { action: ProctorActionType; studentName
       try {
         localStorage.removeItem(`cbt_blocked_${cmd.subjectId}_${cleanName}`);
         localStorage.removeItem(`cbt_exam_state_${cmd.subjectId}_${cleanName}`);
+        localStorage.removeItem(`cbt_exam_questions_${cmd.subjectId}_${cleanName}`);
         localStorage.removeItem(`cbt_answers_${cmd.studentName}_${cmd.subjectId}`);
         localStorage.removeItem(`cbt_submitted_${cmd.subjectId}_${cleanName}`);
       } catch {}
@@ -353,6 +354,7 @@ export function sendProctorCommand(cmd: { action: ProctorActionType; studentName
       try {
         localStorage.removeItem(`cbt_blocked_${cmd.subjectId}_${cleanName}`);
         localStorage.removeItem(`cbt_exam_state_${cmd.subjectId}_${cleanName}`);
+        localStorage.removeItem(`cbt_exam_questions_${cmd.subjectId}_${cleanName}`);
       } catch {}
     }
     removeStudentSession(cmd.studentName, cmd.subjectId);

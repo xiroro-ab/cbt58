@@ -428,20 +428,12 @@ export async function checkStudentExamSubmission(
           submittedAt: submittedAtFormatted
         };
       } else {
-        // Di database Supabase TIDAK ADA hasil ujian untuk siswa ini (artinya belum mengerjakan ATAU SUDAH DI-RESET OLEH GURU)
-        // Bersihkan seluruh cache usang di perangkat ini seketika agar siswa bisa langsung ujian ulang!
+        // Di database Supabase TIDAK ADA hasil ujian final untuk siswa ini (belum mengumpulkan atau baru di-reset oleh guru)
+        // HANYA bersihkan flag submitted lokal (jika pernah ada submit usang).
+        // JANGAN PERNAH menghapus cbt_exam_state atau cbt_answers karena siswa mungkin sedang melanjutkan ujian aktif yang belum selesai!
         if (typeof window !== 'undefined') {
           try {
             localStorage.removeItem(`cbt_submitted_${subjectId}_${cleanName}`);
-            localStorage.removeItem(`cbt_blocked_${subjectId}_${cleanName}`);
-            localStorage.removeItem(`cbt_exam_state_${subjectId}_${cleanName}`);
-            localStorage.removeItem(`cbt_answers_${studentName}_${subjectId}`);
-            const stored = localStorage.getItem(`cbt_results_${subjectId}`);
-            if (stored) {
-              const list: ExamResult[] = JSON.parse(stored);
-              const cleaned = list.filter(r => r.studentName.toLowerCase().trim() !== cleanName);
-              localStorage.setItem(`cbt_results_${subjectId}`, JSON.stringify(cleaned));
-            }
           } catch {}
         }
         return { isSubmitted: false };
@@ -501,6 +493,7 @@ export async function deleteExamResult(resultId: string, subjectId?: string, stu
         localStorage.removeItem(`cbt_answers_${studentName}_${subjectId}`);
         localStorage.removeItem(`cbt_blocked_${subjectId}_${cleanName}`);
         localStorage.removeItem(`cbt_exam_state_${subjectId}_${cleanName}`);
+        localStorage.removeItem(`cbt_exam_questions_${subjectId}_${cleanName}`);
         localStorage.removeItem(`cbt_submitted_${subjectId}_${cleanName}`);
       }
     } catch {}
@@ -780,9 +773,10 @@ export async function checkStudentLockStatus(
 
   // 1. PRIORITAS UTAMA: Periksa database Supabase Cloud (Single Source of Truth)
   try {
-    const { data, error } = await supabase
+    // A. Cek notifikasi autolock yang belum dibuka oleh pengawas
+    const { data: autolocks, error: lockErr } = await supabase
       .from('exam_notifications')
-      .select('id, message, created_at, is_read')
+      .select('id, message, created_at')
       .eq('subject_id', subjectId)
       .ilike('student_name', studentName.trim())
       .eq('type', 'autolock')
@@ -790,17 +784,75 @@ export async function checkStudentLockStatus(
       .order('created_at', { ascending: false })
       .limit(1);
 
-    if (!error) {
-      if (data && data.length > 0) {
-        // Terbukti di database cloud masih tercatat autolock belum dibaca/dibuka
+    // B. Hitung jumlah total pelanggaran aktif siswa ini di Supabase
+    const { count: unreadViolations, error: countErr } = await supabase
+      .from('exam_notifications')
+      .select('id', { count: 'exact', head: true })
+      .eq('subject_id', subjectId)
+      .ilike('student_name', studentName.trim())
+      .in('type', ['violation', 'autolock'])
+      .eq('is_read', false);
+
+    if (!lockErr && !countErr) {
+      const cloudViolationCount = typeof unreadViolations === 'number' ? unreadViolations : 0;
+      const isCloudBlocked = (autolocks && autolocks.length > 0) || (cloudViolationCount >= violationLimit);
+
+      // Baca rekaman lokal perangkat siswa
+      let localViolationCount = 0;
+      let localIsBlocked = false;
+      let localReason = '';
+
+      if (typeof window !== 'undefined') {
+        try {
+          const blockedFlag = localStorage.getItem(`cbt_blocked_${subjectId}_${cleanName}`);
+          if (blockedFlag) {
+            const parsed = JSON.parse(blockedFlag);
+            if (parsed.isBlocked) {
+              localIsBlocked = true;
+              localViolationCount = parsed.violationCount || violationLimit;
+            }
+          }
+          const stateKey = `cbt_exam_state_${subjectId}_${cleanName}`;
+          const saved = localStorage.getItem(stateKey);
+          if (saved) {
+            const parsed = JSON.parse(saved);
+            localViolationCount = Math.max(localViolationCount, parsed.violationCount || 0);
+            if (parsed.isLocked || localViolationCount >= violationLimit) {
+              localIsBlocked = true;
+              localReason = parsed.lastViolationReason || '';
+            }
+          }
+        } catch {}
+      }
+
+      // Gunakan hitungan pelanggaran tertinggi agar pelanggaran siswa tidak hilang jika browser ditutup/kill task
+      const finalViolationCount = Math.max(cloudViolationCount, localViolationCount);
+
+      if (isCloudBlocked || localIsBlocked || finalViolationCount >= violationLimit) {
+        if (typeof window !== 'undefined') {
+          try {
+            localStorage.setItem(`cbt_blocked_${subjectId}_${cleanName}`, JSON.stringify({
+              isBlocked: true,
+              violationCount: finalViolationCount,
+              lockedAt: Date.now()
+            }));
+            const stateKey = `cbt_exam_state_${subjectId}_${cleanName}`;
+            const saved = localStorage.getItem(stateKey);
+            if (saved) {
+              const parsed = JSON.parse(saved);
+              parsed.isLocked = true;
+              parsed.violationCount = finalViolationCount;
+              localStorage.setItem(stateKey, JSON.stringify(parsed));
+            }
+          } catch {}
+        }
         return {
           isBlocked: true,
-          violationCount: violationLimit,
-          reason: data[0].message || 'Terkunci di server pengawas karena melampaui batas pelanggaran anti-cheat.'
+          violationCount: finalViolationCount,
+          reason: autolocks?.[0]?.message || localReason || `Terkunci karena telah melakukan ${finalViolationCount} kali pelanggaran anti-cheat.`
         };
       } else {
-        // Di database Supabase TIDAK ADA kuncian autolock yang aktif (Sudah dibuka pengawas atau di-reset).
-        // Segera bersihkan flag terkunci lokal di perangkat/HP siswa agar siswa bisa langsung lanjut/masuk!
+        // Siswa tidak terblokir, tapi JANGAN PERNAH mereset violationCount ke 0 jika siswa memang sudah punya pelanggaran!
         if (typeof window !== 'undefined') {
           try {
             localStorage.removeItem(`cbt_blocked_${subjectId}_${cleanName}`);
@@ -809,12 +861,15 @@ export async function checkStudentLockStatus(
             if (saved) {
               const parsed = JSON.parse(saved);
               parsed.isLocked = false;
-              parsed.violationCount = 0;
+              parsed.violationCount = finalViolationCount;
               localStorage.setItem(stateKey, JSON.stringify(parsed));
             }
           } catch {}
         }
-        return { isBlocked: false, violationCount: 0 };
+        return {
+          isBlocked: false,
+          violationCount: finalViolationCount
+        };
       }
     }
   } catch (err) {

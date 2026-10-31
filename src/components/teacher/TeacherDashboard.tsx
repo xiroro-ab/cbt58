@@ -105,6 +105,70 @@ interface TeacherDashboardProps {
   onUpdateSchoolSettings?: (settings: SchoolSettings) => void;
 }
 
+// Kata-kata umum mata pelajaran yang dikecualikan dari pemotongan kata kunci agar tidak terjadi kebocoran mapel lintas guru
+const GENERIC_SUBJECT_STOP_WORDS = new Set([
+  'bahasa', 'pendidikan', 'ilmu', 'pengetahuan', 'seni', 'budaya', 'terpadu',
+  'umum', 'dasar', 'kelas', 'semester', 'ganjil', 'genap', 'ujian', 'asesmen',
+  'sumatif', 'tengah', 'akhir', 'asas', 'asat', 'pts', 'pas', 'pat', 'us',
+  'smp', 'smpn', 'tingkat', 'paket', 'soal'
+]);
+
+// Helper tampilan nama mapel rapi tanpa prefix berlebih
+const formatSubjectTitle = (title: string) => {
+  if (!title) return '';
+  const clean = title
+    .replace(/^Asesmen Sumatif( Akhir)?( Tengah)? Semester( - )?/i, '')
+    .replace(/^Asesmen Sumatif - /i, '')
+    .replace(/^ASAS( Ganjil| Genap)?( - | )?/i, '')
+    .replace(/^ASTS( Ganjil| Genap)?( - | )?/i, '')
+    .replace(/^PAS( Ganjil| Genap)?( - | )?/i, '')
+    .replace(/^PTS( Ganjil| Genap)?( - | )?/i, '')
+    .replace(/^Ujian( Sekolah| Semester)?( - | )?/i, '')
+    .trim();
+
+  return clean || title;
+};
+
+// Helper pengecekan hak akses mata pelajaran per guru (mencakup pencocokan multi-kata kunci & mapel buatan guru)
+const isSubjectBelongToTeacher = (s: Subject, teacher: Teacher | null, createdIds: string[] = []): boolean => {
+  if (!teacher || teacher.role === 'admin' || teacher.role === 'pengawas') return true;
+  if (createdIds.includes(s.id)) return true;
+
+  const sLower = s.title.toLowerCase();
+
+  const checkMatch = (teacherSubStr: string) => {
+    const tLower = teacherSubStr.toLowerCase().trim();
+    if (!tLower) return false;
+    // 1. Cocok penuh (contoh: "Informatika" di dalam "ASAS GANJIL INFORMATIKA KELAS 9")
+    if (sLower.includes(tLower) || tLower.includes(sLower)) return true;
+
+    // 2. Cocok kata kunci unik setelah difilter dari kata-kata umum
+    const keywords = tLower
+      .split(/[\s&,/()-]+/)
+      .map(w => w.trim())
+      .filter(w => w.length >= 3 && !GENERIC_SUBJECT_STOP_WORDS.has(w));
+
+    if (keywords.length > 0 && keywords.some(kw => sLower.includes(kw))) {
+      return true;
+    }
+    return false;
+  };
+
+  // 1. Cek dari penugasan guru (assignments)
+  if (teacher.assignments && teacher.assignments.length > 0) {
+    for (const asg of teacher.assignments) {
+      if (checkMatch(asg.subject)) return true;
+    }
+  }
+
+  // 2. Cek dari mata pelajaran utama guru (teacher.subject)
+  if (teacher.subject && checkMatch(teacher.subject)) {
+    return true;
+  }
+
+  return false;
+};
+
 export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   currentNav,
   subject,
@@ -853,70 +917,6 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
     const remedialPct = Math.round((remedial / total) * 100);
     return { total, avg, passed, passedPct, remedial, remedialPct };
   }, [filteredResults]);
-
-  // Helper tampilan nama mapel rapi tanpa prefix berlebih
-  const formatSubjectTitle = (title: string) => {
-    if (!title) return '';
-    let clean = title
-      .replace(/^Asesmen Sumatif( Akhir)?( Tengah)? Semester( - )?/i, '')
-      .replace(/^Asesmen Sumatif - /i, '')
-      .replace(/^ASAS( Ganjil| Genap)?( - | )?/i, '')
-      .replace(/^ASTS( Ganjil| Genap)?( - | )?/i, '')
-      .replace(/^PAS( Ganjil| Genap)?( - | )?/i, '')
-      .replace(/^PTS( Ganjil| Genap)?( - | )?/i, '')
-      .replace(/^Ujian( Sekolah| Semester)?( - | )?/i, '')
-      .trim();
-
-    return clean || title;
-  };
-
-  // Kata-kata umum mata pelajaran yang dikecualikan dari pemotongan kata kunci agar tidak terjadi kebocoran mapel lintas guru
-  const GENERIC_SUBJECT_STOP_WORDS = new Set([
-    'bahasa', 'pendidikan', 'ilmu', 'pengetahuan', 'seni', 'budaya', 'terpadu',
-    'umum', 'dasar', 'kelas', 'semester', 'ganjil', 'genap', 'ujian', 'asesmen',
-    'sumatif', 'tengah', 'akhir', 'asas', 'asat', 'pts', 'pas', 'pat', 'us',
-    'smp', 'smpn', 'tingkat', 'paket', 'soal'
-  ]);
-
-  // Helper pengecekan hak akses mata pelajaran per guru (mencakup pencocokan multi-kata kunci & mapel buatan guru)
-  const isSubjectBelongToTeacher = (s: Subject, teacher: Teacher | null, createdIds: string[] = []): boolean => {
-    if (!teacher || teacher.role === 'admin' || teacher.role === 'pengawas') return true;
-    if (createdIds.includes(s.id)) return true;
-
-    const sLower = s.title.toLowerCase();
-
-    const checkMatch = (teacherSubStr: string) => {
-      const tLower = teacherSubStr.toLowerCase().trim();
-      if (!tLower) return false;
-      // 1. Cocok penuh (contoh: "Informatika" di dalam "ASAS GANJIL INFORMATIKA KELAS 9")
-      if (sLower.includes(tLower) || tLower.includes(sLower)) return true;
-
-      // 2. Cocok kata kunci unik setelah difilter dari kata-kata umum
-      const keywords = tLower
-        .split(/[\s&,/()-]+/)
-        .map(w => w.trim())
-        .filter(w => w.length >= 3 && !GENERIC_SUBJECT_STOP_WORDS.has(w));
-
-      if (keywords.length > 0 && keywords.some(kw => sLower.includes(kw))) {
-        return true;
-      }
-      return false;
-    };
-
-    // 1. Cek dari penugasan guru (assignments)
-    if (teacher.assignments && teacher.assignments.length > 0) {
-      for (const asg of teacher.assignments) {
-        if (checkMatch(asg.subject)) return true;
-      }
-    }
-
-    // 2. Cek dari mata pelajaran utama guru (teacher.subject)
-    if (teacher.subject && checkMatch(teacher.subject)) {
-      return true;
-    }
-
-    return false;
-  };
 
   // Daftar mapel yang berhak diakses (Admin & Pengawas: SEMUA mapel; Guru Mapel: HANYA mapel miliknya atau yang baru dibuatnya)
   const accessibleSubjects = useMemo(() => {

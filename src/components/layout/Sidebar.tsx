@@ -124,7 +124,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 <LayoutDashboard className="w-4 h-4" />
                 <span>{t.navDashboard}</span>
               </div>
-              {currentNav === 'dashboard' && <ChevronRight className="w-3.5 h-3.5 text-violet-500" />}
             </button>
 
             <button
@@ -281,7 +280,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 <HelpCircle className="w-4 h-4 text-violet-600 dark:text-violet-400" />
                 <span>{t.navHelp}</span>
               </div>
-              <span className="w-2 h-2 rounded-full bg-violet-600"></span>
             </button>
           </div>
         </div>

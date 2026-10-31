@@ -216,6 +216,8 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
 
     const limit = subject.violationLimit || 3;
 
+    const actualClass = studentClass || subject.className;
+
     // Catat notifikasi otomatis ke Supabase
     try {
       await insertNotification({
@@ -223,7 +225,7 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
         studentName,
         type: nextCount >= limit ? 'autolock' : 'violation',
         title: nextCount >= limit ? 'Ujian Siswa Terkunci' : 'Peringatan Anti-Cheat',
-        message: `Siswa ${studentName} (${subject.className}): ${reason} (Pelanggaran ke-${nextCount} dari batas ${limit}).`
+        message: `Siswa ${studentName} (${actualClass}): ${reason} (Pelanggaran ke-${nextCount} dari batas ${limit}).`
       });
     } catch {}
 

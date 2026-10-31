@@ -379,28 +379,27 @@ export const Navbar: React.FC<NavbarProps> = ({
           {showNotifications && (
             <div className="absolute right-0 mt-2 w-80 sm:w-[420px] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-2xl p-5 space-y-3.5 z-50 animate-in fade-in zoom-in-95">
               <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
-                <div className="flex items-center gap-2">
-                  <div className="w-7 h-7 rounded-lg bg-violet-100 dark:bg-violet-950/60 text-violet-600 dark:text-violet-400 flex items-center justify-center font-bold">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-violet-100 dark:bg-violet-950/60 text-violet-600 dark:text-violet-400 flex items-center justify-center font-bold flex-shrink-0">
                     <Bell className="w-4 h-4" />
                   </div>
-                  <div>
-                    <h4 className="font-bold text-xs text-slate-900 dark:text-white flex items-center gap-1.5">
-                      <span>Notifikasi Aktivitas Realtime</span>
-                      {unreadNotifCount > 0 && (
-                        <span className="px-1.5 py-0.2 rounded-full bg-violet-600 text-white text-[10px] font-bold">
-                          {unreadNotifCount} baru
-                        </span>
-                      )}
+                  <div className="flex items-center gap-2">
+                    <h4 className="font-extrabold text-xs sm:text-sm text-slate-900 dark:text-white">
+                      Notifikasi Aktivitas
                     </h4>
-                    <p className="text-[10px] text-slate-400">Pembaruan otomatis dari database Supabase</p>
+                    {unreadNotifCount > 0 && (
+                      <span className="px-2 py-0.5 rounded-full bg-violet-600 text-white text-[10px] font-extrabold whitespace-nowrap shadow-xs">
+                        {unreadNotifCount} Baru
+                      </span>
+                    )}
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2.5">
                   {unreadNotifCount > 0 && (
                     <button
                       onClick={onMarkAllNotificationsRead}
-                      className="text-[11px] font-semibold text-violet-600 dark:text-violet-400 hover:underline cursor-pointer"
+                      className="text-[11px] font-bold text-violet-600 dark:text-violet-400 hover:underline cursor-pointer"
                     >
                       Tandai Dibaca
                     </button>
@@ -408,43 +407,50 @@ export const Navbar: React.FC<NavbarProps> = ({
                   {notifications.length > 0 && (
                     <button
                       onClick={onClearAllNotifications}
-                      className="text-[11px] font-semibold text-rose-500 hover:underline cursor-pointer"
-                      title="Hapus seluruh riwayat notifikasi di layar & database"
+                      className="text-[11px] font-bold text-rose-500 hover:text-rose-600 hover:underline cursor-pointer"
+                      title="Hapus seluruh riwayat notifikasi"
                     >
                       Hapus Semua
                     </button>
                   )}
+                  <button
+                    onClick={() => setShowNotifications(false)}
+                    className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
+                    title="Tutup Notifikasi"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
                 </div>
               </div>
 
               {/* Filter Notifikasi */}
-              <div className="flex gap-1.5 text-[11px] font-semibold">
+              <div className="flex gap-1.5 text-[11px] font-bold">
                 <button
                   onClick={() => setNotifFilter('all')}
-                  className={`px-3 py-1 rounded-lg transition ${
+                  className={`px-3 py-1.5 rounded-xl transition cursor-pointer ${
                     notifFilter === 'all'
-                      ? 'bg-violet-600 text-white'
-                      : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+                      ? 'bg-violet-600 text-white shadow-xs'
+                      : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
                   }`}
                 >
                   Semua ({notifications.length})
                 </button>
                 <button
                   onClick={() => setNotifFilter('violation')}
-                  className={`px-3 py-1 rounded-lg transition ${
+                  className={`px-3 py-1.5 rounded-xl transition cursor-pointer ${
                     notifFilter === 'violation'
-                      ? 'bg-rose-600 text-white'
-                      : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+                      ? 'bg-rose-600 text-white shadow-xs'
+                      : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
                   }`}
                 >
                   Anti-Cheat ({notifications.filter(n => n.type === 'violation' || n.type === 'autolock').length})
                 </button>
                 <button
                   onClick={() => setNotifFilter('submission')}
-                  className={`px-3 py-1 rounded-lg transition ${
+                  className={`px-3 py-1.5 rounded-xl transition cursor-pointer ${
                     notifFilter === 'submission'
-                      ? 'bg-emerald-600 text-white'
-                      : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+                      ? 'bg-emerald-600 text-white shadow-xs'
+                      : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
                   }`}
                 >
                   Nilai Masuk ({notifications.filter(n => n.type === 'submission').length})
@@ -493,10 +499,10 @@ export const Navbar: React.FC<NavbarProps> = ({
                               e.stopPropagation();
                               onDeleteNotification(n.id);
                             }}
-                            className="p-1 rounded text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition"
-                            title="Hapus notifikasi ini dari layar & database"
+                            className="p-1 rounded text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition cursor-pointer"
+                            title="Hapus notifikasi ini"
                           >
-                            <Trash2 className="w-3 h-3" />
+                            <Trash2 className="w-3.5 h-3.5" />
                           </button>
                         </div>
                       </div>

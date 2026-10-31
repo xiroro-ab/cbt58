@@ -1,10 +1,11 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Subject, Question, QuestionType } from '@/types/cbt';
+import { Subject, Question } from '@/types/cbt';
 import {
-  PRESET_STANDARDS,
-  StandardPresetType,
+  STANDARDS_OPTIONS,
+  StandardBadge,
+  GEMINI_MODELS,
   QuestionCounts,
   getRecommendedTopics,
   buildAiQuestionPrompt,
@@ -22,7 +23,6 @@ import {
   HelpCircle,
   KeyRound,
   FileText,
-  Download,
   BookOpen,
   Sliders,
   ChevronDown,
@@ -34,7 +34,10 @@ import {
   Trash2,
   ClipboardPaste,
   ShieldCheck,
-  Eye
+  Cpu,
+  Info,
+  CheckSquare,
+  Square
 } from 'lucide-react';
 
 interface AiQuestionGeneratorModalProps {
@@ -63,31 +66,38 @@ export function AiQuestionGeneratorModal({
     return allSubjects.find(s => s.id === targetSubjectId) || currentSubject || allSubjects[0];
   }, [allSubjects, targetSubjectId, currentSubject]);
 
-  // Form Fields
-  const [standardPreset, setStandardPreset] = useState<StandardPresetType>('AKM');
+  // 1. STANDAR & KEDALAMAN SOAL (MULTI-CENTANG CHECKBOX)
+  const [selectedStandards, setSelectedStandards] = useState<StandardBadge[]>(['AKM', 'TKA']);
+
+  // 2. MATERI & KESULITAN
   const [topic, setTopic] = useState('');
   const [difficulty, setDifficulty] = useState<'Campuran' | 'Mudah' | 'Sedang' | 'Sukar (HOTS)'>('Campuran');
   const [customInstructions, setCustomInstructions] = useState('');
   const [showAdvanced, setShowAdvanced] = useState(false);
 
-  // Question counts
+  // 3. JUMLAH & TIPE SOAL (DITENTUKAN OLEH GURU)
   const [counts, setCounts] = useState<QuestionCounts>({
-    pg: 2,
-    pgk: 3,
-    bs: 3,
-    jodoh: 2,
+    pg: 5,
+    pgk: 2,
+    bs: 2,
+    jodoh: 1,
     isian: 0,
     esai: 0
   });
 
-  // API Key & manual mode
+  // 4. MODEL GEMINI & KUNCI API KESUKAAN GURU
+  const [selectedModel, setSelectedModel] = useState<string>('gemini-1.5-flash');
+  const [isCustomModel, setIsCustomModel] = useState(false);
+  const [customModelName, setCustomModelName] = useState('');
   const [apiKey, setApiKey] = useState('');
   const [showApiKeyInput, setShowApiKeyInput] = useState(false);
   const [isApiKeySaved, setIsApiKeySaved] = useState(false);
+
+  // Fallback Manual Paste JSON Modal
   const [manualJsonInput, setManualJsonInput] = useState('');
   const [showPasteModal, setShowPasteModal] = useState(false);
 
-  // Status & Async State
+  // Status & Loading State
   const [isLoading, setIsLoading] = useState(false);
   const [loadingStepText, setLoadingStepText] = useState('Menginisialisasi...');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -97,13 +107,23 @@ export function AiQuestionGeneratorModal({
   const [generatedQuestions, setGeneratedQuestions] = useState<Question[]>([]);
   const [selectedQuestionIds, setSelectedQuestionIds] = useState<Set<string>>(new Set());
 
-  // Load API key dari localStorage saat mount
+  // Load Saved API key & Model dari localStorage saat modal dibuka
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const savedKey = localStorage.getItem('cbt_gemini_api_key') || '';
       if (savedKey) {
         setApiKey(savedKey);
         setIsApiKeySaved(true);
+      }
+      const savedModel = localStorage.getItem('cbt_gemini_model') || 'gemini-1.5-flash';
+      const isPredefined = GEMINI_MODELS.some(m => m.id === savedModel);
+      if (isPredefined) {
+        setSelectedModel(savedModel);
+        setIsCustomModel(false);
+      } else if (savedModel) {
+        setSelectedModel('custom');
+        setIsCustomModel(true);
+        setCustomModelName(savedModel);
       }
     }
   }, []);
@@ -115,37 +135,52 @@ export function AiQuestionGeneratorModal({
     }
   }, [currentSubject?.id]);
 
-  // Total count
+  // Total butir soal
   const totalQuestions =
     counts.pg + counts.pgk + counts.bs + counts.jodoh + counts.isian + counts.esai;
 
-  // Handle preset change
-  const handleSelectPreset = (presetId: StandardPresetType) => {
-    setStandardPreset(presetId);
-    const config = PRESET_STANDARDS.find(p => p.id === presetId);
-    if (config) {
-      setCounts({ ...config.defaultCounts });
-      setDifficulty(config.defaultDifficulty);
-    }
+  // Toggle Checkbox Standar (Bisa pilih 1, 2, atau semuanya)
+  const toggleStandard = (stdId: StandardBadge) => {
+    setSelectedStandards(prev => {
+      if (prev.includes(stdId)) {
+        // Jangan biarkan kosong sama sekali, minimal 1 standar aktif
+        if (prev.length === 1) return prev;
+        return prev.filter(id => id !== stdId);
+      } else {
+        return [...prev, stdId];
+      }
+    });
   };
 
-  // Counter helper
+  // Counter Helpers
   const updateCount = (key: keyof QuestionCounts, delta: number) => {
     setCounts(prev => {
-      const nextVal = Math.max(0, Math.min(30, (prev[key] || 0) + delta));
+      const nextVal = Math.max(0, Math.min(50, (prev[key] || 0) + delta));
       return { ...prev, [key]: nextVal };
     });
-    setStandardPreset('CUSTOM');
   };
 
   const setCountDirect = (key: keyof QuestionCounts, val: number) => {
-    setCounts(prev => ({ ...prev, [key]: Math.max(0, Math.min(30, val)) }));
-    setStandardPreset('CUSTOM');
+    setCounts(prev => ({ ...prev, [key]: Math.max(0, Math.min(50, val)) }));
   };
 
-  // Simpan API key ke localStorage
-  const handleSaveApiKey = () => {
+  // Pintasan Komposisi Cepat
+  const applyQuickTemplate = (tpl: 'ringkas' | 'campuran' | 'lengkap' | 'reset') => {
+    if (tpl === 'ringkas') {
+      setCounts({ pg: 3, pgk: 1, bs: 1, jodoh: 0, isian: 0, esai: 0 });
+    } else if (tpl === 'campuran') {
+      setCounts({ pg: 5, pgk: 2, bs: 2, jodoh: 1, isian: 0, esai: 0 });
+    } else if (tpl === 'lengkap') {
+      setCounts({ pg: 10, pgk: 4, bs: 3, jodoh: 2, isian: 1, esai: 0 });
+    } else if (tpl === 'reset') {
+      setCounts({ pg: 0, pgk: 0, bs: 0, jodoh: 0, isian: 0, esai: 0 });
+    }
+  };
+
+  // Simpan Pengaturan Gemini (Model & API Key) ke localStorage
+  const handleSaveGeminiSettings = () => {
     if (typeof window !== 'undefined') {
+      // Simpan API Key
       if (apiKey.trim()) {
         localStorage.setItem('cbt_gemini_api_key', apiKey.trim());
         setIsApiKeySaved(true);
@@ -153,19 +188,28 @@ export function AiQuestionGeneratorModal({
         localStorage.removeItem('cbt_gemini_api_key');
         setIsApiKeySaved(false);
       }
+
+      // Simpan Model
+      const finalModelName = isCustomModel ? customModelName.trim() : selectedModel;
+      if (finalModelName) {
+        localStorage.setItem('cbt_gemini_model', finalModelName);
+      }
     }
   };
 
-  // Salin prompt untuk dipakai di gemini.google.com jika guru tidak punya API key
+  const activeModelId = isCustomModel ? customModelName.trim() || 'gemini-1.5-flash' : selectedModel;
+
+  // Salin prompt untuk dipakai di gemini.google.com
   const handleCopyPrompt = () => {
     const promptText = buildAiQuestionPrompt({
       subjectTitle: activeSubject?.title || 'Mata Pelajaran',
       className: activeSubject?.className || 'Kelas VIII',
       topic: topic.trim() || 'Materi Pembelajaran Pokok',
       difficulty,
-      standardPreset,
+      selectedStandards,
       counts,
-      customInstructions
+      customInstructions,
+      model: activeModelId
     });
 
     navigator.clipboard.writeText(promptText);
@@ -176,20 +220,20 @@ export function AiQuestionGeneratorModal({
   // Generate via Next.js API Route (Gemini API)
   const handleGenerate = async () => {
     if (totalQuestions <= 0) {
-      setErrorMessage('Jumlah butir soal yang diminta minimal 1 butir.');
+      setErrorMessage('Tentukan minimal 1 butir soal pada kolom tipe soal.');
       return;
     }
 
     setIsLoading(true);
     setErrorMessage(null);
-    setLoadingStepText('Menghubungkan ke Google Gemini AI...');
+    setLoadingStepText(`Menghubungkan ke Gemini (${activeModelId})...`);
 
     const timer1 = setTimeout(() => {
-      setLoadingStepText('Menganalisis materi & merancang stimulus kontekstual...');
+      setLoadingStepText('Menganalisis standar kedalaman soal yang dicentang...');
     }, 1800);
 
     const timer2 = setTimeout(() => {
-      setLoadingStepText('Menyusun butir soal, opsi jawaban, dan kunci...');
+      setLoadingStepText('Menyusun stimulus konteks, opsi butir soal, dan kunci...');
     }, 4500);
 
     const timer3 = setTimeout(() => {
@@ -205,10 +249,11 @@ export function AiQuestionGeneratorModal({
           className: activeSubject?.className || 'Kelas VIII',
           topic: topic.trim() || 'Materi Pembelajaran Pokok',
           difficulty,
-          standardPreset,
+          selectedStandards,
           counts,
           customInstructions,
-          apiKey: apiKey.trim()
+          apiKey: apiKey.trim(),
+          model: activeModelId
         })
       });
 
@@ -222,7 +267,7 @@ export function AiQuestionGeneratorModal({
         if (data.error === 'API_KEY_REQUIRED') {
           setShowApiKeyInput(true);
         }
-        throw new Error(data.message || 'Gagal membuat soal dengan AI.');
+        throw new Error(data.message || 'Gagal membuat butir soal dengan AI.');
       }
 
       if (!data.questions || !Array.isArray(data.questions) || data.questions.length === 0) {
@@ -237,12 +282,11 @@ export function AiQuestionGeneratorModal({
       );
 
       setGeneratedQuestions(converted);
-      // Default pilih semua soal
       setSelectedQuestionIds(new Set(converted.map(q => q.id)));
       setCurrentStep('preview');
     } catch (err: any) {
       console.error('Error generating questions:', err);
-      setErrorMessage(err.message || 'Terjadi kesalahan saat memproses soal.');
+      setErrorMessage(err.message || 'Terjadi kendala saat memproses butir soal.');
     } finally {
       clearTimeout(timer1);
       clearTimeout(timer2);
@@ -287,7 +331,7 @@ export function AiQuestionGeneratorModal({
       setManualJsonInput('');
       setCurrentStep('preview');
     } catch (err: any) {
-      alert('Format JSON tidak valid. Pastikan teks yang ditempel adalah JSON array murni.');
+      alert('Format JSON tidak valid. Pastikan teks yang ditempel adalah JSON array hasil Gemini.');
     }
   };
 
@@ -313,7 +357,7 @@ export function AiQuestionGeneratorModal({
     }
   };
 
-  // Hapus satu butir soal dari daftar review
+  // Hapus butir soal dari daftar review
   const handleRemoveQuestion = (qId: string) => {
     setGeneratedQuestions(prev => prev.filter(q => q.id !== qId));
     setSelectedQuestionIds(prev => {
@@ -331,7 +375,6 @@ export function AiQuestionGeneratorModal({
       return;
     }
 
-    // Re-index orderIndex agar berurutan rapi
     const finalQuestions = toSave.map((q, idx) => ({
       ...q,
       subjectId: activeSubject?.id || q.subjectId,
@@ -345,7 +388,11 @@ export function AiQuestionGeneratorModal({
   if (!isOpen) return null;
 
   const recommendedTopics = getRecommendedTopics(activeSubject?.title || '');
-  const activePresetConfig = PRESET_STANDARDS.find(p => p.id === standardPreset) || PRESET_STANDARDS[0];
+
+  // Deskripsi ringkas sintesis standar yang dicentang
+  const activeStandardsObjects = STANDARDS_OPTIONS.filter(s => selectedStandards.includes(s.id));
+  const standardsSummaryText =
+    activeStandardsObjects.map(s => s.badge).join(' + ') || 'Standar Umum';
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/70 backdrop-blur-sm animate-fade-in">
@@ -365,11 +412,11 @@ export function AiQuestionGeneratorModal({
                   AI Question Generator
                 </h3>
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase bg-violet-100 dark:bg-violet-950 text-violet-700 dark:text-violet-300 border border-violet-300 dark:border-violet-800">
-                  Powered by Gemini
+                  {activeModelId}
                 </span>
               </div>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                Generate butir soal berstandar AKM, PISA, & TKA langsung ke Bank Soal
+                Pilih kedalaman standar (AKM, PISA, TKA, Harian) dan tentukan jumlah soal dengan mudah
               </p>
             </div>
           </div>
@@ -388,7 +435,7 @@ export function AiQuestionGeneratorModal({
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
           {currentStep === 'config' ? (
             <>
-              {/* TARGET MATA PELAJARAN & KELAS */}
+              {/* TARGET MATA PELAJARAN */}
               <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div className="flex items-center gap-2.5">
                   <div className="p-2 rounded-xl bg-violet-100 dark:bg-violet-950/80 text-violet-600 dark:text-violet-400">
@@ -396,7 +443,7 @@ export function AiQuestionGeneratorModal({
                   </div>
                   <div>
                     <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">
-                      Target Mata Pelajaran
+                      Target Mata Pelajaran & Kelas
                     </span>
                     <span className="text-sm font-bold text-slate-900 dark:text-white">
                       {activeSubject?.title || 'Mata Pelajaran'} • {activeSubject?.className || 'Semua Kelas'}
@@ -421,83 +468,94 @@ export function AiQuestionGeneratorModal({
                 )}
               </div>
 
-              {/* 1. PRESET STANDAR SOAL (AKM, PISA, TKA) */}
+              {/* 1. TOMBOL CENTANG STANDAR KEDALAMAN SOAL (BISA PILIH LEBIH DARI 1) */}
               <div className="space-y-2.5">
-                <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center justify-between">
-                  <span className="flex items-center gap-1.5">
-                    <span>1. Pilih Standar Asesmen</span>
-                    <span className="text-violet-600 dark:text-violet-400 font-normal">
-                      (Klik preset untuk komposisi otomatis)
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-2">
+                    <span>1. Standar & Kedalaman Karakteristik Soal</span>
+                    <span className="text-[11px] font-normal text-violet-600 dark:text-violet-400">
+                      (Centang standar yang ingin diterapkan — bisa gabung beberapa standar)
                     </span>
+                  </label>
+                  <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-violet-100 dark:bg-violet-950 text-violet-700 dark:text-violet-300 border border-violet-200 dark:border-violet-800">
+                    {selectedStandards.length} Standar Terpilih
                   </span>
-                  <span className="text-[11px] text-slate-400 font-medium">
-                    {activePresetConfig.title}
-                  </span>
-                </label>
+                </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
-                  {PRESET_STANDARDS.map(preset => {
-                    const isSelected = standardPreset === preset.id;
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {STANDARDS_OPTIONS.map(opt => {
+                    const isChecked = selectedStandards.includes(opt.id);
                     return (
-                      <button
-                        key={preset.id}
-                        type="button"
-                        onClick={() => handleSelectPreset(preset.id)}
-                        className={`text-left p-3.5 rounded-2xl border transition-all cursor-pointer relative flex flex-col justify-between ${
-                          isSelected
-                            ? 'bg-violet-50/80 dark:bg-violet-950/40 border-violet-500 ring-2 ring-violet-500/20 shadow-md'
-                            : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-violet-300 dark:hover:border-violet-700'
+                      <div
+                        key={opt.id}
+                        onClick={() => toggleStandard(opt.id)}
+                        className={`p-3.5 rounded-2xl border transition-all cursor-pointer select-none flex items-start gap-3 relative ${
+                          isChecked
+                            ? `${opt.colorScheme.activeBg} ${opt.colorScheme.activeBorder} ring-2 ring-violet-500/20 shadow-xs`
+                            : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
                         }`}
                       >
-                        <div>
-                          <div className="flex items-center justify-between mb-1.5">
+                        <div className="mt-0.5">
+                          {isChecked ? (
+                            <div className="w-5 h-5 rounded-lg bg-violet-600 text-white flex items-center justify-center shadow-xs">
+                              <Check className="w-3.5 h-3.5 stroke-[3]" />
+                            </div>
+                          ) : (
+                            <div className="w-5 h-5 rounded-lg border-2 border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800" />
+                          )}
+                        </div>
+
+                        <div className="flex-1 space-y-1">
+                          <div className="flex items-center justify-between">
                             <span className="text-xs font-bold text-slate-900 dark:text-white">
-                              {preset.title}
+                              {opt.label}
                             </span>
                             <span
-                              className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                                isSelected
+                              className={`text-[9px] font-bold px-1.5 py-0.2 rounded-md ${
+                                isChecked
                                   ? 'bg-violet-600 text-white'
                                   : 'bg-slate-100 dark:bg-slate-800 text-slate-500'
                               }`}
                             >
-                              {preset.badge}
+                              {opt.badge}
                             </span>
                           </div>
-                          <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed line-clamp-2">
-                            {preset.description}
+                          <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-relaxed">
+                            {opt.description}
                           </p>
                         </div>
-
-                        {isSelected && (
-                          <div className="mt-2.5 pt-2 border-t border-violet-200 dark:border-violet-800/60 flex items-center justify-between text-[10px] text-violet-700 dark:text-violet-300 font-bold">
-                            <span className="flex items-center gap-1">
-                              <CheckCircle2 className="w-3.5 h-3.5 text-violet-600" />
-                              <span>Preset Aktif</span>
-                            </span>
-                            <span>{Object.values(preset.defaultCounts).reduce((a, b) => a + b, 0)} Soal</span>
-                          </div>
-                        )}
-                      </button>
+                      </div>
                     );
                   })}
                 </div>
+
+                {/* Info Sintesis Standar yang Dicentang */}
+                <div className="p-2.5 rounded-xl bg-violet-50/60 dark:bg-violet-950/20 border border-violet-200/80 dark:border-violet-900/40 text-[11px] text-slate-600 dark:text-slate-300 flex items-center gap-2">
+                  <Info className="w-4 h-4 text-violet-600 dark:text-violet-400 shrink-0" />
+                  <span>
+                    <strong>Karakteristik Kedalaman Soal:</strong> AI akan merumuskan butir soal berbobot{' '}
+                    <strong className="text-violet-700 dark:text-violet-300">{standardsSummaryText}</strong>.
+                    {selectedStandards.includes('AKM') || selectedStandards.includes('PISA')
+                      ? ' Soal akan dilengkapi stimulus bacaan teks/data nyata dan penalaran analitis (HOTS).'
+                      : ' Soal menguji konsep inti pembelajaran secara presisi.'}
+                  </span>
+                </div>
               </div>
 
-              {/* 2. TOPIK / MATERI & KESULITAN */}
+              {/* 2. TOPIK / MATERI & TINGKAT KESULITAN */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="md:col-span-2 space-y-2">
                   <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center justify-between">
                     <span>2. Topik / KD / Materi Pembelajaran *</span>
                     <span className="text-[10px] text-slate-400 font-normal">
-                      Contoh materi pokok
+                      Ketik materi atau pilih topik cepat
                     </span>
                   </label>
                   <input
                     type="text"
                     value={topic}
                     onChange={e => setTopic(e.target.value)}
-                    placeholder="Contoh: Teorema Pythagoras, Teks Eksplanasi, dsb..."
+                    placeholder="Contoh: Teorema Pythagoras, Teks Eksplanasi, Sistem Peredaran Darah..."
                     className="w-full text-xs font-medium px-3.5 py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500"
                   />
 
@@ -519,7 +577,7 @@ export function AiQuestionGeneratorModal({
 
                 <div className="space-y-2">
                   <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                    Tingkat Kesulitan
+                    Tingkat Kesulitan Kognitif
                   </label>
                   <select
                     value={difficulty}
@@ -527,71 +585,73 @@ export function AiQuestionGeneratorModal({
                     className="w-full text-xs font-semibold px-3 py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500 cursor-pointer"
                   >
                     <option value="Campuran">Campuran Proporsional</option>
-                    <option value="Mudah">Mudah (Dasar/Pemahaman)</option>
-                    <option value="Sedang">Sedang (Aplikasi)</option>
-                    <option value="Sukar (HOTS)">Sukar (Penalaran HOTS)</option>
+                    <option value="Mudah">Mudah (Dasar / Pemahaman)</option>
+                    <option value="Sedang">Sedang (Aplikasi / Terapan)</option>
+                    <option value="Sukar (HOTS)">Sukar (Penalaran HOTS C4-C6)</option>
                   </select>
                   <p className="text-[10px] text-slate-400">
-                    AI menyesuaikan tingkat kognitif Bloom / Webb.
+                    Menyesuaikan taksonomi kognitif Bloom / Webb.
                   </p>
                 </div>
               </div>
 
-              {/* 3. KOMPOSISI TIPE SOAL (CLICK COUNTER) */}
+              {/* 3. JUMLAH & TIPE SOAL (DITENTUKAN OLEH GURU) */}
               <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-                    <span>3. Komposisi Tipe Soal</span>
-                    <span className="text-slate-400 font-normal">
-                      (Klik [-] dan [+] untuk menyesuaikan)
-                    </span>
-                  </label>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div>
+                    <label className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                      <span>3. Tentukan Jumlah & Komposisi Tipe Soal</span>
+                      <span className="text-slate-400 font-normal">
+                        (Klik [-] dan [+] sesuai kebutuhan)
+                      </span>
+                    </label>
+                  </div>
 
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold px-3 py-1 rounded-full bg-violet-600 text-white shadow-xs">
-                      Total: {totalQuestions} Butir Soal
+                  {/* Tombol Cepat Komposisi */}
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="text-[10px] text-slate-400 font-semibold">Pintasan:</span>
+                    <button
+                      type="button"
+                      onClick={() => applyQuickTemplate('ringkas')}
+                      className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 hover:bg-violet-100 dark:hover:bg-violet-950 text-slate-700 dark:text-slate-300 transition cursor-pointer"
+                    >
+                      5 Ringkas
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => applyQuickTemplate('campuran')}
+                      className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 hover:bg-violet-100 dark:hover:bg-violet-950 text-slate-700 dark:text-slate-300 transition cursor-pointer"
+                    >
+                      10 Campuran
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => applyQuickTemplate('lengkap')}
+                      className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 hover:bg-violet-100 dark:hover:bg-violet-950 text-slate-700 dark:text-slate-300 transition cursor-pointer"
+                    >
+                      20 Ujian
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => applyQuickTemplate('reset')}
+                      className="text-[10px] font-bold px-2 py-0.5 rounded-md text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition cursor-pointer"
+                    >
+                      Reset 0
+                    </button>
+                    <span className="text-xs font-bold px-3 py-1 rounded-full bg-violet-600 text-white shadow-xs ml-1">
+                      Total: {totalQuestions} Soal
                     </span>
                   </div>
                 </div>
 
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
                   {[
-                    {
-                      key: 'pg' as const,
-                      label: 'Pilihan Ganda',
-                      short: 'PG',
-                      sub: '1 jawaban benar'
-                    },
-                    {
-                      key: 'pgk' as const,
-                      label: 'PG Kompleks',
-                      short: 'PGK',
-                      sub: 'Multi-jawaban'
-                    },
-                    {
-                      key: 'bs' as const,
-                      label: 'Benar / Salah',
-                      short: 'B/S',
-                      sub: 'Pernyataan tabel'
-                    },
-                    {
-                      key: 'jodoh' as const,
-                      label: 'Menjodohkan',
-                      short: 'Jodoh',
-                      sub: 'Pasang kiri-kanan'
-                    },
-                    {
-                      key: 'isian' as const,
-                      label: 'Isian Singkat',
-                      short: 'Isian',
-                      sub: 'Kata/istilah kunci'
-                    },
-                    {
-                      key: 'esai' as const,
-                      label: 'Esai / Uraian',
-                      short: 'Esai',
-                      sub: 'Telaah analitis'
-                    }
+                    { key: 'pg' as const, label: 'Pilihan Ganda', short: 'PG', sub: '1 Kunci' },
+                    { key: 'pgk' as const, label: 'PG Kompleks', short: 'PGK', sub: 'Multi Kunci' },
+                    { key: 'bs' as const, label: 'Benar / Salah', short: 'B/S', sub: 'Tabel B/S' },
+                    { key: 'jodoh' as const, label: 'Menjodohkan', short: 'Jodoh', sub: 'Pasangan' },
+                    { key: 'isian' as const, label: 'Isian Singkat', short: 'Isian', sub: 'Kata Kunci' },
+                    { key: 'esai' as const, label: 'Esai / Uraian', short: 'Esai', sub: 'Rubrik' }
                   ].map(item => {
                     const val = counts[item.key];
                     return (
@@ -605,11 +665,11 @@ export function AiQuestionGeneratorModal({
                       >
                         <div>
                           <div className="flex items-center justify-between mb-1">
-                            <span className="text-[11px] font-bold text-slate-800 dark:text-slate-200 truncate">
+                            <span className="text-[11px] font-bold text-slate-800 dark:text-slate-200">
                               {item.short}
                             </span>
                             <span className="text-[9px] px-1.5 py-0.2 rounded font-mono font-semibold bg-slate-100 dark:bg-slate-800 text-slate-500">
-                              {val}
+                              {val} Soal
                             </span>
                           </div>
                           <p className="text-[10px] text-slate-500 dark:text-slate-400 font-medium truncate">
@@ -630,7 +690,7 @@ export function AiQuestionGeneratorModal({
                           <input
                             type="number"
                             min="0"
-                            max="30"
+                            max="50"
                             value={val}
                             onChange={e => setCountDirect(item.key, parseInt(e.target.value) || 0)}
                             className="w-10 text-center text-xs font-bold py-1 rounded-md bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white focus:outline-none"
@@ -649,51 +709,17 @@ export function AiQuestionGeneratorModal({
                 </div>
               </div>
 
-              {/* PENGATURAN LANJUTAN & CATATAN KHUSUS */}
-              <div className="space-y-2 border-t border-slate-200 dark:border-slate-800 pt-3">
-                <button
-                  type="button"
-                  onClick={() => setShowAdvanced(!showAdvanced)}
-                  className="flex items-center gap-1.5 text-xs font-semibold text-slate-600 dark:text-slate-400 hover:text-violet-600 dark:hover:text-violet-400 cursor-pointer"
-                >
-                  <Sliders className="w-3.5 h-3.5" />
-                  <span>Pengaturan Lanjutan & Catatan Khusus AI</span>
-                  {showAdvanced ? (
-                    <ChevronUp className="w-3.5 h-3.5" />
-                  ) : (
-                    <ChevronDown className="w-3.5 h-3.5" />
-                  )}
-                </button>
-
-                {showAdvanced && (
-                  <div className="space-y-3 pt-2">
-                    <div>
-                      <label className="text-[11px] font-semibold text-slate-600 dark:text-slate-400 block mb-1">
-                        Catatan / Instruksi Khusus untuk AI (Opsional):
-                      </label>
-                      <textarea
-                        value={customInstructions}
-                        onChange={e => setCustomInstructions(e.target.value)}
-                        placeholder="Misal: Sertakan cerita singkat tentang kearifan lokal Jawa, buat kalimat tidak lebih dari 3 baris per butir..."
-                        rows={2}
-                        className="w-full text-xs p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500"
-                      />
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* ATUR KUNCI API GEMINI (OPSIONAL JIKA SUDAH ADA DI SERVER) */}
-              <div className="p-3.5 rounded-2xl bg-amber-50/70 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/40 text-xs">
-                <div className="flex items-center justify-between">
+              {/* 4. MODEL GEMINI KESUKAAN & KUNCI API GURU */}
+              <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-800 space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
-                    <KeyRound className="w-4 h-4 text-amber-600 dark:text-amber-400" />
-                    <span className="font-bold text-amber-900 dark:text-amber-300">
-                      Kunci Google Gemini API
+                    <Cpu className="w-4 h-4 text-violet-600 dark:text-violet-400" />
+                    <span className="text-xs font-bold text-slate-900 dark:text-white">
+                      Model Gemini & Kunci API Kesukaan Guru
                     </span>
                     {isApiKeySaved && (
                       <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 flex items-center gap-1">
-                        <Check className="w-3 h-3" /> Tersimpan di Browser
+                        <Check className="w-3 h-3" /> API Key Tersimpan
                       </span>
                     )}
                   </div>
@@ -701,42 +727,129 @@ export function AiQuestionGeneratorModal({
                   <button
                     type="button"
                     onClick={() => setShowApiKeyInput(!showApiKeyInput)}
-                    className="text-[11px] font-bold text-amber-700 dark:text-amber-400 hover:underline cursor-pointer"
+                    className="text-[11px] font-bold text-violet-600 dark:text-violet-400 hover:underline cursor-pointer"
                   >
-                    {showApiKeyInput ? 'Tutup Pengaturan Kunci' : 'Atur API Key Pribadi'}
+                    {showApiKeyInput ? 'Tutup Pengaturan Model & Key' : 'Atur Model & API Key'}
                   </button>
                 </div>
 
+                {/* Dropdown Pemilihan Model Gemini */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                  <div>
+                    <label className="text-[11px] font-semibold text-slate-600 dark:text-slate-400 block mb-1">
+                      Pilih Versi Model Gemini AI:
+                    </label>
+                    <select
+                      value={isCustomModel ? 'custom' : selectedModel}
+                      onChange={e => {
+                        if (e.target.value === 'custom') {
+                          setIsCustomModel(true);
+                        } else {
+                          setIsCustomModel(false);
+                          setSelectedModel(e.target.value);
+                          if (typeof window !== 'undefined') {
+                            localStorage.setItem('cbt_gemini_model', e.target.value);
+                          }
+                        }
+                      }}
+                      className="w-full text-xs font-semibold px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500 cursor-pointer"
+                    >
+                      {GEMINI_MODELS.map(m => (
+                        <option key={m.id} value={m.id}>
+                          {m.name} — {m.tag}
+                        </option>
+                      ))}
+                      <option value="custom">Model Kustom Lainnya (Ketik Manual)...</option>
+                    </select>
+
+                    {isCustomModel && (
+                      <div className="mt-2">
+                        <input
+                          type="text"
+                          value={customModelName}
+                          onChange={e => setCustomModelName(e.target.value)}
+                          placeholder="Masukkan nama model (contoh: gemini-1.5-flash-8b)"
+                          className="w-full text-xs px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-violet-400 text-slate-900 dark:text-white font-mono"
+                        />
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="text-[11px] text-slate-500 dark:text-slate-400 flex flex-col justify-center">
+                    <p>
+                      <strong>Model Aktif:</strong>{' '}
+                      <span className="font-mono text-violet-600 dark:text-violet-400 font-bold">
+                        {activeModelId}
+                      </span>
+                    </p>
+                    <p className="text-[10px] text-slate-400 mt-1">
+                      {GEMINI_MODELS.find(m => m.id === selectedModel)?.description ||
+                        'Model Gemini kustom sesuai preferensi guru.'}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Input Kunci API Pribadi */}
                 {showApiKeyInput && (
-                  <div className="mt-2.5 pt-2 border-t border-amber-200 dark:border-amber-900/40 space-y-2">
-                    <p className="text-[11px] text-amber-800 dark:text-amber-400/90 leading-relaxed">
-                      Masukkan Google Gemini API Key Anda (gratis di{' '}
+                  <div className="mt-3 pt-3 border-t border-slate-200 dark:border-slate-700/80 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label className="text-[11px] font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                        <KeyRound className="w-3.5 h-3.5 text-amber-600" />
+                        <span>Kunci Google Gemini API Pribadi (Opsional):</span>
+                      </label>
                       <a
                         href="https://aistudio.google.com/app/apikey"
                         target="_blank"
                         rel="noreferrer"
-                        className="font-bold underline text-violet-600 dark:text-violet-400"
+                        className="text-[10px] font-bold text-violet-600 dark:text-violet-400 hover:underline"
                       >
-                        aistudio.google.com
+                        Dapatkan API Key Gratis di Google AI Studio →
                       </a>
-                      ). Kunci disimpan secara aman di browser lokal Anda tanpa dikirim ke pihak lain.
-                    </p>
+                    </div>
                     <div className="flex items-center gap-2">
                       <input
                         type="password"
                         value={apiKey}
                         onChange={e => setApiKey(e.target.value)}
-                        placeholder="AIzaSy..."
-                        className="flex-1 text-xs px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-amber-300 dark:border-amber-800 text-slate-900 dark:text-white font-mono"
+                        placeholder="AIzaSy... (Kosongkan jika menggunakan API Key sekolah / salin prompt)"
+                        className="flex-1 text-xs px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white font-mono"
                       />
                       <button
                         type="button"
-                        onClick={handleSaveApiKey}
-                        className="px-3.5 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs transition cursor-pointer"
+                        onClick={handleSaveGeminiSettings}
+                        className="px-3.5 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-bold text-xs transition cursor-pointer"
                       >
-                        Simpan Kunci
+                        Simpan Pengaturan
                       </button>
                     </div>
+                    <p className="text-[10px] text-slate-400 leading-relaxed">
+                      💡 <strong>Skenario Tanpa Kunci:</strong> Jika guru tidak mengisi API Key di sini, sistem otomatis menggunakan API Key default dari server sekolah. Bila server sekolah juga belum memasang key, guru selalu bisa menggunakan tombol <strong>&apos;Salin Prompt AI&apos;</strong> untuk membuat soal secara 100% gratis di gemini.google.com tanpa perlu API key apapun!
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* CATATAN KHUSUS (OPSIONAL) */}
+              <div className="space-y-2 border-t border-slate-200 dark:border-slate-800 pt-3">
+                <button
+                  type="button"
+                  onClick={() => setShowAdvanced(!showAdvanced)}
+                  className="flex items-center gap-1.5 text-xs font-semibold text-slate-600 dark:text-slate-400 hover:text-violet-600 dark:hover:text-violet-400 cursor-pointer"
+                >
+                  <Sliders className="w-3.5 h-3.5" />
+                  <span>Catatan Khusus untuk AI (Opsional)</span>
+                  {showAdvanced ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                </button>
+
+                {showAdvanced && (
+                  <div className="pt-2">
+                    <textarea
+                      value={customInstructions}
+                      onChange={e => setCustomInstructions(e.target.value)}
+                      placeholder="Misal: Sertakan cerita pendek kearifan lokal Indonesia, hindari kalimat yang terlalu panjang, prioritaskan stimulus grafik data..."
+                      rows={2}
+                      className="w-full text-xs p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500"
+                    />
                   </div>
                 )}
               </div>
@@ -764,10 +877,10 @@ export function AiQuestionGeneratorModal({
                   </div>
                   <div>
                     <h4 className="text-sm font-bold text-emerald-900 dark:text-emerald-200">
-                      {generatedQuestions.length} Butir Soal Berhasil Dibuat oleh AI!
+                      {generatedQuestions.length} Butir Soal Berhasil Dibuat ({activeModelId})!
                     </h4>
                     <p className="text-xs text-emerald-700 dark:text-emerald-400">
-                      Periksa dan centang soal yang ingin Anda masukkan ke Bank Soal.
+                      Standar: {standardsSummaryText} • Centang soal yang ingin disimpan ke Bank Soal.
                     </p>
                   </div>
                 </div>
@@ -968,7 +1081,7 @@ export function AiQuestionGeneratorModal({
         <div className="p-4 sm:p-5 border-t border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-900/80 flex flex-col sm:flex-row items-center justify-between gap-3">
           {currentStep === 'config' ? (
             <>
-              {/* Opsi Salin Prompt & Impor JSON (Fail-safe Gratis) */}
+              {/* Opsi Salin Prompt & Impor JSON (100% Gratis Tanpa API Key) */}
               <div className="flex items-center gap-2 w-full sm:w-auto">
                 <button
                   type="button"
@@ -1015,7 +1128,7 @@ export function AiQuestionGeneratorModal({
                 ) : (
                   <>
                     <Sparkles className="w-4 h-4" />
-                    <span>Generate {totalQuestions} Soal dengan Gemini</span>
+                    <span>Generate {totalQuestions} Soal ({activeModelId})</span>
                   </>
                 )}
               </button>
@@ -1048,7 +1161,7 @@ export function AiQuestionGeneratorModal({
       </div>
 
       {/* ============================================================ */}
-      {/* MODAL TEMPEL JSON MANUAL                                      */}
+      {/* MODAL TEMPEL JSON MANUAL (100% BEBAS TANPA KUNCI API)        */}
       {/* ============================================================ */}
       {showPasteModal && (
         <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fade-in">
@@ -1057,7 +1170,7 @@ export function AiQuestionGeneratorModal({
               <div className="flex items-center gap-2">
                 <ClipboardPaste className="w-5 h-5 text-violet-600" />
                 <h4 className="text-sm font-bold text-slate-900 dark:text-white">
-                  Tempel JSON Hasil Gemini AI
+                  Tempel JSON Hasil dari Gemini Web
                 </h4>
               </div>
               <button
@@ -1068,8 +1181,10 @@ export function AiQuestionGeneratorModal({
               </button>
             </div>
 
-            <p className="text-xs text-slate-500 dark:text-slate-400">
-              Salin prompt dengan tombol &apos;Salin Prompt AI&apos;, tempelkan ke gemini.google.com, lalu tempelkan teks balasan JSON yang Anda dapatkan di bawah ini:
+            <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+              1. Klik tombol <strong>&apos;Salin Prompt AI&apos;</strong>.<br />
+              2. Buka <a href="https://gemini.google.com" target="_blank" rel="noreferrer" className="text-violet-600 dark:text-violet-400 underline font-bold">gemini.google.com</a> (gratis tanpa API key), lalu tempel prompt tersebut.<br />
+              3. Salin balasan JSON dari Gemini dan tempelkan di kotak bawah ini:
             </p>
 
             <textarea

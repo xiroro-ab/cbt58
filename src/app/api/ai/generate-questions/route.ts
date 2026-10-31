@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { buildAiQuestionPrompt, StandardPresetType } from '@/lib/aiQuestionGenerator';
+import { buildAiQuestionPrompt, StandardBadge } from '@/lib/aiQuestionGenerator';
 
 export async function POST(req: NextRequest) {
   try {
@@ -9,19 +9,22 @@ export async function POST(req: NextRequest) {
       className = 'Kelas VIII',
       topic = 'Materi Pembelajaran Umum',
       difficulty = 'Campuran',
-      standardPreset = 'AKM',
+      selectedStandards = ['AKM', 'TKA'],
       counts = { pg: 5, pgk: 2, bs: 2, jodoh: 1, isian: 0, esai: 0 },
       customInstructions = '',
-      apiKey: clientApiKey = ''
+      apiKey: clientApiKey = '',
+      model: clientModel = 'gemini-1.5-flash'
     } = body;
 
+    // Prioritas Kunci API: 1. Input pribadi guru -> 2. Environment server sekolah
     const apiKey = clientApiKey?.trim() || process.env.GEMINI_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY;
 
     if (!apiKey) {
       return NextResponse.json(
         {
           error: 'API_KEY_REQUIRED',
-          message: 'Kunci API Gemini belum dikonfigurasi. Masukkan Google Gemini API Key Anda pada pengaturan modal (gratis di aistudio.google.com) atau gunakan opsi Salin Prompt.'
+          message:
+            'Kunci API Gemini belum dikonfigurasi pada server sekolah maupun input guru. Silakan masukkan Google Gemini API Key Anda (gratis di aistudio.google.com) atau gunakan tombol "Salin Prompt AI" untuk membuat soal langsung secara gratis di gemini.google.com tanpa API key.'
         },
         { status: 400 }
       );
@@ -45,19 +48,25 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Bangun prompt sistem komprehensif
+    // Bangun prompt sistem dengan integrasi multi-standar (AKM, PISA, TKA, Harian)
     const systemPrompt = buildAiQuestionPrompt({
       subjectTitle,
       className,
       topic,
       difficulty,
-      standardPreset: standardPreset as StandardPresetType,
+      selectedStandards: (Array.isArray(selectedStandards) && selectedStandards.length > 0)
+        ? (selectedStandards as StandardBadge[])
+        : ['AKM', 'TKA'],
       counts,
-      customInstructions
+      customInstructions,
+      model: clientModel
     });
 
-    // Panggil API Gemini
-    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+    // Sanitasi nama model yang dipilih guru
+    const selectedModel = (clientModel || 'gemini-1.5-flash').trim();
+    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
+      selectedModel
+    )}:generateContent?key=${apiKey}`;
 
     const geminiRes = await fetch(geminiUrl, {
       method: 'POST',
@@ -85,8 +94,13 @@ export async function POST(req: NextRequest) {
         errJson = JSON.parse(errText);
       } catch {}
 
-      const msg = errJson?.error?.message || `Gagal menghubungi Gemini API (Status ${geminiRes.status})`;
-      return NextResponse.json({ error: 'GEMINI_API_ERROR', message: msg }, { status: geminiRes.status });
+      const msg =
+        errJson?.error?.message ||
+        `Gagal menghubungi Gemini API dengan model "${selectedModel}" (Status ${geminiRes.status})`;
+      return NextResponse.json(
+        { error: 'GEMINI_API_ERROR', message: msg, rawError: errJson },
+        { status: geminiRes.status }
+      );
     }
 
     const geminiData = await geminiRes.json();
@@ -94,7 +108,10 @@ export async function POST(req: NextRequest) {
 
     if (!rawOutputText) {
       return NextResponse.json(
-        { error: 'NO_RESPONSE', message: 'Gemini tidak memberikan jawaban yang valid.' },
+        {
+          error: 'NO_RESPONSE',
+          message: `Model Gemini ${selectedModel} tidak memberikan respons teks yang valid.`
+        },
         { status: 500 }
       );
     }
@@ -122,7 +139,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         {
           error: 'JSON_PARSE_ERROR',
-          message: 'Format balasan AI belum berupa JSON valid. Silakan coba kembali atau gunakan mode Salin Prompt.',
+          message:
+            'Format balasan dari AI belum berupa array JSON yang valid. Silakan klik generate ulang atau coba dengan model lain.',
           raw: cleanedJson
         },
         { status: 500 }
@@ -136,7 +154,8 @@ export async function POST(req: NextRequest) {
         totalGenerated: parsedQuestions.length,
         subjectTitle,
         topic,
-        standardPreset
+        selectedStandards,
+        model: selectedModel
       }
     });
   } catch (error: any) {

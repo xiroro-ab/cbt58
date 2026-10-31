@@ -408,10 +408,17 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   // Helper tampilan nama mapel rapi tanpa prefix berlebih
   const formatSubjectTitle = (title: string) => {
     if (!title) return '';
-    return title
+    let clean = title
       .replace(/^Asesmen Sumatif( Akhir)?( Tengah)? Semester( - )?/i, '')
       .replace(/^Asesmen Sumatif - /i, '')
+      .replace(/^ASAS( Ganjil| Genap)?( - | )?/i, '')
+      .replace(/^ASTS( Ganjil| Genap)?( - | )?/i, '')
+      .replace(/^PAS( Ganjil| Genap)?( - | )?/i, '')
+      .replace(/^PTS( Ganjil| Genap)?( - | )?/i, '')
+      .replace(/^Ujian( Sekolah| Semester)?( - | )?/i, '')
       .trim();
+
+    return clean || title;
   };
 
   // Helper pengecekan hak akses mata pelajaran per guru (mencakup pencocokan multi-kata kunci & mapel buatan guru)
@@ -996,7 +1003,9 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
 
   // Data Rekapitulasi Pelaksanaan Ujian (Bulanan / Contoh 3) - Terhubung 100% Data Riil Database
   const monthlyExamStats = useMemo(() => {
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const months = language === 'en'
+      ? ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+      : ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
     const currentMonth = new Date().getMonth();
 
     // Hitung peserta ujian (takers) riil per bulan berdasarkan data riil results
@@ -1045,7 +1054,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
       stats,
       maxVal: calculatedMax
     };
-  }, [results, accessibleSubjects, subject]);
+  }, [results, accessibleSubjects, subject, language]);
 
   // Helper membuat garis lengkung mulus (Spline Bezier Curve) identik Contoh 3
   const getSplinePath = (points: Array<{ x: number; y: number }>) => {
@@ -1449,25 +1458,33 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
             <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-3xl p-6 shadow-xs space-y-4">
               <div className="flex items-start justify-between">
                 <div>
-                  <h3 className="font-bold text-base text-slate-900 dark:text-white">Exam Taken Times</h3>
-                  <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">Taken records of last Years</p>
+                  <h3 className="font-bold text-base text-slate-900 dark:text-white">
+                    {language === 'en' ? 'Exam Taken Times' : 'Rekapitulasi Pelaksanaan Ujian'}
+                  </h3>
+                  <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">
+                    {language === 'en' ? 'Taken records of last Years' : 'Rekaman riwayat pelaksanaan ujian bulanan'}
+                  </p>
 
                   {/* Legends */}
                   <div className="flex items-center gap-4 mt-3 text-xs">
                     <div className="flex items-center gap-1.5">
                       <span className="w-2.5 h-2.5 rounded-full bg-violet-600"></span>
-                      <span className="text-slate-700 dark:text-slate-300 font-medium text-xs">Active Exams</span>
+                      <span className="text-slate-700 dark:text-slate-300 font-medium text-xs">
+                        {language === 'en' ? 'Active Exams' : 'Jadwal Ujian'}
+                      </span>
                     </div>
                     <div className="flex items-center gap-1.5">
                       <span className="w-2.5 h-2.5 rounded-full bg-violet-200 dark:bg-violet-900/60 border border-violet-400/40"></span>
-                      <span className="text-slate-700 dark:text-slate-300 font-medium text-xs">Active Exam Takers</span>
+                      <span className="text-slate-700 dark:text-slate-300 font-medium text-xs">
+                        {language === 'en' ? 'Active Exam Takers' : 'Peserta Ujian'}
+                      </span>
                     </div>
                   </div>
                 </div>
 
                 <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/50 text-xs font-semibold text-slate-700 dark:text-slate-300 shadow-2xs">
                   <Calendar className="w-3.5 h-3.5 text-slate-500" />
-                  <span>Monthly</span>
+                  <span>{language === 'en' ? 'Monthly' : 'Bulanan'}</span>
                 </div>
               </div>
 
@@ -1608,24 +1625,34 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
             {/* Chart 2: Average Results For Test Questions (Segmented Multi-Color Bars) */}
             <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-3xl p-6 shadow-xs flex flex-col justify-between space-y-4">
               <div>
-                <h3 className="font-bold text-base text-slate-900 dark:text-white">Average Results For Test Questions</h3>
+                <h3 className="font-bold text-base text-slate-900 dark:text-white">
+                  {language === 'en' ? 'Average Results For Test Questions' : 'Tingkat Kesulitan & Capaian Butir Soal'}
+                </h3>
                 {/* 4 Colored Legends */}
                 <div className="flex flex-wrap items-center gap-3.5 mt-3 text-xs">
                   <div className="flex items-center gap-1.5">
                     <span className="w-2.5 h-2.5 rounded-full bg-violet-600"></span>
-                    <span className="text-slate-700 dark:text-slate-300 font-medium text-xs">Easy questions</span>
+                    <span className="text-slate-700 dark:text-slate-300 font-medium text-xs">
+                      {language === 'en' ? 'Easy questions' : 'Soal Mudah'}
+                    </span>
                   </div>
                   <div className="flex items-center gap-1.5">
                     <span className="w-2.5 h-2.5 rounded-full bg-teal-500"></span>
-                    <span className="text-slate-700 dark:text-slate-300 font-medium text-xs">Medium questions</span>
+                    <span className="text-slate-700 dark:text-slate-300 font-medium text-xs">
+                      {language === 'en' ? 'Medium questions' : 'Soal Sedang'}
+                    </span>
                   </div>
                   <div className="flex items-center gap-1.5">
                     <span className="w-2.5 h-2.5 rounded-full bg-amber-400"></span>
-                    <span className="text-slate-700 dark:text-slate-300 font-medium text-xs">Difficult questions</span>
+                    <span className="text-slate-700 dark:text-slate-300 font-medium text-xs">
+                      {language === 'en' ? 'Difficult questions' : 'Soal Sulit'}
+                    </span>
                   </div>
                   <div className="flex items-center gap-1.5">
                     <span className="w-2.5 h-2.5 rounded-full bg-orange-500"></span>
-                    <span className="text-slate-700 dark:text-slate-300 font-medium text-xs">Hard</span>
+                    <span className="text-slate-700 dark:text-slate-300 font-medium text-xs">
+                      {language === 'en' ? 'Hard' : 'Sangat Sulit'}
+                    </span>
                   </div>
                 </div>
 
@@ -1634,7 +1661,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                   {questionAnalyticsSubjects.map((sub) => (
                     <div key={sub.name} className="flex items-center gap-3 sm:gap-4">
                       <span
-                        className="w-20 sm:w-24 text-xs font-semibold text-slate-700 dark:text-slate-300 truncate"
+                        className="w-28 sm:w-36 text-xs font-semibold text-slate-700 dark:text-slate-300 truncate"
                         title={`${sub.name} (Rata-rata Nilai: ${sub.avgScore})`}
                       >
                         {sub.name}
@@ -1642,7 +1669,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                       {/* Segmented Track */}
                       <div
                         className="flex-1 h-4 rounded-full bg-slate-100/70 dark:bg-slate-800/40 p-0.5 flex items-center gap-1 cursor-help"
-                        title={`${sub.name} | Rata-rata: ${sub.avgScore} | Mudah: ${sub.percentages?.easyPct}%, Sedang: ${sub.percentages?.medPct}%, Sulit: ${sub.percentages?.diffPct}%, Hard: ${sub.percentages?.hardPct}%`}
+                        title={`${sub.name} | Rata-rata: ${sub.avgScore} | Mudah: ${sub.percentages?.easyPct}%, Sedang: ${sub.percentages?.medPct}%, Sulit: ${sub.percentages?.diffPct}%, Sangat Sulit: ${sub.percentages?.hardPct}%`}
                       >
                         <div
                           style={{ width: `${sub.easy}%` }}
@@ -1662,7 +1689,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                         <div
                           style={{ width: `${sub.hard}%` }}
                           className="h-full rounded-full bg-orange-500 transition-all"
-                          title={`Hard: ${sub.percentages?.hardPct}% (${sub.hard}% skala mark)`}
+                          title={`Sangat Sulit: ${sub.percentages?.hardPct}% (${sub.hard}% skala mark)`}
                         ></div>
                       </div>
                     </div>
@@ -1672,7 +1699,9 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
 
               {/* Bottom Pass Mark Scale (10 to 100) */}
               <div className="flex items-center pt-3 border-t border-slate-100 dark:border-slate-800 text-[11px] text-slate-400 font-medium">
-                <span className="w-20 sm:w-24 text-slate-700 dark:text-slate-300 font-bold">Pass Mark :</span>
+                <span className="w-28 sm:w-36 text-slate-700 dark:text-slate-300 font-bold">
+                  {language === 'en' ? 'Pass Mark :' : 'Batas KKM :'}
+                </span>
                 <div className="flex-1 flex justify-between px-1">
                   <span>10</span>
                   <span>20</span>

@@ -132,7 +132,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   ];
 
   return (
-    <header className="sticky top-0 z-20 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b border-slate-200/80 dark:border-slate-800/80 px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between transition-colors gap-2">
+    <header className="sticky top-0 z-20 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b border-slate-200/80 dark:border-slate-800/80 px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between transition-colors gap-2 print:hidden">
       {/* 1. HAMBURGER (MOBILE) + GREETING & DATE */}
       <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1">
         {onToggleMobileSidebar && (

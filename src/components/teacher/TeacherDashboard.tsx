@@ -12,6 +12,7 @@ import { sendProctorCommand, subscribeToLiveSessions, removeStudentSession, broa
 import { clearStudentAutolockInSupabase, insertMessage, fetchQuestionsBySubject } from '@/lib/supabaseService';
 import { resolveStudentSingleClass, isClassInGrade } from '@/lib/rosterStudents';
 import { TTESignatureSeal } from '@/components/common/TTESignatureSeal';
+import { ClassRecapModal } from '../modals/ClassRecapModal';
 import {
   TrendingUp,
   Award,
@@ -20,6 +21,7 @@ import {
   BookOpen,
   Calendar,
   Building2,
+  FileSpreadsheet,
   Send,
   MoreVertical,
   Edit2,
@@ -658,6 +660,10 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
       setCreatedSubjectIds([]);
     }
   }, [currentTeacher?.id]);
+
+  // Modal Cetak Rekap Nilai Siswa Per Kelas (Leger Nilai)
+  const [isClassRecapModalOpen, setIsClassRecapModalOpen] = useState(false);
+  const [recapModalClass, setRecapModalClass] = useState<string>('');
 
   // AI Question Generator Modal State & Handler
   const [isAiModalOpen, setIsAiModalOpen] = useState(false);
@@ -2092,8 +2098,8 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
 
   return (
     <div className="p-3 sm:p-6 md:p-8 space-y-6 max-w-7xl mx-auto w-full transition-colors print:p-0 print:m-0 print:max-w-none print:w-full print:block">
-      {/* WRAPPER KONTEN UTAMA DASHBOARD (SEMBUNYI SAAT CETAK DOSSIER) */}
-      <div className={`space-y-6 ${selectedResult ? 'print:hidden' : ''}`}>
+      {/* WRAPPER KONTEN UTAMA DASHBOARD (SEMBUNYI SAAT CETAK DOSSIER / REKAP KELAS) */}
+      <div className={`space-y-6 ${(selectedResult || isClassRecapModalOpen) ? 'print:hidden' : ''}`}>
       {/* ============================================================== */}
       {/* 1. TAMPILAN DASHBOARD UTAMA (100% REAL DATA DRIVEN)             */}
       {/* ============================================================== */}
@@ -3663,6 +3669,20 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
             </div>
 
             <div className="flex items-center gap-2 flex-wrap">
+              {/* Tombol Cetak Rekap Nilai Siswa Per Kelas */}
+              <button
+                type="button"
+                onClick={() => {
+                  setRecapModalClass(resultsClassFilter !== 'ALL' ? resultsClassFilter : (availableClasses[0] || 'VII.1'));
+                  setIsClassRecapModalOpen(true);
+                }}
+                className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-xs transition cursor-pointer"
+                title="Cetak rekapan nilai lengkap per rombel kelas (misal: VII.1)"
+              >
+                <FileSpreadsheet className="w-3.5 h-3.5" />
+                <span>Cetak Rekap Kelas</span>
+              </button>
+
               {/* Tombol Cetak Sertifikat Aktif */}
               <button
                 onClick={() => {
@@ -4584,6 +4604,20 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                 <Printer className="w-4 h-4" />
                 <span>Cetak Dokumen / Simpan PDF</span>
               </button>
+
+              {/* Tombol Buka Cetak Rekap Kelas Modal */}
+              <button
+                type="button"
+                onClick={() => {
+                  setRecapModalClass(selectedDocClass !== 'Semua Kelas' ? selectedDocClass : (availableClasses[0] || 'VII.1'));
+                  setIsClassRecapModalOpen(true);
+                }}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition shadow-md shadow-emerald-600/20 cursor-pointer"
+                title="Buka Lembar Rekapan Nilai Per Rombel Kelas Lengkap dengan Statistik & TTE"
+              >
+                <FileSpreadsheet className="w-4 h-4" />
+                <span>Rekap Nilai Per Kelas</span>
+              </button>
             </div>
           </div>
 
@@ -4612,27 +4646,47 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
 
           {/* LEMBAR DOKUMEN RESMI (PRINTABLE SHEET) */}
           <div className="p-8 sm:p-12 bg-white text-slate-900 rounded-2xl border border-slate-200/80 shadow-md font-serif space-y-6 max-w-4xl mx-auto print:border-none print:shadow-none print:p-0 print:max-w-none">
-            {/* KOP SURAT RESMI SEKOLAH */}
-            <div className="border-b-4 border-double border-slate-900 pb-4 flex items-center justify-between gap-6 text-center">
-              <div className="w-16 h-16 flex-shrink-0 flex items-center justify-center border-2 border-slate-900 rounded-full font-sans font-bold text-xs">
-                SMPN 58
+            {/* KOP SURAT RESMI SEKOLAH (DINAMIS DARI PENGATURAN SISTEM) */}
+            <div className="border-b-4 border-double border-slate-900 pb-4 flex items-center justify-between gap-4 text-center">
+              {/* Logo Kiri (Dinas/Pemda) */}
+              <div className="w-16 h-16 sm:w-20 sm:h-20 flex-shrink-0 flex items-center justify-center">
+                <img
+                  src={effectiveSchoolSettings.logoLeft || '/logo-dinas.png'}
+                  alt="Logo Dinas"
+                  className="max-h-16 sm:max-h-20 max-w-full object-contain"
+                />
               </div>
+
+              {/* Teks Kop Tengah */}
               <div className="flex-1 space-y-0.5">
-                <h4 className="text-sm font-semibold tracking-wider uppercase font-sans">
-                  Pemerintah Kota Palembang • Dinas Pendidikan
+                <h4 className="text-xs sm:text-sm font-semibold tracking-wider uppercase font-sans text-slate-800">
+                  {effectiveSchoolSettings.institution1 || 'PEMERINTAH KOTA PALEMBANG'}
                 </h4>
-                <h2 className="text-xl sm:text-2xl font-black tracking-wide font-sans text-slate-900">
-                  SMP NEGERI 58 PALEMBANG
+                <h2 className="text-sm sm:text-base font-bold tracking-wider uppercase font-sans text-slate-900">
+                  {effectiveSchoolSettings.institution2 || 'DINAS PENDIDIKAN'}
                 </h2>
-                <p className="text-[11px] font-sans text-slate-700">
-                  NPSN: 10603758 • NSS: 201116001058 • Status: Terakreditasi A
-                </p>
-                <p className="text-[10px] font-sans text-slate-600">
-                  Jl. Pangeran Ratu, Jakabaring, Kec. Seberang Ulu I, Kota Palembang, Sumatera Selatan 30257
-                </p>
+                <h1 className="text-lg sm:text-2xl font-black tracking-wide font-sans text-slate-950 uppercase">
+                  {effectiveSchoolSettings.schoolName || 'SMP NEGERI 58 PALEMBANG'}
+                </h1>
+                {effectiveSchoolSettings.schoolAddress && (
+                  <p className="text-[10px] sm:text-[11px] font-sans text-slate-600 leading-snug">
+                    {effectiveSchoolSettings.schoolAddress}
+                  </p>
+                )}
+                {effectiveSchoolSettings.schoolContact && (
+                  <p className="text-[10px] font-sans text-slate-500 leading-snug">
+                    {effectiveSchoolSettings.schoolContact}
+                  </p>
+                )}
               </div>
-              <div className="w-16 h-16 flex-shrink-0 flex items-center justify-center border-2 border-slate-900 rounded-lg font-sans font-black text-sm">
-                CBT v2
+
+              {/* Logo Kanan (Sekolah) */}
+              <div className="w-16 h-16 sm:w-20 sm:h-20 flex-shrink-0 flex items-center justify-center">
+                <img
+                  src={effectiveSchoolSettings.logoRight || '/logo-sekolah.png'}
+                  alt="Logo Sekolah"
+                  className="max-h-16 sm:max-h-20 max-w-full object-contain"
+                />
               </div>
             </div>
 
@@ -8549,6 +8603,21 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
           onSaveQuestions={handleSaveAiQuestions}
         />
       </div>
+
+      {/* ============================================================== */}
+      {/* 13. MODAL CETAK REKAP NILAI SISWA PER KELAS (LEGER ROMBEL)     */}
+      {/* ============================================================== */}
+      <ClassRecapModal
+        isOpen={isClassRecapModalOpen}
+        onClose={() => setIsClassRecapModalOpen(false)}
+        results={results}
+        allSubjects={accessibleSubjects}
+        students={students}
+        schoolSettings={effectiveSchoolSettings}
+        currentTeacher={currentTeacher}
+        initialClass={recapModalClass || (resultsClassFilter !== 'ALL' ? resultsClassFilter : (availableClasses[0] || 'VII.1'))}
+        initialSubjectId={resultsSubjectFilter !== 'ALL' ? resultsSubjectFilter : (selectedBankSubjectId || subject.id)}
+      />
     </div>
   );
 };

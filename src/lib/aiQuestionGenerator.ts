@@ -333,6 +333,38 @@ export function buildAiQuestionPrompt(params: PromptBuildParams): string {
     .map((s, idx) => `${idx + 1}. [${s.label}]: ${s.focusGuideline}`)
     .join('\n');
 
+  // Contoh konteks stimulus dinamis sesuai mata pelajaran yang dipilih
+  const getSubjectContextExample = (sub: string): string => {
+    const s = sub.toLowerCase();
+    if (s.includes('informatika') || s.includes('komputer') || s.includes('tik')) {
+      return 'studi kasus keamanan siber/phishing, diagram topologi jaringan LAN, efisiensi algoritma sorting, atau formula analisis spreadsheet';
+    }
+    if (s.includes('matematika') || s.includes('mtk')) {
+      return 'tabel numerasi keuangan/biaya belanja, grafik fungsi perbandingan, diagram geometri arsitektur, atau studi kasus peluang';
+    }
+    if (s.includes('ipa') || s.includes('sains')) {
+      return 'data eksperimen sains, fenomena perubahan iklim, infografis anatomi peredaran darah, atau grafik gerak dan gaya';
+    }
+    if (s.includes('inggris') || s.includes('english')) {
+      return 'artikel berita berbahasa Inggris, dialog percakapan situasional, teks manual prosedur, atau teks deskriptif';
+    }
+    if (s.includes('indonesia')) {
+      return 'teks eksplanasi fenomena alam/sosial, telaah kritis opini artikel media, teks ulasan novel, atau teks persuasi';
+    }
+    if (s.includes('ips') || s.includes('sosial')) {
+      return 'data aktivitas perdagangan antarpulau, dinamika sejarah pergerakan nasional, atau fenomena mobilitas sosial masyarakat';
+    }
+    if (s.includes('pkn') || s.includes('pancasila') || s.includes('ppkn')) {
+      return 'studi kasus musyawarah mufakat di lingkungan warga, analisis tata perundang-undangan, atau hak & kewajiban konstitusional';
+    }
+    if (s.includes('pai') || s.includes('agama')) {
+      return 'studi kasus penerapan akhlak mulia dan toleransi, sejarah peradaban Islam, atau hikmah pelaksanaan tata cara ibadah';
+    }
+    return `studi kasus kontekstual kehidupan nyata atau data tabel/infografis ilmiah yang menguji aplikasi materi ${sub}`;
+  };
+
+  const contextExample = getSubjectContextExample(targetDiscipline);
+
   return `Anda adalah Pakar Asesmen Pendidikan Nasional dan Pembuat Soal Ujian Berbasis Komputer (CBT) SMP Indonesia yang menguasai Kurikulum Merdeka, Standar AKM (Kemendikbud), Standar PISA (OECD), Standar TKA (Akademik/ASAS), dan Soal Harian Formatif.
 
 ========================================================================
@@ -349,7 +381,7 @@ ATURAN WAJIB DISIPLIN ILMU:
 - DILARANG KERAS menyajikan soal pemahaman bacaan umum fiksi/sastra, tata bahasa/kebahasaan, kalimat utama, majas, atau materi di luar "${targetDiscipline}", KECUALI jika mata pelajaran yang diminta memang "Bahasa Indonesia"!
 - Jika Standar AKM (Literasi/Numerasi) atau Standar PISA dipilih:
   Stimulus bacaan HARUS berupa studi kasus nyata, artikel sains/teknologi terapan, simulasi masalah, atau data statistik yang menguji konsep "${targetDiscipline}".
-  (Contoh jika Informatika: studi kasus serangan phishing, simulasi rute jaringan LAN, perbandingan algoritma sorting, arsitektur IoT, formula spreadsheet, dsb. Pertanyaan menguji logika komputasi dan analisis data "${targetDiscipline}", BUKAN menguji kemampuan membaca bahasa!).
+  (Contoh konteks untuk ${targetDiscipline}: ${contextExample}. Pertanyaan menguji pemahaman konsep dan kemampuan analitis "${targetDiscipline}", BUKAN sekadar membaca teks fiksi!).
 ========================================================================
 
 TUGAS UTAMA:

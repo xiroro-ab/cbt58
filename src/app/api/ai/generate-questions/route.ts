@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { buildAiQuestionPrompt, StandardBadge, sanitizeAndParseAiJson } from '@/lib/aiQuestionGenerator';
 
+// Maksimum durasi eksekusi di Vercel Serverless Function (60 detik)
+export const maxDuration = 60;
+
 /**
  * Mendapatkan API Key Gemini dari Environment Vercel / Server
  * Mendukung beberapa variasi nama variabel lingkungan agar fail-safe
@@ -18,13 +21,35 @@ function getServerGeminiApiKey(): string {
 
 /**
  * Endpoint status untuk memeriksa apakah Vercel sudah terpasang API Key Gemini
+ * serta mengambil daftar model resmi yang sedang aktif dari Google
  */
 export async function GET() {
   const serverKey = getServerGeminiApiKey();
+  let availableModels: string[] = [];
+
+  if (serverKey) {
+    try {
+      const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models?key=${serverKey}`,
+        { next: { revalidate: 1800 } }
+      );
+      if (res.ok) {
+        const data = await res.json();
+        availableModels = (data.models || [])
+          .filter((m: any) => m.supportedGenerationMethods?.includes('generateContent'))
+          .map((m: any) => m.name.replace(/^models\//i, ''))
+          .filter((name: string) => name.includes('flash') || name.includes('pro'));
+      }
+    } catch {
+      // fail-safe jika endpoint list models gagal
+    }
+  }
+
   return NextResponse.json({
     status: 'ok',
     hasServerKey: Boolean(serverKey),
-    envDetected: serverKey ? 'GEMINI_API_KEY_ACTIVE' : 'NONE'
+    envDetected: serverKey ? 'GEMINI_API_KEY_ACTIVE' : 'NONE',
+    availableModels
   });
 }
 
@@ -90,8 +115,9 @@ export async function POST(req: NextRequest) {
       model: clientModel
     });
 
-    // Sanitasi nama model yang dipilih guru
-    const selectedModel = (clientModel || 'gemini-1.5-flash').trim();
+    // Sanitasi nama model yang dipilih guru (bersihkan spasi dan prefix 'models/' jika ada)
+    const rawModel = (clientModel || 'gemini-1.5-flash').trim();
+    const selectedModel = rawModel.replace(/^models\//i, '');
     const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
       selectedModel
     )}:generateContent?key=${apiKey}`;

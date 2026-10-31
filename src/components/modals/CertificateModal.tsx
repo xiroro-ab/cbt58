@@ -46,7 +46,24 @@ export const CertificateModal: React.FC<CertificateModalProps> = ({
   const currentResult = results.find(r => r.id === activeStudentId) || selectedStudentResult || results[0];
 
   const handlePrint = () => {
-    window.print();
+    const htmlEl = document.documentElement;
+    const isDark = htmlEl.classList.contains('dark');
+
+    if (isDark) {
+      htmlEl.classList.remove('dark');
+    }
+
+    setTimeout(() => {
+      window.print();
+      if (isDark) {
+        const restoreDark = () => {
+          htmlEl.classList.add('dark');
+          window.removeEventListener('afterprint', restoreDark);
+        };
+        window.addEventListener('afterprint', restoreDark, { once: true });
+        setTimeout(restoreDark, 3000);
+      }
+    }, 60);
   };
 
   const getPredicate = (score: number) => {

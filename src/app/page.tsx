@@ -1661,7 +1661,7 @@ export default function Home() {
   // VIEW 3: PANEL GURU / DASHBOARD UTAMA SAAS (TABOR STUDY FORMAL THEME)
   // =========================================================================
   return (
-    <div className="flex h-screen bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 overflow-hidden font-sans transition-colors">
+    <div className="flex h-screen bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 overflow-hidden font-sans transition-colors print:h-auto print:overflow-visible print:bg-white print:text-black print:block">
       {/* SIDEBAR FORMAL DENGAN DRAWER MOBILE */}
       <Sidebar
         currentNav={currentNav}
@@ -1680,7 +1680,7 @@ export default function Home() {
       />
 
       {/* MAIN CONTAINER */}
-      <div className="flex-1 flex flex-col h-screen overflow-y-auto">
+      <div className="flex-1 flex flex-col h-screen overflow-y-auto print:h-auto print:overflow-visible print:bg-white print:block">
         {/* NAVBAR HEADER DENGAN NOTIFIKASI & PESAN KENDALA AKTIF (OPSI A) */}
         <Navbar
           onStartStudentExam={() => setViewMode('student_login')}
@@ -1706,7 +1706,7 @@ export default function Home() {
         />
 
         {/* DASHBOARD CONTENT BODY */}
-        <main className={`flex-1 ${isCertificatesModalOpen ? 'print:hidden' : ''}`}>
+        <main className={`flex-1 print:h-auto print:overflow-visible print:bg-white ${isCertificatesModalOpen ? 'print:hidden' : ''}`}>
           <TeacherDashboard
             currentNav={currentNav}
             subject={subject}

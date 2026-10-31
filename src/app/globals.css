@@ -57,23 +57,75 @@ select option {
   background: rgba(150, 150, 150, 0.5);
 }
 
-/* Styling Khusus Cetak Kertas & Simpan PDF Resmi */
+/* Styling Khusus Cetak Kertas & Simpan PDF Resmi (Bebas Glitch Tema Hitam) */
 @media print {
-  body {
+  html,
+  html.dark,
+  body,
+  .dark,
+  .dark body,
+  #root,
+  #__next {
+    background: #ffffff !important;
     background-color: #ffffff !important;
     color: #000000 !important;
+    color-scheme: light !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
 
-  /* Sembunyikan sidebar, bilah navigasi, scrollbar, dan tombol aksi saat mencetak */
+  /* Sembunyikan sidebar, bilah navigasi header, scrollbar, dan tombol aksi saat mencetak */
   aside,
   nav,
+  header,
   button,
-  .print\:hidden {
+  .print\:hidden,
+  .dark .print\:hidden {
     display: none !important;
   }
 
+  /* Hilangkan backdrop gelap modal saat cetak */
+  .dark .bg-black\/70,
+  .dark .bg-black\/60,
+  .dark [class*="bg-black/"] {
+    background: transparent !important;
+    background-color: transparent !important;
+    backdrop-filter: none !important;
+  }
+
+  /* Paksa semua kontainer dan kartu cetak dossier & sertifikat berlatar putih bersih */
+  .dark .print\:bg-white,
+  .dark [class*="print:bg-white"],
+  .dark .bg-slate-900,
+  .dark .bg-slate-950,
+  .dark [class*="dark:bg-slate-900"],
+  .dark [class*="dark:bg-slate-950"],
+  .dark [class*="dark:bg-slate-800"] {
+    background-color: #ffffff !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
+
+  /* Paksa teks hitam tajam mudah dibaca */
+  .dark .print\:text-black,
+  .dark [class*="print:text-black"],
+  .dark [class*="dark:text-white"],
+  .dark [class*="dark:text-slate-100"],
+  .dark [class*="dark:text-slate-200"],
+  .dark [class*="dark:text-slate-300"],
+  .dark [class*="dark:text-slate-400"] {
+    color: #0f172a !important;
+  }
+
+  /* Garis batas kartu cetak rapi */
+  .dark .print\:border-slate-300,
+  .dark [class*="print:border-slate"],
+  .dark [class*="dark:border-slate"] {
+    border-color: #cbd5e1 !important;
+  }
+
   @page {
-    margin: 1.2cm;
+    margin: 1cm;
     size: auto;
   }
 }

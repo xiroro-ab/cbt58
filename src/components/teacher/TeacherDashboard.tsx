@@ -1917,8 +1917,31 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
     document.body.removeChild(link);
   };
 
+  const handlePrintDossier = () => {
+    const htmlEl = document.documentElement;
+    const isDark = htmlEl.classList.contains('dark');
+
+    if (isDark) {
+      htmlEl.classList.remove('dark');
+    }
+
+    setTimeout(() => {
+      window.print();
+      if (isDark) {
+        const restoreDark = () => {
+          htmlEl.classList.add('dark');
+          window.removeEventListener('afterprint', restoreDark);
+        };
+        window.addEventListener('afterprint', restoreDark, { once: true });
+        setTimeout(restoreDark, 3000);
+      }
+    }, 60);
+  };
+
   return (
-    <div className={`p-3 sm:p-6 md:p-8 space-y-6 max-w-7xl mx-auto w-full transition-colors ${selectedResult ? 'print:hidden' : ''}`}>
+    <div className="p-3 sm:p-6 md:p-8 space-y-6 max-w-7xl mx-auto w-full transition-colors print:p-0 print:m-0 print:max-w-none print:w-full print:block">
+      {/* WRAPPER KONTEN UTAMA DASHBOARD (SEMBUNYI SAAT CETAK DOSSIER) */}
+      <div className={`space-y-6 ${selectedResult ? 'print:hidden' : ''}`}>
       {/* ============================================================== */}
       {/* 1. TAMPILAN DASHBOARD UTAMA (100% REAL DATA DRIVEN)             */}
       {/* ============================================================== */}
@@ -6423,6 +6446,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
           </div>
         </div>
       )}
+      </div>
 
       {/* ============================================================== */}
       {/* 8. MODAL DETAIL NILAI SISWA (DOSSIER & PENILAIAN MANUAL ESAI)    */}
@@ -6437,7 +6461,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
         const cleanDossierSubjectName = extractSubjectAndGrade(rawDossierSubjectTitle, cleanDossierClass).cleanSubject || rawDossierSubjectTitle;
 
         return (
-          <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 print:static print:z-auto print:bg-white print:p-0 print:block">
+          <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 print:static print:z-auto print:bg-white print:p-0 print:block print:w-full">
             {/* FLOATING SUCCESS TOAST KOREKSI NILAI URAIAN */}
             {dossierSuccessToast && (
               <div className="fixed top-6 left-1/2 -translate-x-1/2 z-[60] px-5 py-3 rounded-2xl bg-emerald-600 text-white font-extrabold text-xs shadow-2xl flex items-center gap-2.5 animate-in slide-in-from-top-4 border border-emerald-400/30 print:hidden">
@@ -6446,7 +6470,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
               </div>
             )}
 
-            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-3xl w-full max-h-[90vh] overflow-y-auto p-5 sm:p-7 space-y-5 shadow-2xl animate-in zoom-in-95 print:border-none print:shadow-none print:max-w-none print:max-h-none print:overflow-visible print:p-0 print:bg-white print:text-black">
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-3xl w-full max-h-[90vh] overflow-y-auto p-5 sm:p-7 space-y-5 shadow-2xl animate-in zoom-in-95 print:border-none print:shadow-none print:max-w-none print:max-h-none print:overflow-visible print:p-0 print:bg-white print:text-black print:w-full print:space-y-4">
               {/* KOP SURAT RESMI KHUSUS CETAK DOSSIER */}
               <div className="hidden print:block border-b-4 border-double border-slate-900 pb-3 mb-4 text-center">
                 <div className="flex items-center justify-between gap-4">
@@ -7015,7 +7039,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                     </button>
 
                     <button
-                      onClick={() => window.print()}
+                      onClick={handlePrintDossier}
                       className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-semibold cursor-pointer transition border border-slate-200 dark:border-slate-700"
                     >
                       <Printer className="w-3.5 h-3.5" />
@@ -7040,7 +7064,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
       {/* 9. MODAL BUAT JADWAL UJIAN BARU                                 */}
       {/* ============================================================== */}
       {isAddScheduleModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 print:hidden">
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-xl w-full max-h-[90vh] overflow-y-auto p-6 space-y-5 shadow-2xl animate-in zoom-in-95">
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
               <div className="flex items-center gap-2.5">
@@ -7304,7 +7328,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
       {/* 10. MODAL EDIT PENGATURAN JADWAL UJIAN                         */}
       {/* ============================================================== */}
       {isEditScheduleModalOpen && scheduleToEdit && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 print:hidden">
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-xl w-full max-h-[90vh] overflow-y-auto p-6 space-y-5 shadow-2xl animate-in zoom-in-95">
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
               <div className="flex items-center gap-2.5">
@@ -7573,7 +7597,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
       {/* 11. MODAL KONFIRMASI HAPUS JADWAL UJIAN                         */}
       {/* ============================================================== */}
       {subjectToDelete && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 print:hidden">
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl animate-in zoom-in-95">
             <div className="flex items-center gap-3 text-rose-600 dark:text-rose-400">
               <div className="w-10 h-10 rounded-xl bg-rose-100 dark:bg-rose-950/60 flex items-center justify-center">
@@ -7613,7 +7637,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
       {/* 12. MODAL DIALOG KONFIRMASI / ALERT TEMA APLIKASI (ANTI-SLOP)  */}
       {/* ============================================================== */}
       {customDialog.isOpen && (
-        <div className="fixed inset-0 z-[120] bg-black/70 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in">
+        <div className="fixed inset-0 z-[120] bg-black/70 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in print:hidden">
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl animate-in zoom-in-95">
             <div className="flex items-center gap-3">
               <div
@@ -7681,14 +7705,16 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
       {/* ============================================================== */}
       {/* 8. MODAL AI QUESTION GENERATOR (GEMINI)                         */}
       {/* ============================================================== */}
-      <AiQuestionGeneratorModal
-        isOpen={isAiModalOpen}
-        onClose={() => setIsAiModalOpen(false)}
-        currentSubject={currentBankSubject}
-        allSubjects={accessibleSubjects}
-        existingQuestionsCount={bankSubjectQuestions.length}
-        onSaveQuestions={handleSaveAiQuestions}
-      />
+      <div className="print:hidden">
+        <AiQuestionGeneratorModal
+          isOpen={isAiModalOpen}
+          onClose={() => setIsAiModalOpen(false)}
+          currentSubject={currentBankSubject}
+          allSubjects={accessibleSubjects}
+          existingQuestionsCount={bankSubjectQuestions.length}
+          onSaveQuestions={handleSaveAiQuestions}
+        />
+      </div>
     </div>
   );
 };

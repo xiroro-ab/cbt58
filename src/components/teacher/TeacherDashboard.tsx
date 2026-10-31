@@ -5,6 +5,7 @@ import { Subject, Question, QuestionType, ExamResult, Student, Teacher, ScoringR
 import { NavItem } from '../layout/Sidebar';
 import { useLanguage } from '@/context/LanguageContext';
 import { StudentManagement } from './StudentManagement';
+import { AiQuestionGeneratorModal } from './AiQuestionGeneratorModal';
 import { evaluateFullExam, calculateSingleQuestionScore } from '@/lib/scoringEngine';
 import { sendProctorCommand, subscribeToLiveSessions, removeStudentSession, broadcastAnnouncementToStudents } from '@/lib/liveMonitoringService';
 import { clearStudentAutolockInSupabase, insertMessage } from '@/lib/supabaseService';
@@ -376,6 +377,19 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
       setCreatedSubjectIds([]);
     }
   }, [currentTeacher?.id]);
+
+  // AI Question Generator Modal State & Handler
+  const [isAiModalOpen, setIsAiModalOpen] = useState(false);
+  const handleSaveAiQuestions = (newQuestions: Question[]) => {
+    newQuestions.forEach(q => {
+      onAddQuestion(q);
+    });
+    showThemedAlert(
+      'Berhasil Menyimpan Soal AI',
+      `${newQuestions.length} butir soal berhasil ditambahkan ke Bank Soal!`,
+      'info'
+    );
+  };
 
   // Form State untuk Tambah Soal
   const [modalType, setModalType] = useState<QuestionType>('Pilihan Ganda');
@@ -3379,6 +3393,16 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                 </div>
 
                 <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsAiModalOpen(true)}
+                    className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-gradient-to-r from-violet-600 via-fuchsia-600 to-pink-600 hover:opacity-90 text-white font-semibold text-xs shadow-md shadow-violet-600/20 transition cursor-pointer"
+                    title="Generate butir soal dengan bantuan AI Gemini"
+                  >
+                    <Sparkles className="w-4 h-4" />
+                    <span>AI Question Generator</span>
+                  </button>
+
                   {(currentTeacher?.role === 'admin' || currentTeacher?.role === 'pengawas') && (
                     <button
                       onClick={() => setIsAddScheduleModalOpen(true)}
@@ -3586,6 +3610,16 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                   </button>
 
                   <button
+                    type="button"
+                    onClick={() => setIsAiModalOpen(true)}
+                    className="flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-gradient-to-r from-violet-600 via-fuchsia-600 to-pink-600 hover:opacity-90 text-white font-semibold text-xs shadow-md shadow-violet-600/20 transition cursor-pointer flex-shrink-0"
+                    title="Buat butir soal otomatis dengan Gemini AI"
+                  >
+                    <Sparkles className="w-4 h-4" />
+                    <span>Buat Soal AI (Gemini)</span>
+                  </button>
+
+                  <button
                     onClick={onOpenAddModal}
                     className="flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-semibold text-xs shadow-md shadow-violet-600/20 transition cursor-pointer flex-shrink-0"
                   >
@@ -3632,15 +3666,26 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                       Belum ada butir soal untuk mata pelajaran ini
                     </h4>
                     <p className="text-xs text-slate-400 max-w-md mx-auto">
-                      Mata pelajaran ini belum memiliki butir soal ujian. Klik tombol "+ Tambah Soal" di atas untuk mulai membuat soal.
+                      Mata pelajaran ini belum memiliki butir soal ujian. Anda dapat membuat soal otomatis dengan AI atau menambahkannya secara manual.
                     </p>
-                    <button
-                      onClick={onOpenAddModal}
-                      className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-semibold text-xs shadow-md shadow-violet-600/20 transition cursor-pointer"
-                    >
-                      <PlusCircle className="w-4 h-4" />
-                      <span>Tambah Butir Soal Pertama</span>
-                    </button>
+                    <div className="flex items-center justify-center gap-2.5 flex-wrap pt-1">
+                      <button
+                        type="button"
+                        onClick={() => setIsAiModalOpen(true)}
+                        className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-violet-600 via-fuchsia-600 to-pink-600 hover:opacity-90 text-white font-semibold text-xs shadow-md shadow-violet-600/20 transition cursor-pointer"
+                      >
+                        <Sparkles className="w-4 h-4" />
+                        <span>✨ Buat Soal Otomatis AI (Gemini)</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={onOpenAddModal}
+                        className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-semibold text-xs shadow-md shadow-violet-600/20 transition cursor-pointer"
+                      >
+                        <PlusCircle className="w-4 h-4" />
+                        <span>Tambah Manual</span>
+                      </button>
+                    </div>
                   </div>
                 ) : (
                   filteredBankQuestions.map((q, idx) => {
@@ -5036,6 +5081,27 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                 ✕
               </button>
             </div>
+
+            {!editingQuestion && (
+              <div className="p-3 rounded-xl bg-gradient-to-r from-violet-500/10 via-fuchsia-500/10 to-transparent border border-violet-200 dark:border-violet-800/60 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-violet-600 dark:text-violet-400 shrink-0" />
+                  <p className="text-[11px] text-slate-600 dark:text-slate-300">
+                    Ingin membuat paket butir soal otomatis berstandar <strong>AKM, PISA, & TKA</strong>?
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleCloseQuestionModal();
+                    setIsAiModalOpen(true);
+                  }}
+                  className="px-2.5 py-1.5 rounded-lg bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:opacity-90 text-white text-[11px] font-bold shrink-0 transition cursor-pointer shadow-xs"
+                >
+                  Buka AI Generator
+                </button>
+              </div>
+            )}
 
             <form onSubmit={handleSaveQuestion} className="space-y-4 text-xs font-medium">
               {/* Tipe Soal Terurut Proporsional */}
@@ -6722,6 +6788,18 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
           </div>
         </div>
       )}
+
+      {/* ============================================================== */}
+      {/* 8. MODAL AI QUESTION GENERATOR (GEMINI)                         */}
+      {/* ============================================================== */}
+      <AiQuestionGeneratorModal
+        isOpen={isAiModalOpen}
+        onClose={() => setIsAiModalOpen(false)}
+        currentSubject={currentBankSubject}
+        allSubjects={accessibleSubjects}
+        existingQuestionsCount={bankSubjectQuestions.length}
+        onSaveQuestions={handleSaveAiQuestions}
+      />
     </div>
   );
 };

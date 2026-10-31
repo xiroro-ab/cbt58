@@ -154,4 +154,5 @@ export interface ExamMessage {
   body: string;
   status: 'pending' | 'resolved' | 'acknowledged';
   createdAt: string;
+  createdAtTime?: number;
 }

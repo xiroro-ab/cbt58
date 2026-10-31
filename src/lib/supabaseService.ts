@@ -596,6 +596,24 @@ export async function updateSubjectInSupabase(sub: Subject): Promise<boolean> {
 }
 
 /**
+ * Memeriksa status aktif ujian secara langsung dan realtime dari database Supabase
+ */
+export async function checkSubjectIsActive(subjectId: string): Promise<boolean | null> {
+  try {
+    const { data, error } = await supabase
+      .from('subjects')
+      .select('is_active')
+      .eq('id', subjectId)
+      .maybeSingle();
+
+    if (error || !data) return null;
+    return Boolean(data.is_active);
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Menambahkan mata pelajaran / paket jadwal ujian baru ke Supabase
  */
 export async function insertSubject(sub: Subject): Promise<Subject | null> {
@@ -1146,7 +1164,8 @@ export async function fetchMessages(subjectId?: string): Promise<ExamMessage[]> 
       title: m.title,
       body: m.body,
       status: m.status,
-      createdAt: new Date(m.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
+      createdAt: new Date(m.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
+      createdAtTime: m.created_at ? new Date(m.created_at).getTime() : 0
     }));
   } catch (err) {
     console.warn('Error fetchMessages from Supabase:', err);

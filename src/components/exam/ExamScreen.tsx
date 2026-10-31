@@ -161,47 +161,83 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
   const [isSubmittingReport, setIsSubmittingReport] = useState(false);
 
   // State Pengumuman Broadcast dari Pengawas (Model Pop-up Bersih & Icon Pojok Atas)
+  const sessionStartTimeRef = useRef<number>(Date.now());
+  const [dismissedAnnouncementTexts, setDismissedAnnouncementTexts] = useState<string[]>(() => {
+    if (typeof window === 'undefined') return [];
+    try {
+      const raw = sessionStorage.getItem(`cbt_dismissed_ann_texts_${subject.id}`);
+      return raw ? JSON.parse(raw) : [];
+    } catch {
+      return [];
+    }
+  });
+  const dismissedTextsRef = useRef<Set<string>>(new Set(dismissedAnnouncementTexts));
+
+  // Inisialisasi pengumuman aktif dari storage lokal (agar icon 📢 di header muncul),
+  // TETAPI pop-up otomatis WAJIB FALSE saat awal masuk ujian (tidak mengganggu siswa dengan pesan lama)
   const [activeAnnouncement, setActiveAnnouncement] = useState<BroadcastAnnouncement | null>(() => {
     return getLatestStoredAnnouncement();
   });
   const [showBroadcastPopup, setShowBroadcastPopup] = useState<boolean>(false);
-  const [dismissedAnnouncementId, setDismissedAnnouncementId] = useState<string | null>(() => {
-    if (typeof window === 'undefined') return null;
-    try {
-      return sessionStorage.getItem(`cbt_dismissed_ann_${subject.id}`) || null;
-    } catch {
-      return null;
-    }
-  });
-  const dismissedAnnouncementIdRef = useRef<string | null>(dismissedAnnouncementId);
-  dismissedAnnouncementIdRef.current = dismissedAnnouncementId;
+  const activeAnnouncementRef = useRef<BroadcastAnnouncement | null>(activeAnnouncement);
+  activeAnnouncementRef.current = activeAnnouncement;
 
-  // Handler pengumuman masuk: Jika baru, wajib keluar pop up & menggantikan pengumuman lama
-  const handleIncomingAnnouncement = useCallback((ann: BroadcastAnnouncement) => {
-    if (!ann || !ann.text) return;
+  // Handler pengumuman masuk: Jika baru & bukan pesan lama sesi sebelumnya, wajib keluar pop up
+  const processIncomingAnnouncement = useCallback((ann: {
+    id?: string;
+    text: string;
+    senderName?: string;
+    subjectId?: string;
+    timestamp?: number;
+  }, isLiveEvent = false) => {
+    if (!ann || !ann.text || !ann.text.trim()) return;
+    const cleanText = ann.text.trim();
+    const annTimestamp = ann.timestamp || Date.now();
 
     setActiveAnnouncement(prev => {
-      const isNew = !prev || prev.id !== ann.id || prev.text !== ann.text;
-      if (isNew) {
-        // Tampilkan pop-up jika pengumuman ini belum pernah ditutup siswa
-        if (dismissedAnnouncementIdRef.current !== ann.id) {
+      const isDifferentText = !prev || prev.text.trim() !== cleanText;
+
+      if (isDifferentText) {
+        // Pengumuman baru atau teks berbeda dari guru pengawas
+        // Pop-up HANYA dibuka otomatis jika:
+        // 1. Ini siaran live realtime saat siswa sedang mengerjakan ujian (isLiveEvent = true)
+        // ATAU 2. Timestamp pengumuman lebih baru dari saat siswa masuk layar ujian (annTimestamp > sessionStartTimeRef.current)
+        // DAN 3. Pengumuman dengan teks ini belum pernah ditutup secara sadar oleh siswa
+        const isAfterSessionStart = isLiveEvent || annTimestamp > sessionStartTimeRef.current;
+        const isAlreadyDismissed = dismissedTextsRef.current.has(cleanText);
+
+        if (isAfterSessionStart && !isAlreadyDismissed) {
           setShowBroadcastPopup(true);
         }
-        return ann; // Gantikan pengumuman lama dengan pengumuman baru
+
+        const newAnn: BroadcastAnnouncement = {
+          id: ann.id || `ann-${Date.now()}`,
+          text: cleanText,
+          senderName: ann.senderName || 'Guru Pengawas',
+          subjectId: ann.subjectId || subject.id,
+          timestamp: annTimestamp
+        };
+        activeAnnouncementRef.current = newAnn;
+        return newAnn;
       }
+
+      // Jika teksnya sama persis dengan yang sudah aktif di layar:
+      // Jangan pernah membuka kembali pop-up secara otomatis!
       return prev;
     });
-  }, []);
+  }, [subject.id]);
 
   // Handler ketika siswa menutup pop-up (klik tombol Close / tanda X)
   const handleCloseBroadcastPopup = () => {
     setShowBroadcastPopup(false);
-    if (activeAnnouncement) {
-      setDismissedAnnouncementId(activeAnnouncement.id);
-      dismissedAnnouncementIdRef.current = activeAnnouncement.id;
+    if (activeAnnouncementRef.current) {
+      const cleanText = activeAnnouncementRef.current.text.trim();
+      dismissedTextsRef.current.add(cleanText);
+      setDismissedAnnouncementTexts(prev => Array.from(new Set([...prev, cleanText])));
       if (typeof window !== 'undefined') {
         try {
-          sessionStorage.setItem(`cbt_dismissed_ann_${subject.id}`, activeAnnouncement.id);
+          const list = Array.from(dismissedTextsRef.current);
+          sessionStorage.setItem(`cbt_dismissed_ann_texts_${subject.id}`, JSON.stringify(list));
         } catch {}
       }
     }
@@ -823,60 +859,61 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
   useEffect(() => {
     if (isExamCompleted) return;
 
-    // A. Dengarkan Supabase Realtime Broadcast + Browser BroadcastChannel
+    // A. Dengarkan Supabase Realtime Broadcast + Browser BroadcastChannel (Siaran Live Realtime saat Ujian Berlangsung)
     const unsubAnnouncements = subscribeToAnnouncements(ann => {
       if (ann && ann.text) {
-        handleIncomingAnnouncement(ann);
+        processIncomingAnnouncement(ann, true);
       }
     });
 
     // B. Dengarkan Postgres Database Changes
     const unsubMessages = subscribeToMessages(msg => {
       if (msg.targetType === 'broadcast' && msg.body) {
-        handleIncomingAnnouncement({
+        processIncomingAnnouncement({
           id: msg.id,
           text: msg.body,
           senderName: msg.senderName || 'Guru Pengawas',
           subjectId: msg.subjectId,
           timestamp: Date.now()
-        });
+        }, true);
       }
     });
 
-    // C. Muat pesan broadcast yang sudah ada dari Supabase saat awal masuk
+    // C. Muat pesan broadcast yang sudah ada dari Supabase saat awal masuk (isLiveEvent = false)
+    // Supaya pengumuman lama TIDAK memicu pop-up otomatis di wajah siswa, namun tetap tersedia di icon 📢
     const checkCloudBroadcasts = () => {
       if (!subject.id) return;
       fetchMessages(subject.id).then(msgs => {
         const broadcasts = msgs.filter(m => m.targetType === 'broadcast');
         if (broadcasts.length > 0 && broadcasts[0].body) {
-          handleIncomingAnnouncement({
+          processIncomingAnnouncement({
             id: broadcasts[0].id,
             text: broadcasts[0].body,
             senderName: broadcasts[0].senderName || 'Guru Pengawas',
             subjectId: broadcasts[0].subjectId,
-            timestamp: Date.now()
-          });
+            timestamp: broadcasts[0].createdAtTime || 0
+          }, false);
         }
       }).catch(() => {});
     };
 
     checkCloudBroadcasts();
 
-    // D. Polling berkala (fail-safe tiap 3 detik jika websocket sempat disconnect)
+    // D. Polling berkala fail-safe (tiap 5 detik jika koneksi websocket sempat terputus)
     const pollInterval = setInterval(() => {
       const stored = getLatestStoredAnnouncement();
       if (stored?.text) {
-        handleIncomingAnnouncement(stored);
+        processIncomingAnnouncement(stored, false);
       }
       checkCloudBroadcasts();
-    }, 3000);
+    }, 5000);
 
     return () => {
       unsubAnnouncements();
       unsubMessages();
       clearInterval(pollInterval);
     };
-  }, [isExamCompleted, subject.id, handleIncomingAnnouncement]);
+  }, [isExamCompleted, subject.id, processIncomingAnnouncement]);
 
   const currentQuestion = questions && questions.length > 0 ? questions[currentIndex] : undefined;
   const currentAnswerData = answers && answers.length > 0

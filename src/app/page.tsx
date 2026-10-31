@@ -55,7 +55,8 @@ import {
   insertTeacher,
   updateTeacherStatusInSupabase,
   mergeTeachers,
-  findMatchingSubject
+  findMatchingSubject,
+  checkSubjectIsActive
 } from '@/lib/supabaseService';
 import { useTheme } from '@/context/ThemeContext';
 import { useLanguage } from '@/context/LanguageContext';
@@ -80,7 +81,8 @@ import {
   X,
   ShieldAlert,
   Info,
-  Loader2
+  Loader2,
+  Ban
 } from 'lucide-react';
 
 // Helper pengecekan hak akses mata pelajaran per guru (mencakup pencocokan multi-kata kunci & mapel buatan guru)
@@ -212,17 +214,15 @@ export default function Home() {
   const detectedSubject = useMemo(() => {
     if (!inputToken.trim()) return null;
     const clean = inputToken.trim().toUpperCase();
-    return subjects.find(s => s.token.trim().toUpperCase() === clean && s.isActive)
-      || subjects.find(s => s.token.trim().toUpperCase() === clean)
-      || null;
+    return subjects.find(s => s.token.trim().toUpperCase() === clean) || null;
   }, [inputToken, subjects]);
 
-  // Prefetch butir soal di latar belakang segera setelah token mapel valid terdeteksi (0ms saat Mulai Ujian)
+  // Prefetch butir soal di latar belakang segera setelah token mapel valid & aktif terdeteksi (0ms saat Mulai Ujian)
   useEffect(() => {
-    if (detectedSubject?.id) {
+    if (detectedSubject?.id && detectedSubject.isActive) {
       fetchQuestionsBySubject(detectedSubject.id).catch(() => {});
     }
-  }, [detectedSubject?.id]);
+  }, [detectedSubject?.id, detectedSubject?.isActive]);
 
   // 1. Load data awal dari Supabase & sinkronkan dengan cache lokal
   useEffect(() => {
@@ -752,16 +752,24 @@ export default function Home() {
     const cleanToken = inputToken.trim().toUpperCase();
     // 1. Auto-deteksi mata pelajaran berdasarkan token yang dimasukkan siswa
     const matchedSub = subjects.find(
-      s => s.token.trim().toUpperCase() === cleanToken && s.isActive
-    ) || subjects.find(
       s => s.token.trim().toUpperCase() === cleanToken
     );
 
     if (!matchedSub) {
       setLoginError(
         language === 'id'
-          ? `Token "${inputToken}" tidak ditemukan atau belum aktif! Silakan tanyakan token resmi kepada guru pengawas.`
-          : `Exam token "${inputToken}" not found or inactive! Please ask your proctor.`
+          ? `Token "${inputToken}" tidak ditemukan! Silakan tanyakan token resmi kepada guru pengawas.`
+          : `Exam token "${inputToken}" not found! Please ask your proctor.`
+      );
+      return;
+    }
+
+    // 1b. Validasi Status Aktif Paket Ujian (Penolakan langsung jika jadwal ujian dinonaktifkan guru)
+    if (!matchedSub.isActive) {
+      setLoginError(
+        language === 'id'
+          ? `AKSES DITUTUP: Jadwal ujian "${matchedSub.title}" saat ini berstatus NON-AKTIF (terkunci) oleh Guru Pengawas. Siswa tidak dapat mengikuti ujian ini.`
+          : `ACCESS DENIED: Exam "${matchedSub.title}" is currently INACTIVE (locked) by the proctor. Students cannot start this exam.`
       );
       return;
     }
@@ -791,8 +799,9 @@ export default function Home() {
     setLoginError('');
 
     try {
-      // 3. Verifikasi Paralel Cepat (Anti Re-Login, Anti-Cheat Lock & Muat Butir Soal serentak)
-      const [submissionStatus, lockStatus, loadedQuestions] = await Promise.all([
+      // 3. Verifikasi Paralel Cepat (Cek Status Aktif Realtime di Supabase, Anti Re-Login, Anti-Cheat Lock & Muat Butir Soal serentak)
+      const [liveIsActive, submissionStatus, lockStatus, loadedQuestions] = await Promise.all([
+        checkSubjectIsActive(matchedSub.id),
         checkStudentExamSubmission(matchedSub.id, studentName),
         checkStudentLockStatus(matchedSub.id, studentName, matchedSub.violationLimit || 3),
         fetchQuestionsBySubject(matchedSub.id).catch(err => {
@@ -800,6 +809,16 @@ export default function Home() {
           return [] as Question[];
         })
       ]);
+
+      if (liveIsActive === false) {
+        setSubjects(prev => prev.map(s => s.id === matchedSub.id ? { ...s, isActive: false } : s));
+        setLoginError(
+          language === 'id'
+            ? `AKSES DITUTUP: Jadwal ujian "${matchedSub.title}" saat ini telah DINONAKTIFKAN (terkunci) oleh Guru Pengawas. Sesi ujian tidak dapat diikuti saat ini.`
+            : `ACCESS DENIED: Exam "${matchedSub.title}" has been DEACTIVATED (locked) by the proctor. You cannot start the exam at this time.`
+        );
+        return;
+      }
 
       if (submissionStatus.isSubmitted) {
         setLoginError(
@@ -883,7 +902,21 @@ export default function Home() {
     }
   };
 
-  const handleConfirmStartExam = () => {
+  const handleConfirmStartExam = async () => {
+    if (briefingData?.subject?.id) {
+      try {
+        const liveActive = await checkSubjectIsActive(briefingData.subject.id);
+        if (liveActive === false) {
+          setShowBriefModal(false);
+          setLoginError(
+            language === 'id'
+              ? `AKSES DITUTUP: Jadwal ujian "${briefingData.subject.title}" baru saja DINONAKTIFKAN oleh Guru Pengawas.`
+              : `ACCESS DENIED: Exam "${briefingData.subject.title}" was just DEACTIVATED by the proctor.`
+          );
+          return;
+        }
+      } catch {}
+    }
     setShowBriefModal(false);
     setViewMode('student_exam');
   };
@@ -1339,15 +1372,32 @@ export default function Home() {
 
               {/* Status Auto-Deteksi Token Mata Pelajaran */}
               {detectedSubject && (
-                <div className="mt-2 p-2.5 rounded-xl bg-violet-50 dark:bg-violet-950/40 border border-violet-200 dark:border-violet-800 flex items-center gap-2.5 text-[11px] text-violet-700 dark:text-violet-300 animate-in fade-in">
-                  <CheckCircle2 className="w-4 h-4 text-violet-600 dark:text-violet-400 flex-shrink-0" />
-                  <div className="flex-1">
-                    <p className="font-bold">{detectedSubject.title}</p>
-                    <p className="text-[10px] text-violet-600/80 dark:text-violet-400/80">
-                      Rombel: <span className="font-semibold">{detectedSubject.className || 'Semua Rombel'}</span> • Durasi: {detectedSubject.durationMinutes} Menit • Toleransi: {detectedSubject.violationLimit || 3}x
-                    </p>
+                detectedSubject.isActive ? (
+                  <div className="mt-2 p-2.5 rounded-xl bg-violet-50 dark:bg-violet-950/40 border border-violet-200 dark:border-violet-800 flex items-center gap-2.5 text-[11px] text-violet-700 dark:text-violet-300 animate-in fade-in">
+                    <CheckCircle2 className="w-4 h-4 text-violet-600 dark:text-violet-400 flex-shrink-0" />
+                    <div className="flex-1">
+                      <p className="font-bold">{detectedSubject.title}</p>
+                      <p className="text-[10px] text-violet-600/80 dark:text-violet-400/80">
+                        Rombel: <span className="font-semibold">{detectedSubject.className || 'Semua Rombel'}</span> • Durasi: {detectedSubject.durationMinutes} Menit • Toleransi: {detectedSubject.violationLimit || 3}x
+                      </p>
+                    </div>
                   </div>
-                </div>
+                ) : (
+                  <div className="mt-2 p-2.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800/80 flex items-center gap-2.5 text-[11px] text-rose-700 dark:text-rose-300 animate-in fade-in">
+                    <Ban className="w-4 h-4 text-rose-600 dark:text-rose-400 flex-shrink-0" />
+                    <div className="flex-1">
+                      <p className="font-bold">
+                        {detectedSubject.title}
+                        <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-rose-100 dark:bg-rose-900/60 text-rose-700 dark:text-rose-300 font-semibold ml-1.5">
+                          Non-Aktif
+                        </span>
+                      </p>
+                      <p className="text-[10px] text-rose-600/90 dark:text-rose-400/90">
+                        Jadwal ujian ini sedang dinonaktifkan (terkunci) oleh Guru Pengawas. Siswa belum dapat memulai ujian.
+                      </p>
+                    </div>
+                  </div>
+                )
               )}
             </div>
 

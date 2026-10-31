@@ -100,6 +100,25 @@ export function AiQuestionGeneratorModal({
   const [pasteError, setPasteError] = useState<string | null>(null);
   const [previewNotice, setPreviewNotice] = useState<string | null>(null);
 
+  // Status Kunci Vercel Server
+  const [hasServerKey, setHasServerKey] = useState<boolean | null>(null);
+
+  // Periksa apakah Vercel sudah terpasang GEMINI_API_KEY setiap modal dibuka
+  useEffect(() => {
+    if (isOpen) {
+      fetch('/api/ai/generate-questions')
+        .then(res => res.json())
+        .then(data => {
+          if (data && typeof data.hasServerKey === 'boolean') {
+            setHasServerKey(data.hasServerKey);
+          }
+        })
+        .catch(() => {
+          setHasServerKey(false);
+        });
+    }
+  }, [isOpen]);
+
   // Status & Loading State
   const [isLoading, setIsLoading] = useState(false);
   const [loadingStepText, setLoadingStepText] = useState('Menginisialisasi...');
@@ -711,14 +730,24 @@ export function AiQuestionGeneratorModal({
               {/* 4. MODEL GEMINI KESUKAAN & KUNCI API GURU */}
               <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-800 space-y-3">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <Cpu className="w-4 h-4 text-violet-600 dark:text-violet-400" />
                     <span className="text-xs font-bold text-slate-900 dark:text-white">
-                      Model Gemini & Kunci API Kesukaan Guru
+                      Model Gemini & Kunci API
                     </span>
-                    {isApiKeySaved && (
+                    {hasServerKey && !apiKey && (
                       <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 flex items-center gap-1">
-                        <Check className="w-3 h-3" /> API Key Tersimpan
+                        <Check className="w-3 h-3" /> Vercel Server Aktif (Siap Pakai)
+                      </span>
+                    )}
+                    {isApiKeySaved && apiKey && (
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 border border-blue-300 dark:border-blue-800 flex items-center gap-1">
+                        <Check className="w-3 h-3" /> Kunci Pribadi Guru
+                      </span>
+                    )}
+                    {hasServerKey === false && !apiKey && (
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-800 flex items-center gap-1">
+                        <AlertCircle className="w-3 h-3" /> Belum Ada Kunci di Vercel
                       </span>
                     )}
                   </div>
@@ -731,6 +760,16 @@ export function AiQuestionGeneratorModal({
                     {showApiKeyInput ? 'Tutup Pengaturan Model & Key' : 'Atur Model & API Key'}
                   </button>
                 </div>
+
+                {/* Banner Status Kunci Vercel */}
+                {hasServerKey && !apiKey && (
+                  <div className="p-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900/40 text-[11px] text-emerald-800 dark:text-emerald-300 flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <span>
+                      <strong>Vercel Terhubung:</strong> Server Vercel sudah terpasang API Key Gemini. Semua guru dapat langsung membuat soal tanpa perlu menginputkan kunci!
+                    </span>
+                  </div>
+                )}
 
                 {/* Dropdown Pemilihan Model Gemini */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
@@ -822,7 +861,7 @@ export function AiQuestionGeneratorModal({
                       </button>
                     </div>
                     <p className="text-[10px] text-slate-400 leading-relaxed">
-                      💡 <strong>Skenario Tanpa Kunci:</strong> Jika guru tidak mengisi API Key di sini, sistem otomatis menggunakan API Key default dari server sekolah. Bila server sekolah juga belum memasang key, guru selalu bisa menggunakan tombol <strong>&apos;Salin Prompt AI&apos;</strong> untuk membuat soal secara 100% gratis di gemini.google.com tanpa perlu API key apapun!
+                      💡 <strong>Setup di Vercel:</strong> Pasang variabel <code className="font-mono bg-slate-200 dark:bg-slate-700 px-1 py-0.5 rounded text-violet-700 dark:text-violet-300">GEMINI_API_KEY</code> di Vercel Dashboard (Settings → Environment Variables). Setelah itu, seluruh guru yang tidak memasukkan API key pribadi akan otomatis menggunakan kuota server sekolah!
                     </p>
                   </div>
                 )}

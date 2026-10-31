@@ -1,6 +1,33 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { buildAiQuestionPrompt, StandardBadge, sanitizeAndParseAiJson } from '@/lib/aiQuestionGenerator';
 
+/**
+ * Mendapatkan API Key Gemini dari Environment Vercel / Server
+ * Mendukung beberapa variasi nama variabel lingkungan agar fail-safe
+ */
+function getServerGeminiApiKey(): string {
+  return (
+    process.env.GEMINI_API_KEY ||
+    process.env.NEXT_PUBLIC_GEMINI_API_KEY ||
+    process.env.GOOGLE_GEMINI_API_KEY ||
+    process.env.GOOGLE_API_KEY ||
+    process.env.GEMINI_KEY ||
+    ''
+  ).trim();
+}
+
+/**
+ * Endpoint status untuk memeriksa apakah Vercel sudah terpasang API Key Gemini
+ */
+export async function GET() {
+  const serverKey = getServerGeminiApiKey();
+  return NextResponse.json({
+    status: 'ok',
+    hasServerKey: Boolean(serverKey),
+    envDetected: serverKey ? 'GEMINI_API_KEY_ACTIVE' : 'NONE'
+  });
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
@@ -16,15 +43,16 @@ export async function POST(req: NextRequest) {
       model: clientModel = 'gemini-1.5-flash'
     } = body;
 
-    // Prioritas Kunci API: 1. Input pribadi guru -> 2. Environment server sekolah
-    const apiKey = clientApiKey?.trim() || process.env.GEMINI_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY;
+    // Prioritas Kunci API: 1. Input pribadi guru -> 2. Environment Vercel server sekolah
+    const serverKey = getServerGeminiApiKey();
+    const apiKey = clientApiKey?.trim() || serverKey;
 
     if (!apiKey) {
       return NextResponse.json(
         {
           error: 'API_KEY_REQUIRED',
           message:
-            'Kunci API Gemini belum dikonfigurasi pada server sekolah maupun input guru. Silakan masukkan Google Gemini API Key Anda (gratis di aistudio.google.com) atau gunakan tombol "Salin Prompt AI" untuk membuat soal langsung secara gratis di gemini.google.com tanpa API key.'
+            'Kunci API Gemini belum dipasang di Vercel (Environment Variables) maupun input guru. Silakan tambahkan variabel GEMINI_API_KEY di Vercel Dashboard -> Settings -> Environment Variables, atau masukkan API Key Anda di modal.'
         },
         { status: 400 }
       );

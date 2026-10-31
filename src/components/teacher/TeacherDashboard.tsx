@@ -223,9 +223,10 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
       logoRight: schoolSettings?.logoRight || '/logo-sekolah.png',
       principalName: schoolSettings?.principalName || 'Hj. Rohana, S.Pd., M.Si.',
       principalNip: schoolSettings?.principalNip || '19680512 199412 2 001',
+      principalTitle: schoolSettings?.principalTitle || `Kepala ${schoolSettings?.schoolName?.replace('SMP NEGERI ', 'SMPN ') || 'SMPN 58 Palembang'}`,
       principalPhoto: schoolSettings?.principalPhoto || '',
-      teacherName: schoolSettings?.teacherName || currentTeacher?.name || 'Hendra Wijaya, S.Pd',
-      teacherNip: schoolSettings?.teacherNip || currentTeacher?.nip || '19870420 201201 1 004',
+      teacherName: currentTeacher?.name || schoolSettings?.teacherName || 'Aris Bermansyah, S.Kom',
+      teacherNip: currentTeacher?.nip || schoolSettings?.teacherNip || '199611142024211010',
       city: schoolSettings?.city || 'Palembang',
       enableTTE: schoolSettings?.enableTTE !== false,
       tteType: schoolSettings?.tteType || 'qrcode',
@@ -321,7 +322,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
       return {
         name: effectiveSchoolSettings.principalName || 'Hj. Rohana, S.Pd., M.Si.',
         nip: effectiveSchoolSettings.principalNip || '-',
-        title: 'Kepala Sekolah SMPN 58'
+        title: effectiveSchoolSettings.principalTitle || 'Kepala SMPN 58 Palembang'
       };
     }
     if (dossierSignerMode === 'default_teacher') {
@@ -6359,7 +6360,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                         type="text"
                         value={localSettingsForm.teacherName}
                         onChange={e => setLocalSettingsForm(prev => ({ ...prev, teacherName: e.target.value }))}
-                        placeholder="Hendra Wijaya, S.Pd"
+                        placeholder="Aris Bermansyah, S.Kom"
                         className="w-full p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500"
                       />
                     </div>
@@ -6373,7 +6374,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                         type="text"
                         value={localSettingsForm.teacherNip}
                         onChange={e => setLocalSettingsForm(prev => ({ ...prev, teacherNip: e.target.value }))}
-                        placeholder="19870420 201201 1 004"
+                        placeholder="199611142024211010"
                         className="w-full p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-mono font-semibold text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500"
                       />
                     </div>

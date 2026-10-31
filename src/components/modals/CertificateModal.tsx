@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { ExamResult, Subject, Student, SchoolSettings } from '@/types/cbt';
+import { ExamResult, Subject, Student, SchoolSettings, Teacher } from '@/types/cbt';
 import { resolveStudentSingleClass } from '@/lib/rosterStudents';
 import { extractSubjectAndGrade } from '@/lib/aiQuestionGenerator';
 import { useLanguage } from '@/context/LanguageContext';
@@ -16,6 +16,7 @@ interface CertificateModalProps {
   allSubjects?: Subject[];
   students?: Student[];
   schoolSettings?: SchoolSettings;
+  currentTeacher?: Teacher | null;
 }
 
 export const CertificateModal: React.FC<CertificateModalProps> = ({
@@ -25,7 +26,8 @@ export const CertificateModal: React.FC<CertificateModalProps> = ({
   selectedStudentResult,
   allSubjects = [],
   students = [],
-  schoolSettings
+  schoolSettings,
+  currentTeacher
 }) => {
   const { language } = useLanguage();
   const [activeStudentId, setActiveStudentId] = useState<string>(
@@ -88,8 +90,12 @@ export const CertificateModal: React.FC<CertificateModalProps> = ({
 
   const principalName = schoolSettings?.principalName || 'Hj. Rohana, S.Pd., M.Si.';
   const principalNip = schoolSettings?.principalNip || '19680512 199412 2 001';
+  const principalTitle = schoolSettings?.principalTitle || `Kepala ${schoolSettings?.schoolName?.replace('SMP NEGERI ', 'SMPN ') || 'SMPN 58 Palembang'}`;
+  const teacherName = currentTeacher?.name || schoolSettings?.teacherName || 'Aris Bermansyah, S.Kom';
+  const teacherNip = currentTeacher?.nip || schoolSettings?.teacherNip || '199611142024211010';
   const schoolName = schoolSettings?.schoolName || 'SMP NEGERI 58 PALEMBANG';
   const city = schoolSettings?.city || 'Palembang';
+  const todayStr = new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
 
   return (
     <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 print:p-0 print:bg-white print:static print:z-auto print:block">
@@ -252,32 +258,112 @@ export const CertificateModal: React.FC<CertificateModalProps> = ({
                 </div>
               </div>
 
-              {/* Tanda Tangan & TTE Validasi */}
-              <div className="pt-6 sm:pt-8 flex flex-col sm:flex-row items-center sm:items-end justify-between gap-6 text-xs">
-                {/* Bagian Kiri: Verifikasi Keaslian Digital */}
-                <div className="space-y-1 text-center sm:text-left">
-                  <div className="flex items-center justify-center sm:justify-start gap-2 text-emerald-700 font-bold text-[11px]">
-                    <ShieldCheck className="w-4 h-4 text-emerald-600" />
-                    <span>Dokumen Resmi Terverifikasi</span>
+              {/* Tanda Tangan & TTE Validasi Formal (Dual Signatures) */}
+              <div className="pt-6 sm:pt-8 grid grid-cols-2 gap-4 sm:gap-8 text-center text-xs font-sans print:break-inside-avoid">
+                {/* Sisi Kiri: Guru Pengampu Mata Pelajaran */}
+                <div className="flex flex-col items-center justify-between min-h-[160px] space-y-2">
+                  <div>
+                    <p className="font-bold text-slate-900 uppercase font-sans tracking-wide text-[11px] sm:text-xs">
+                      Guru Pengampu
+                    </p>
+                    <p className="text-[10px] sm:text-[11px] text-slate-600 font-sans line-clamp-1">
+                      {cleanSubject}
+                    </p>
                   </div>
-                  <p className="text-[10px] text-slate-400 font-mono">
-                    ID Sertifikat: CBT58-{currentResult.id.slice(0, 10).toUpperCase()}
-                  </p>
-                  <p className="text-[9px] text-slate-400">
-                    Diterbitkan otomatis dari Server CBT SMPN 58 Palembang
-                  </p>
+
+                  <div className="py-1 flex items-center justify-center min-h-[85px]">
+                    {schoolSettings?.enableTTE !== false ? (
+                      <TTESignatureSeal
+                        settings={schoolSettings}
+                        documentId={`SKL-GURU-${currentResult.id}`}
+                        signerName={teacherName}
+                        signerTitle="Guru Pengampu"
+                        signerNip={teacherNip}
+                        signDate={todayStr}
+                        sealOnly={true}
+                        className="scale-90"
+                      />
+                    ) : (
+                      <div className="h-16" />
+                    )}
+                  </div>
+
+                  <div>
+                    <strong className="underline font-bold text-slate-900 block leading-tight text-xs uppercase font-sans">
+                      {teacherName}
+                    </strong>
+                    <span className="text-[10px] text-slate-600 font-mono block mt-0.5">
+                      NIP. {teacherNip}
+                    </span>
+                  </div>
                 </div>
 
-                {/* Bagian Kanan: TTE Kepala Sekolah */}
-                <TTESignatureSeal
-                  settings={schoolSettings}
-                  documentId={currentResult.id}
-                  signerName={principalName}
-                  signerTitle="Kepala Sekolah SMPN 58"
-                  signerNip={principalNip}
-                  className="sm:text-right"
-                />
+                {/* Sisi Kanan: Kepala Sekolah */}
+                <div className="flex flex-col items-center justify-between min-h-[160px] space-y-2">
+                  <div>
+                    <p className="text-[10px] sm:text-[11px] text-slate-600 font-sans">
+                      {city}, {todayStr}
+                    </p>
+                    <p className="font-bold text-slate-900 uppercase font-sans tracking-wide text-[11px] sm:text-xs">
+                      Mengetahui,
+                    </p>
+                    <p className="font-bold text-slate-900 uppercase font-sans tracking-wide text-[11px] sm:text-xs">
+                      {principalTitle}
+                    </p>
+                  </div>
+
+                  <div className="py-1 flex items-center justify-center min-h-[85px]">
+                    {schoolSettings?.enableTTE !== false ? (
+                      <TTESignatureSeal
+                        settings={schoolSettings}
+                        documentId={`SKL-KEPSEK-${currentResult.id}`}
+                        signerName={principalName}
+                        signerTitle={principalTitle}
+                        signerNip={principalNip}
+                        signDate={todayStr}
+                        sealOnly={true}
+                        className="scale-90"
+                      />
+                    ) : (
+                      <div className="h-16" />
+                    )}
+                  </div>
+
+                  <div>
+                    <strong className="underline font-bold text-slate-900 block leading-tight text-xs uppercase font-sans">
+                      {principalName}
+                    </strong>
+                    <span className="text-[10px] text-slate-600 font-mono block mt-0.5">
+                      NIP. {principalNip}
+                    </span>
+                  </div>
+                </div>
               </div>
+
+              {/* Catatan Kaki Otentikasi Digital */}
+              <div className="mt-6 pt-3 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between text-[9px] sm:text-[10px] text-slate-500 font-sans gap-2 print:border-slate-300">
+                <div className="flex items-center gap-1.5 text-emerald-700 font-medium">
+                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                  <span>Dokumen Resmi Terverifikasi TTE Elektronik Server CBT {schoolSettings?.schoolName || 'SMPN 58 Palembang'}</span>
+                </div>
+                <div className="font-mono text-[8.5px] sm:text-[9px] text-slate-400">
+                  ID: CBT58-{currentResult.id.slice(0, 10).toUpperCase()} • Dicetak: {todayStr}
+                </div>
+              </div>
+
+              {/* Print Sheet Styling */}
+              <style>{`
+                @media print {
+                  @page {
+                    size: A4 portrait;
+                    margin: 8mm;
+                  }
+                  body {
+                    -webkit-print-color-adjust: exact !important;
+                    print-color-adjust: exact !important;
+                  }
+                }
+              `}</style>
             </div>
           )}
         </div>

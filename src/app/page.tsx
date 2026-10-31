@@ -51,7 +51,8 @@ import {
   bulkRemoveStudentsFromSupabase,
   fetchTeachers,
   insertTeacher,
-  updateTeacherStatusInSupabase
+  updateTeacherStatusInSupabase,
+  mergeTeachers
 } from '@/lib/supabaseService';
 import { useTheme } from '@/context/ThemeContext';
 import { useLanguage } from '@/context/LanguageContext';
@@ -103,8 +104,23 @@ export default function Home() {
   const { theme, toggleTheme } = useTheme();
   const { language, toggleLanguage, t } = useLanguage();
 
-  // Sesi 30 Guru & Pengawas CBT
-  const [teachers, setTeachers] = useState<Teacher[]>(initialTeachers);
+  // Sesi 30 Guru & Pengawas CBT (Diinisialisasi instan dari cache lokal agar tidak ada jeda login)
+  const [teachers, setTeachers] = useState<Teacher[]>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const cached = localStorage.getItem('cbt_cached_teachers');
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            return mergeTeachers(parsed, initialTeachers);
+          }
+        }
+      } catch (e) {
+        console.warn('Failed reading cbt_cached_teachers:', e);
+      }
+    }
+    return initialTeachers;
+  });
   const [currentTeacher, setCurrentTeacher] = useState<Teacher | null>(null);
   const [activeAssignmentSubject, setActiveAssignmentSubject] = useState<string>('');
   const [viewMode, setViewMode] = useState<'teacher_login' | 'teacher' | 'student_login' | 'student_exam'>('teacher_login');
@@ -299,6 +315,11 @@ export default function Home() {
         const tList = await fetchTeachers();
         if (tList && tList.length > 0) {
           setTeachers(tList);
+          if (typeof window !== 'undefined') {
+            try {
+              localStorage.setItem('cbt_cached_teachers', JSON.stringify(tList));
+            } catch (e) {}
+          }
         }
 
         // Cek parameter URL untuk membuka ruang ujian siswa secara langsung (?mode=student)
@@ -744,7 +765,15 @@ export default function Home() {
   };
 
   const handleRegisterTeacher = async (newTeacher: Teacher): Promise<boolean> => {
-    setTeachers(prev => [newTeacher, ...prev]);
+    setTeachers(prev => {
+      const updated = [newTeacher, ...prev.filter(t => t.id !== newTeacher.id && t.nip !== newTeacher.nip && t.email !== newTeacher.email)];
+      if (typeof window !== 'undefined') {
+        try {
+          localStorage.setItem('cbt_cached_teachers', JSON.stringify(updated));
+        } catch (e) {}
+      }
+      return updated;
+    });
     try {
       await insertTeacher(newTeacher);
       return true;

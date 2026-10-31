@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { Teacher, TeacherAssignment } from '@/types/cbt';
 import { useLanguage } from '@/context/LanguageContext';
 import { useTheme } from '@/context/ThemeContext';
+import { fetchTeachers, mergeTeachers } from '@/lib/supabaseService';
 import {
   GraduationCap,
   ShieldCheck,
@@ -81,6 +82,7 @@ export const TeacherLogin: React.FC<TeacherLoginProps> = ({
   const [loginPin, setLoginPin] = useState('');
   const [showLoginPin, setShowLoginPin] = useState(false);
   const [loginError, setLoginError] = useState('');
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
 
   // Form State: Register
   const [regName, setRegName] = useState('');
@@ -148,7 +150,7 @@ export const TeacherLogin: React.FC<TeacherLoginProps> = ({
   };
 
   // Submit Login
-  const handleLoginSubmit = (e: React.FormEvent) => {
+  const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoginError('');
 
@@ -173,34 +175,79 @@ export const TeacherLogin: React.FC<TeacherLoginProps> = ({
       return;
     }
 
-    // Cari guru berdasarkan NIP, Email, atau Nama
-    const teacher = teachers.find(
-      t =>
-        t.nip.toLowerCase() === cleanId ||
-        t.email.toLowerCase() === cleanId ||
-        t.name.toLowerCase() === cleanId
-    );
+    setIsLoggingIn(true);
 
-    if (!teacher) {
-      setLoginError(
-        language === 'id'
-          ? 'Akun guru tidak terdaftar. Silakan gunakan tab "Daftar Akun Baru" di atas untuk mendaftarkan akun Anda.'
-          : 'Teacher account not found. Please register a new account.'
+    try {
+      // 1. Kumpulkan daftar guru saat ini (prop teachers + local storage cache)
+      let currentList: Teacher[] = [...teachers];
+      if (typeof window !== 'undefined') {
+        try {
+          const cached = localStorage.getItem('cbt_cached_teachers');
+          if (cached) {
+            const parsed = JSON.parse(cached);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              currentList = mergeTeachers(parsed, currentList);
+            }
+          }
+        } catch (e) {}
+      }
+
+      // Cari guru di daftar lokal
+      let teacher = currentList.find(
+        t =>
+          (t.nip && t.nip.trim().toLowerCase() === cleanId) ||
+          (t.email && t.email.trim().toLowerCase() === cleanId) ||
+          (t.name && t.name.trim().toLowerCase() === cleanId)
       );
-      return;
-    }
 
-    // Verifikasi PIN
-    if (teacher.pin && cleanPin !== teacher.pin) {
-      setLoginError(
-        language === 'id'
-          ? 'Password / PIN keamanan salah! Periksa kembali input Anda.'
-          : 'Incorrect password or PIN.'
-      );
-      return;
-    }
+      // JIKA guru belum ditemukan ATAU pin tidak cocok di memori lokal:
+      // Tarik data terbaru langsung dari Supabase untuk verifikasi real-time
+      // (Ini mencegah bug 'salah password' pada klik pertama akibat jeda sinkronisasi awal)
+      if (!teacher || (teacher.pin && String(teacher.pin).trim() !== cleanPin)) {
+        try {
+          const freshList = await fetchTeachers();
+          if (freshList && freshList.length > 0) {
+            currentList = freshList;
+            if (typeof window !== 'undefined') {
+              try {
+                localStorage.setItem('cbt_cached_teachers', JSON.stringify(freshList));
+              } catch (e) {}
+            }
+            teacher = freshList.find(
+              t =>
+                (t.nip && t.nip.trim().toLowerCase() === cleanId) ||
+                (t.email && t.email.trim().toLowerCase() === cleanId) ||
+                (t.name && t.name.trim().toLowerCase() === cleanId)
+            );
+          }
+        } catch (err) {
+          console.warn('Gagal sinkronisasi data guru real-time dari Supabase:', err);
+        }
+      }
 
-    onLoginSuccess(teacher);
+      if (!teacher) {
+        setLoginError(
+          language === 'id'
+            ? 'Akun guru tidak terdaftar. Silakan gunakan tab "Daftar Akun Baru" di atas untuk mendaftarkan akun Anda.'
+            : 'Teacher account not found. Please register a new account.'
+        );
+        return;
+      }
+
+      // Verifikasi PIN
+      if (teacher.pin && String(teacher.pin).trim() !== cleanPin) {
+        setLoginError(
+          language === 'id'
+            ? 'Password / PIN keamanan salah! Periksa kembali input Anda.'
+            : 'Incorrect password or PIN.'
+        );
+        return;
+      }
+
+      onLoginSuccess(teacher);
+    } finally {
+      setIsLoggingIn(false);
+    }
   };
 
   // Submit Register
@@ -307,8 +354,12 @@ export const TeacherLogin: React.FC<TeacherLoginProps> = ({
       {/* Top Bar Controls */}
       <div className="absolute top-4 left-4 right-4 sm:top-6 sm:left-8 sm:right-8 flex items-center justify-between">
         <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-xl bg-violet-600 text-white font-bold flex items-center justify-center text-xs shadow-md shadow-violet-600/30">
-            58
+          <div className="w-9 h-9 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-1 flex items-center justify-center shadow-xs">
+            <img
+              src="https://raw.githubusercontent.com/xiroro-ab/smp58dataguru/refs/heads/main/ico.png"
+              alt="Logo SMPN 58"
+              className="w-full h-full object-contain"
+            />
           </div>
           <div>
             <span className="font-bold text-xs tracking-tight text-slate-900 dark:text-white block">
@@ -347,8 +398,12 @@ export const TeacherLogin: React.FC<TeacherLoginProps> = ({
       <div className="max-w-xl w-full bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-3xl p-6 sm:p-8 space-y-6 shadow-xl shadow-slate-200/50 dark:shadow-none animate-in fade-in zoom-in-95 duration-200 my-10">
         {/* Header */}
         <div className="text-center space-y-1.5">
-          <div className="inline-flex p-3 rounded-2xl bg-violet-50 dark:bg-violet-950/50 text-violet-600 dark:text-violet-400 border border-violet-200 dark:border-violet-800/60 shadow-xs mb-1">
-            <UserCheck className="w-6 h-6" />
+          <div className="inline-flex p-2.5 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-xs mb-1">
+            <img
+              src="https://raw.githubusercontent.com/xiroro-ab/smp58dataguru/refs/heads/main/ico.png"
+              alt="Logo SMPN 58"
+              className="w-10 h-10 object-contain"
+            />
           </div>
           <h2 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white">
             {activeTab === 'login'
@@ -461,10 +516,28 @@ export const TeacherLogin: React.FC<TeacherLoginProps> = ({
             <div className="pt-2">
               <button
                 type="submit"
-                className="w-full py-3 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-bold text-xs shadow-md shadow-violet-600/20 flex items-center justify-center gap-2 transition active:scale-[0.99] cursor-pointer"
+                disabled={isLoggingIn}
+                className="w-full py-3 rounded-xl bg-violet-600 hover:bg-violet-500 disabled:opacity-60 text-white font-bold text-xs shadow-md shadow-violet-600/20 flex items-center justify-center gap-2 transition active:scale-[0.99] cursor-pointer"
               >
-                <span>{language === 'id' ? 'Masuk ke Dashboard Guru' : 'Sign In to Dashboard'}</span>
-                <ArrowRight className="w-4 h-4" />
+                {isLoggingIn ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    <span>
+                      {language === 'id'
+                        ? 'Memverifikasi Kredensial...'
+                        : 'Verifying Credentials...'}
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <span>
+                      {language === 'id'
+                        ? 'Masuk ke Dashboard Guru'
+                        : 'Sign In to Dashboard'}
+                    </span>
+                    <ArrowRight className="w-4 h-4" />
+                  </>
+                )}
               </button>
             </div>
           </form>

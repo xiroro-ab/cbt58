@@ -1249,6 +1249,35 @@ export async function insertTeacher(t: Teacher): Promise<boolean> {
 }
 
 /**
+ * Menggabungkan daftar guru dari Supabase dengan initialTeachers fallback.
+ * Akun dari Supabase (termasuk PIN kustom dan mapel terbaru) diutamakan.
+ */
+export function mergeTeachers(supabaseTeachers: Teacher[], fallbackTeachers: Teacher[]): Teacher[] {
+  const result: Teacher[] = [...supabaseTeachers];
+  const seenIds = new Set(result.map(t => (t.id || '').toLowerCase().trim()));
+  const seenNips = new Set(result.map(t => (t.nip || '').toLowerCase().trim()).filter(Boolean));
+  const seenEmails = new Set(result.map(t => (t.email || '').toLowerCase().trim()).filter(Boolean));
+
+  for (const t of fallbackTeachers) {
+    const id = (t.id || '').toLowerCase().trim();
+    const nip = (t.nip || '').toLowerCase().trim();
+    const email = (t.email || '').toLowerCase().trim();
+
+    const idSeen = id && seenIds.has(id);
+    const nipSeen = nip && seenNips.has(nip);
+    const emailSeen = email && seenEmails.has(email);
+
+    if (!idSeen && !nipSeen && !emailSeen) {
+      result.push(t);
+      if (id) seenIds.add(id);
+      if (nip) seenNips.add(nip);
+      if (email) seenEmails.add(email);
+    }
+  }
+  return result;
+}
+
+/**
  * Mengambil daftar 30 Guru & Pengawas dari Supabase (fallback ke initialTeachers)
  */
 export async function fetchTeachers(): Promise<Teacher[]> {
@@ -1262,7 +1291,7 @@ export async function fetchTeachers(): Promise<Teacher[]> {
       return initialTeachers;
     }
 
-    return data.map(t => ({
+    const supabaseTeachers: Teacher[] = data.map(t => ({
       id: t.id,
       nip: t.nip,
       name: t.name,
@@ -1276,6 +1305,8 @@ export async function fetchTeachers(): Promise<Teacher[]> {
       status: t.status || 'Standby',
       lastLogin: t.last_login
     }));
+
+    return mergeTeachers(supabaseTeachers, initialTeachers);
   } catch (err) {
     console.warn('Error fetchTeachers from Supabase, using initialTeachers:', err);
     return initialTeachers;

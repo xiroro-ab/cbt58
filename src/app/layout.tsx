@@ -18,9 +18,13 @@ export const metadata: Metadata = {
   title: "SMPN58 - CBT Assessment",
   description: "Aplikasi Asesmen Sumatif CBT SMP Negeri 58 Palembang",
   icons: {
-    icon: "/ico.png",
+    icon: [
+      { url: "/ico.png", type: "image/png" },
+      { url: "/icon.png", type: "image/png" },
+      { url: "/favicon.ico" }
+    ],
     shortcut: "/ico.png",
-    apple: "/ico.png"
+    apple: "/apple-touch-icon.png"
   }
 };
 

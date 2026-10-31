@@ -13,6 +13,7 @@ import { TeacherLogin } from '@/components/teacher/TeacherLogin';
 import { ExamScreen } from '@/components/exam/ExamScreen';
 import { HelpModal } from '@/components/modals/HelpModal';
 import { CertificateModal } from '@/components/modals/CertificateModal';
+import { broadcastAnnouncementToStudents } from '@/lib/liveMonitoringService';
 import {
   fetchActiveSubject,
   fetchAllSubjects,
@@ -215,6 +216,13 @@ export default function Home() {
       || subjects.find(s => s.token.trim().toUpperCase() === clean)
       || null;
   }, [inputToken, subjects]);
+
+  // Prefetch butir soal di latar belakang segera setelah token mapel valid terdeteksi (0ms saat Mulai Ujian)
+  useEffect(() => {
+    if (detectedSubject?.id) {
+      fetchQuestionsBySubject(detectedSubject.id).catch(() => {});
+    }
+  }, [detectedSubject?.id]);
 
   // 1. Load data awal dari Supabase & sinkronkan dengan cache lokal
   useEffect(() => {
@@ -875,43 +883,9 @@ export default function Home() {
     }
   };
 
-  const handleConfirmStartExam = async () => {
-    if (isStartingExam) return;
-    setIsStartingExam(true);
-    try {
-      if (briefingData) {
-        const [submissionStatus, lockStatus] = await Promise.all([
-          checkStudentExamSubmission(briefingData.subject.id, studentName),
-          checkStudentLockStatus(briefingData.subject.id, studentName, briefingData.subject.violationLimit || 3)
-        ]);
-
-        if (submissionStatus.isSubmitted) {
-          setShowBriefModal(false);
-          setBriefingData(null);
-          setLoginError(
-            language === 'id'
-              ? `AKSES DITOLAK (ANTI-RELOGIN): Siswa "${studentName}" sudah pernah menyelesaikan dan mengumpulkan ujian "${briefingData.subject.title}" pada ${submissionStatus.submittedAt || 'sesi sebelumnya'} (Skor: ${submissionStatus.score}%). Anda tidak diperbolehkan mengerjakan ulang.`
-              : `ACCESS DENIED (ANTI-RELOGIN): Student "${studentName}" has already completed "${briefingData.subject.title}". Retakes are not allowed.`
-          );
-          return;
-        }
-
-        if (lockStatus.isBlocked) {
-          setShowBriefModal(false);
-          setBriefingData(null);
-          setLoginError(
-            language === 'id'
-              ? `AKSES DITOLAK (UJIAN DIBLOKIR): Akun siswa "${studentName}" saat ini sedang DIBLOKIR oleh sistem anti-cheat karena telah melampaui batas toleransi pelanggaran (${briefingData.subject.violationLimit || 3}x). Silakan hubungi Guru Pengawas.`
-              : `ACCESS DENIED (EXAM LOCKED): Student "${studentName}" is currently BLOCKED by the anti-cheat system. Please contact your proctor.`
-          );
-          return;
-        }
-      }
-      setShowBriefModal(false);
-      setViewMode('student_exam');
-    } finally {
-      setIsStartingExam(false);
-    }
+  const handleConfirmStartExam = () => {
+    setShowBriefModal(false);
+    setViewMode('student_exam');
   };
 
   const handleFinishExam = async (resultData: any) => {
@@ -1026,18 +1000,28 @@ export default function Home() {
   };
 
   const handleSendBroadcast = async (broadcastText: string) => {
+    if (!broadcastText.trim()) return;
+
+    // 1. Siarkan langsung via Realtime Broadcast lintas HP siswa, laptop guru, dan tab browser (0ms)
+    broadcastAnnouncementToStudents({
+      text: broadcastText.trim(),
+      subjectId: subject?.id,
+      senderName: currentTeacher?.name || 'Guru Pengawas'
+    });
+
     const newMsg: ExamMessage = {
       id: `msg-${Date.now()}`,
-      subjectId: subject.id,
-      senderName: 'Guru Pengawas',
+      subjectId: subject?.id || '',
+      senderName: currentTeacher?.name || 'Guru Pengawas',
       senderRole: 'teacher',
       targetType: 'broadcast',
       title: 'Pengumuman Pengawas Ruang',
-      body: broadcastText,
+      body: broadcastText.trim(),
       status: 'acknowledged',
       createdAt: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
     };
     setMessages(prev => [newMsg, ...prev]);
+
     try {
       await insertMessage(newMsg);
     } catch (err) {

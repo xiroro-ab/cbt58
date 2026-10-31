@@ -9,13 +9,16 @@ import { useLanguage } from '@/context/LanguageContext';
 import {
   insertNotification,
   insertMessage,
+  fetchMessages,
   subscribeToMessages,
   checkStudentLockStatus
 } from '@/lib/supabaseService';
 import {
   reportStudentSession,
   removeStudentSession,
-  subscribeToStudentCommands
+  subscribeToStudentCommands,
+  subscribeToAnnouncements,
+  getLatestStoredAnnouncement
 } from '@/lib/liveMonitoringService';
 import {
   Clock,
@@ -157,7 +160,11 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
   const [isSubmittingReport, setIsSubmittingReport] = useState(false);
 
   // State Pengumuman Broadcast dari Pengawas
-  const [broadcastNotice, setBroadcastNotice] = useState<string | null>(null);
+  const [broadcastNotice, setBroadcastNotice] = useState<string | null>(() => {
+    const stored = getLatestStoredAnnouncement();
+    return stored?.text || null;
+  });
+  const [showBroadcastPopup, setShowBroadcastPopup] = useState(false);
 
   // State Verifikasi Buka Kunci Mandiri saat Terkunci
   const [isCheckingUnlock, setIsCheckingUnlock] = useState(false);
@@ -771,15 +778,52 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
     };
   }, [isExamCompleted, handleViolation, sendDirectHeartbeat, requestFullscreenMode]);
 
-  // 6. LISTEN FOR PROCTOR BROADCAST MESSAGES
+  // 6. LISTEN FOR PROCTOR BROADCAST MESSAGES (MULTI-CHANNEL REALTIME & CLOUD DB)
   useEffect(() => {
-    if (isExamCompleted || !subject.id) return;
-    const unsub = subscribeToMessages(msg => {
-      if (msg.targetType === 'broadcast') {
-        setBroadcastNotice(msg.body);
+    if (isExamCompleted) return;
+
+    // A. Dengarkan Supabase Realtime Broadcast + Browser BroadcastChannel
+    const unsubAnnouncements = subscribeToAnnouncements(ann => {
+      if (ann && ann.text) {
+        setBroadcastNotice(ann.text);
+        setShowBroadcastPopup(true);
       }
     });
-    return () => unsub();
+
+    // B. Dengarkan Postgres Database Changes
+    const unsubMessages = subscribeToMessages(msg => {
+      if (msg.targetType === 'broadcast' && msg.body) {
+        setBroadcastNotice(msg.body);
+        setShowBroadcastPopup(true);
+      }
+    });
+
+    // C. Muat pesan broadcast yang sudah ada dari Supabase saat awal masuk
+    if (subject.id) {
+      fetchMessages(subject.id).then(msgs => {
+        const broadcasts = msgs.filter(m => m.targetType === 'broadcast');
+        if (broadcasts.length > 0 && broadcasts[0].body) {
+          setBroadcastNotice(prev => prev || broadcasts[0].body);
+        }
+      }).catch(() => {});
+    }
+
+    // D. Polling berkala (fail-safe tiap 4 detik)
+    const pollInterval = setInterval(() => {
+      const stored = getLatestStoredAnnouncement();
+      if (stored?.text) {
+        setBroadcastNotice(prev => {
+          if (!prev) return stored.text;
+          return prev;
+        });
+      }
+    }, 4000);
+
+    return () => {
+      unsubAnnouncements();
+      unsubMessages();
+      clearInterval(pollInterval);
+    };
   }, [isExamCompleted, subject.id]);
 
   const currentQuestion = questions && questions.length > 0 ? questions[currentIndex] : undefined;
@@ -1124,6 +1168,18 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
             </button>
           )}
 
+          {/* Tombol Pengumuman Pengawas jika ada siaran aktif */}
+          {broadcastNotice && (
+            <button
+              onClick={() => setShowBroadcastPopup(true)}
+              className="p-1.5 sm:px-2.5 sm:py-1.5 rounded-xl border border-amber-300 dark:border-amber-700 bg-amber-500/15 text-amber-700 dark:text-amber-300 hover:bg-amber-500/25 text-xs font-bold transition cursor-pointer flex items-center gap-1 animate-pulse"
+              title="Lihat pesan pengumuman pengawas ruangan"
+            >
+              <Megaphone className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 flex-shrink-0" />
+              <span className="hidden md:inline">Pengumuman</span>
+            </button>
+          )}
+
           {/* Tombol Lapor Kendala ke Pengawas */}
           <button
             onClick={() => setShowReportModal(true)}
@@ -1169,18 +1225,36 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
 
       {/* PENGUMUMAN BROADCAST DARI PENGAWAS */}
       {broadcastNotice && (
-        <div className="bg-amber-500 text-slate-950 px-3 sm:px-4 py-2 text-xs font-bold flex items-center justify-between shadow-md">
-          <div className="flex items-center gap-2 max-w-4xl mx-auto flex-1 min-w-0">
-            <Megaphone className="w-4 h-4 flex-shrink-0 animate-bounce" />
-            <span className="truncate">PENGUMUMAN: {broadcastNotice}</span>
+        <div className="bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500 text-slate-950 px-3 sm:px-4 py-2.5 text-xs font-bold shadow-md border-b border-amber-600/30">
+          <div className="max-w-6xl mx-auto flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5 flex-1 min-w-0">
+              <span className="p-1 bg-slate-950 text-amber-400 rounded-lg flex-shrink-0">
+                <Megaphone className="w-4 h-4 animate-bounce" />
+              </span>
+              <div className="flex-1 min-w-0">
+                <span className="font-extrabold uppercase tracking-wide mr-1.5 bg-slate-950/15 px-1.5 py-0.5 rounded text-[10px]">
+                  Pengumuman Pengawas:
+                </span>
+                <span className="font-semibold text-slate-950 break-words">{broadcastNotice}</span>
+              </div>
+            </div>
+            <div className="flex items-center gap-1.5 flex-shrink-0">
+              <button
+                onClick={() => setShowBroadcastPopup(true)}
+                className="px-2.5 py-1 bg-slate-950/15 hover:bg-slate-950/25 rounded-lg text-[11px] font-bold text-slate-950 transition cursor-pointer whitespace-nowrap"
+                title="Buka Pengumuman Lengkap"
+              >
+                Lihat Lengkap
+              </button>
+              <button
+                onClick={() => setBroadcastNotice(null)}
+                className="p-1 hover:bg-slate-950/20 rounded-lg text-slate-950 cursor-pointer"
+                title="Tutup Banner (Tetap bisa dibuka via tombol Pengumuman di atas)"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
           </div>
-          <button
-            onClick={() => setBroadcastNotice(null)}
-            className="p-1 hover:bg-amber-600 rounded-lg text-slate-950 cursor-pointer flex-shrink-0 ml-2"
-            title="Tutup Pengumuman"
-          >
-            <X className="w-4 h-4" />
-          </button>
         </div>
       )}
 
@@ -1641,6 +1715,35 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
                 Ya, Kirim Sekarang
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL POPUP PENGUMUMAN KILAT DARI PENGAWAS */}
+      {showBroadcastPopup && broadcastNotice && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs animate-in fade-in">
+          <div className="max-w-md w-full bg-white dark:bg-slate-900 border-2 border-amber-500 rounded-3xl p-6 shadow-2xl text-center space-y-4 animate-in zoom-in-95">
+            <div className="w-12 h-12 mx-auto rounded-2xl bg-amber-100 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 flex items-center justify-center font-bold">
+              <Megaphone className="w-6 h-6 animate-bounce" />
+            </div>
+            <div className="space-y-1">
+              <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                Pengumuman dari Pengawas Ruangan
+              </h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                SMP Negeri 58 Palembang • Mohon perhatikan seksama
+              </p>
+            </div>
+            <div className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/60 text-xs text-amber-950 dark:text-amber-200 text-left font-medium leading-relaxed whitespace-pre-wrap max-h-60 overflow-y-auto">
+              {broadcastNotice}
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowBroadcastPopup(false)}
+              className="w-full py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs shadow-md transition cursor-pointer"
+            >
+              Saya Mengerti & Lanjutkan Ujian
+            </button>
           </div>
         </div>
       )}

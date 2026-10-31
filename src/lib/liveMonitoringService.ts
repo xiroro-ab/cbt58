@@ -23,6 +23,16 @@ export interface ResultChangePayload {
   studentName?: string;
 }
 
+export interface BroadcastAnnouncement {
+  id: string;
+  text: string;
+  senderName?: string;
+  subjectId?: string;
+  timestamp: number;
+}
+
+export const ANNOUNCEMENT_STORAGE_KEY = 'cbt_active_broadcast';
+
 // Set of listeners for live sessions updates (Teacher View)
 const liveSessionListeners = new Set<(sessions: ExamSession[]) => void>();
 
@@ -31,6 +41,9 @@ const studentCommandListeners = new Set<(cmd: ProctorCommand) => void>();
 
 // Set of listeners for exam results changes (Teacher Dashboard & Database Nilai)
 const resultChangeListeners = new Set<(payload: ResultChangePayload) => void>();
+
+// Set of listeners for proctor announcements (Student & Teacher View)
+const announcementListeners = new Set<(announcement: BroadcastAnnouncement) => void>();
 
 // Singleton BroadcastChannel untuk sinkronisasi antar-tab dalam browser yang sama
 let sharedBc: BroadcastChannel | null = null;
@@ -53,6 +66,10 @@ function getSharedBroadcastChannel(): BroadcastChannel | null {
         } else if (event.data?.type === 'RESULT_CHANGE' && event.data.payload) {
           resultChangeListeners.forEach(fn => {
             try { fn(event.data.payload); } catch {}
+          });
+        } else if (event.data?.type === 'ANNOUNCEMENT_BROADCAST' && event.data.announcement) {
+          announcementListeners.forEach(fn => {
+            try { fn(event.data.announcement); } catch {}
           });
         }
       });
@@ -120,6 +137,19 @@ function initSupabaseChannel() {
             });
           }
         })
+        .on('broadcast', { event: 'exam_announcement' }, (payload: any) => {
+          const ann: BroadcastAnnouncement = payload.payload;
+          if (ann && ann.text) {
+            if (typeof window !== 'undefined') {
+              try {
+                localStorage.setItem(ANNOUNCEMENT_STORAGE_KEY, JSON.stringify(ann));
+              } catch {}
+            }
+            announcementListeners.forEach(fn => {
+              try { fn(ann); } catch {}
+            });
+          }
+        })
         .subscribe((status: string) => {
           if (status === 'SUBSCRIBED') {
             // Channel aktif terhubung
@@ -148,6 +178,13 @@ if (typeof window !== 'undefined') {
         const cmd: ProctorCommand = JSON.parse(e.newValue);
         studentCommandListeners.forEach(fn => {
           try { fn(cmd); } catch {}
+        });
+      } catch {}
+    } else if (e.key === ANNOUNCEMENT_STORAGE_KEY && e.newValue) {
+      try {
+        const ann: BroadcastAnnouncement = JSON.parse(e.newValue);
+        announcementListeners.forEach(fn => {
+          try { fn(ann); } catch {}
         });
       } catch {}
     }
@@ -467,4 +504,82 @@ export function subscribeToLiveSessions(
     liveSessionListeners.delete(onUpdate);
     clearInterval(intervalId);
   };
+}
+
+/**
+ * Pengawas menyiarkan pengumuman kilat ke seluruh siswa yang sedang ujian
+ * (Terkirim via Supabase Realtime Broadcast + Browser BroadcastChannel + LocalStorage)
+ */
+export function broadcastAnnouncementToStudents(announcement: {
+  text: string;
+  subjectId?: string;
+  senderName?: string;
+}) {
+  if (typeof window === 'undefined') return;
+
+  const payload: BroadcastAnnouncement = {
+    id: `ann-${Date.now()}`,
+    text: announcement.text,
+    senderName: announcement.senderName || 'Guru Pengawas',
+    subjectId: announcement.subjectId,
+    timestamp: Date.now()
+  };
+
+  // 1. Simpan ke localStorage agar siswa yang baru masuk/refresh langsung membaca pengumuman ini
+  try {
+    localStorage.setItem(ANNOUNCEMENT_STORAGE_KEY, JSON.stringify(payload));
+  } catch {}
+
+  // 2. Siarkan via BroadcastChannel lokal (antar-tab browser sama)
+  const bc = getSharedBroadcastChannel();
+  if (bc) {
+    try {
+      bc.postMessage({ type: 'ANNOUNCEMENT_BROADCAST', announcement: payload });
+    } catch {}
+  }
+
+  // 3. Siarkan via Supabase Realtime Broadcast (sub-detik lintas HP siswa & laptop guru)
+  const supa = initSupabaseChannel();
+  if (supa) {
+    try {
+      supa.send({
+        type: 'broadcast',
+        event: 'exam_announcement',
+        payload
+      });
+    } catch {}
+  }
+
+  // 4. Picu listener lokal seketika
+  announcementListeners.forEach(fn => {
+    try { fn(payload); } catch {}
+  });
+}
+
+/**
+ * Siswa mendengarkan siaran pengumuman dari pengawas secara realtime
+ */
+export function subscribeToAnnouncements(
+  callback: (announcement: BroadcastAnnouncement) => void
+): () => void {
+  announcementListeners.add(callback);
+  return () => {
+    announcementListeners.delete(callback);
+  };
+}
+
+/**
+ * Mengambil pengumuman terbaru yang masih berlaku (kurang dari 2 jam)
+ */
+export function getLatestStoredAnnouncement(): BroadcastAnnouncement | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = localStorage.getItem(ANNOUNCEMENT_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed: BroadcastAnnouncement = JSON.parse(raw);
+    if (parsed && parsed.text && Date.now() - parsed.timestamp < 2 * 60 * 60 * 1000) {
+      return parsed;
+    }
+  } catch {}
+  return null;
 }

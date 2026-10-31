@@ -6,7 +6,7 @@ import { NavItem } from '../layout/Sidebar';
 import { useLanguage } from '@/context/LanguageContext';
 import { StudentManagement } from './StudentManagement';
 import { evaluateFullExam, calculateSingleQuestionScore } from '@/lib/scoringEngine';
-import { sendProctorCommand, subscribeToLiveSessions, removeStudentSession } from '@/lib/liveMonitoringService';
+import { sendProctorCommand, subscribeToLiveSessions, removeStudentSession, broadcastAnnouncementToStudents } from '@/lib/liveMonitoringService';
 import { clearStudentAutolockInSupabase } from '@/lib/supabaseService';
 import {
   TrendingUp,
@@ -60,7 +60,8 @@ import {
   Unlock,
   RefreshCw,
   CheckSquare,
-  Info
+  Info,
+  Megaphone
 } from 'lucide-react';
 
 interface TeacherDashboardProps {
@@ -255,6 +256,20 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   const [monitoringFilterSubId, setMonitoringFilterSubId] = useState<string>('ALL');
   const [monitoringFilterClass, setMonitoringFilterClass] = useState<string>('ALL');
   const [monitoringActionToast, setMonitoringActionToast] = useState<string | null>(null);
+  const [liveAnnouncementInput, setLiveAnnouncementInput] = useState('');
+  const [showLiveAnnouncementBox, setShowLiveAnnouncementBox] = useState(false);
+
+  const handleSendLiveAnnouncement = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!liveAnnouncementInput.trim()) return;
+    broadcastAnnouncementToStudents({
+      text: liveAnnouncementInput.trim(),
+      senderName: currentTeacher?.name || 'Guru Pengawas',
+      subjectId: monitoringFilterSubId !== 'ALL' ? monitoringFilterSubId : subject.id
+    });
+    setLiveAnnouncementInput('');
+    setMonitoringActionToast('Pengumuman berhasil disiarkan ke seluruh layar siswa!');
+  };
 
   // Daftar kelas unik untuk filter rombel pada Live Monitoring
   const monitoringClasses = useMemo(() => {
@@ -3334,6 +3349,64 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                 <p className="text-3xl font-black text-rose-600 dark:text-rose-400">{blockedCount}</p>
                 <span className="text-[10px] text-rose-600/80">Butuh Aksi Guru</span>
               </div>
+            </div>
+
+            {/* PAPAN PENGUMUMAN & SIARAN LANGSUNG KE SELURUH LAYAR SISWA */}
+            <div className="bg-gradient-to-r from-violet-50 via-white to-amber-50 dark:from-slate-900 dark:via-slate-900 dark:to-slate-900 border border-violet-200/80 dark:border-slate-800 rounded-3xl p-5 shadow-xs space-y-3">
+              <div className="flex items-center justify-between flex-wrap gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-violet-600 text-white flex items-center justify-center font-bold shadow-md shadow-violet-600/20 flex-shrink-0">
+                    <Megaphone className="w-5 h-5 animate-bounce" />
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-sm text-slate-900 dark:text-white flex items-center gap-2">
+                      <span>Papan Pengumuman & Siaran Kilat</span>
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 font-bold uppercase tracking-wider">
+                        Realtime Live
+                      </span>
+                    </h4>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                      Tulis instruksi penting yang akan <strong>langsung muncul di layar ujian seluruh siswa</strong> secara serentak.
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setShowLiveAnnouncementBox(!showLiveAnnouncementBox)}
+                  className="px-4 py-2 rounded-xl border border-violet-200 dark:border-violet-800 bg-white dark:bg-slate-800 text-violet-700 dark:text-violet-300 font-bold text-xs hover:bg-violet-50 transition cursor-pointer flex items-center gap-2 shadow-xs"
+                >
+                  <Megaphone className="w-3.5 h-3.5" />
+                  <span>{showLiveAnnouncementBox ? 'Tutup Formulir' : 'Kirim Siaran ke Siswa'}</span>
+                </button>
+              </div>
+
+              {showLiveAnnouncementBox && (
+                <form onSubmit={handleSendLiveAnnouncement} className="space-y-3 pt-2 animate-in slide-in-from-top-2">
+                  <div className="relative">
+                    <textarea
+                      rows={2}
+                      required
+                      value={liveAnnouncementInput}
+                      onChange={e => setLiveAnnouncementInput(e.target.value)}
+                      placeholder="Ketik teks pengumuman di sini... (Contoh: Perhatian seluruh siswa, waktu tersisa 15 menit lagi. Periksa kembali jawaban Anda sebelum mengumpulkan!)"
+                      className="w-full p-3.5 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500"
+                    />
+                  </div>
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                      Terkirim seketika melalui WebSockets & Broadcast lintas HP & komputer siswa.
+                    </span>
+                    <button
+                      type="submit"
+                      className="px-5 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-bold text-xs shadow-md shadow-violet-600/20 transition flex items-center gap-2 cursor-pointer active:scale-95"
+                    >
+                      <Megaphone className="w-3.5 h-3.5" />
+                      <span>Siarkan ke Seluruh Layar Siswa</span>
+                    </button>
+                  </div>
+                </form>
+              )}
             </div>
 
             {/* TABEL LIVE MONITORING */}

@@ -128,6 +128,46 @@ export async function fetchActiveSubject(): Promise<Subject> {
  * Mengambil daftar soal berdasarkan ID mata pelajaran (Real Data dengan fail-safe localStorage)
  */
 export async function fetchQuestionsBySubject(subjectId: string): Promise<Question[]> {
+  // 1. Fast-Path (Stale-While-Revalidate): Kembalikan cache lokal seketika jika ada agar login siswa instan
+  if (typeof window !== 'undefined') {
+    try {
+      const stored = localStorage.getItem(`cbt_questions_${subjectId}`);
+      if (stored) {
+        const localQuestions = JSON.parse(stored);
+        if (Array.isArray(localQuestions) && localQuestions.length > 0) {
+          // Sinkronisasi pembaruan dari Supabase di latar belakang tanpa menunda UI
+          (async () => {
+            try {
+              const { data, error } = await supabase
+                .from('questions')
+                .select('*')
+                .eq('subject_id', subjectId)
+                .order('order_index', { ascending: true });
+
+              if (!error && data && data.length > 0) {
+                const parsed: Question[] = data.map(row => ({
+                  id: row.id,
+                  subjectId: row.subject_id,
+                  type: row.type,
+                  questionText: row.question_text,
+                  mediaUrl: row.media_url,
+                  options: row.options || [],
+                  answer: row.answer,
+                  orderIndex: row.order_index
+                }));
+                try {
+                  localStorage.setItem(`cbt_questions_${subjectId}`, JSON.stringify(parsed));
+                } catch {}
+              }
+            } catch {}
+          })();
+
+          return localQuestions;
+        }
+      }
+    } catch {}
+  }
+
   try {
     const { data, error } = await supabase
       .from('questions')
@@ -773,29 +813,21 @@ export async function checkStudentLockStatus(
 
   // 1. PRIORITAS UTAMA: Periksa database Supabase Cloud (Single Source of Truth)
   try {
-    // A. Cek notifikasi autolock yang belum dibuka oleh pengawas
-    const { data: autolocks, error: lockErr } = await supabase
+    // A. Satu query gabungan untuk seluruh notifikasi pelanggaran & autolock siswa ini (Lebih Cepat & Efisien)
+    const { data: notifications, error } = await supabase
       .from('exam_notifications')
-      .select('id, message, created_at')
-      .eq('subject_id', subjectId)
-      .ilike('student_name', studentName.trim())
-      .eq('type', 'autolock')
-      .eq('is_read', false)
-      .order('created_at', { ascending: false })
-      .limit(1);
-
-    // B. Hitung jumlah total pelanggaran aktif siswa ini di Supabase
-    const { count: unreadViolations, error: countErr } = await supabase
-      .from('exam_notifications')
-      .select('id', { count: 'exact', head: true })
+      .select('id, type, message, created_at')
       .eq('subject_id', subjectId)
       .ilike('student_name', studentName.trim())
       .in('type', ['violation', 'autolock'])
-      .eq('is_read', false);
+      .eq('is_read', false)
+      .order('created_at', { ascending: false });
 
-    if (!lockErr && !countErr) {
-      const cloudViolationCount = typeof unreadViolations === 'number' ? unreadViolations : 0;
-      const isCloudBlocked = (autolocks && autolocks.length > 0) || (cloudViolationCount >= violationLimit);
+    if (!error) {
+      const notifList = notifications || [];
+      const autolocks = notifList.filter(n => n.type === 'autolock');
+      const cloudViolationCount = notifList.length;
+      const isCloudBlocked = (autolocks.length > 0) || (cloudViolationCount >= violationLimit);
 
       // Baca rekaman lokal perangkat siswa
       let localViolationCount = 0;

@@ -364,3 +364,57 @@ ON CONFLICT (nip) DO UPDATE SET
     pin = EXCLUDED.pin,
     name = EXCLUDED.name,
     status = EXCLUDED.status;
+
+-- ===============================================================
+-- 12. TABEL PENGATURAN KOP SURAT, IDENTITAS SEKOLAH & TTE DIGITAL (CBT SCHOOL SETTINGS)
+-- ===============================================================
+CREATE TABLE IF NOT EXISTS public.school_settings (
+    id TEXT PRIMARY KEY DEFAULT 'default',
+    institution1 TEXT NOT NULL DEFAULT 'PEMERINTAH KOTA PALEMBANG',
+    institution2 TEXT NOT NULL DEFAULT 'DINAS PENDIDIKAN',
+    school_name TEXT NOT NULL DEFAULT 'SMP NEGERI 58 PALEMBANG',
+    school_address TEXT NOT NULL DEFAULT 'Jln. Komering II, Kelurahan Demang Lebar Daun, Kecamatan Ilir Barat I, Kota Palembang, Sumatera Selatan 30151',
+    school_contact TEXT NOT NULL DEFAULT 'Website: https://smpn58.vercel.app/',
+    logo_left TEXT NOT NULL DEFAULT '/logo-dinas.png',
+    logo_right TEXT NOT NULL DEFAULT '/logo-sekolah.png',
+    principal_name TEXT NOT NULL DEFAULT 'Hj. Rohana, S.Pd., M.Si.',
+    principal_nip TEXT NOT NULL DEFAULT '19680512 199412 2 001',
+    principal_photo TEXT DEFAULT '',
+    teacher_name TEXT NOT NULL DEFAULT 'Hendra Wijaya, S.Pd',
+    teacher_nip TEXT NOT NULL DEFAULT '19870420 201201 1 004',
+    city TEXT NOT NULL DEFAULT 'Palembang',
+    enable_tte BOOLEAN NOT NULL DEFAULT true,
+    tte_type TEXT NOT NULL DEFAULT 'qrcode',
+    isolate_teacher_dossier BOOLEAN NOT NULL DEFAULT true,
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- RLS untuk tabel school_settings (Akses penuh untuk aplikasi CBT)
+ALTER TABLE public.school_settings ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow public all on school_settings" ON public.school_settings;
+CREATE POLICY "Allow public all on school_settings" ON public.school_settings FOR ALL USING (true) WITH CHECK (true);
+
+-- Data Awal Pengaturan Resmi SMPN 58 Palembang
+INSERT INTO public.school_settings (
+    id, institution1, institution2, school_name, school_address, school_contact,
+    logo_left, logo_right, principal_name, principal_nip, teacher_name, teacher_nip,
+    city, enable_tte, tte_type, isolate_teacher_dossier
+) VALUES (
+    'default',
+    'PEMERINTAH KOTA PALEMBANG',
+    'DINAS PENDIDIKAN',
+    'SMP NEGERI 58 PALEMBANG',
+    'Jln. Komering II, Kelurahan Demang Lebar Daun, Kecamatan Ilir Barat I, Kota Palembang, Sumatera Selatan 30151',
+    'Website: https://smpn58.vercel.app/',
+    '/logo-dinas.png',
+    '/logo-sekolah.png',
+    'Hj. Rohana, S.Pd., M.Si.',
+    '19680512 199412 2 001',
+    'Hendra Wijaya, S.Pd',
+    '19870420 201201 1 004',
+    'Palembang',
+    true,
+    'qrcode',
+    true
+) ON CONFLICT (id) DO NOTHING;
+

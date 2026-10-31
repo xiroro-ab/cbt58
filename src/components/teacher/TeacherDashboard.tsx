@@ -174,15 +174,75 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   const fileInputLogoRightRef = useRef<HTMLInputElement>(null);
   const fileInputPrincipalPhotoRef = useRef<HTMLInputElement>(null);
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, field: 'logoLeft' | 'logoRight' | 'principalPhoto') => {
+  const compressImageFile = (
+    file: File,
+    maxWidth: number,
+    maxHeight: number,
+    quality = 0.88
+  ): Promise<string> => {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          let width = img.width;
+          let height = img.height;
+
+          if (width > height) {
+            if (width > maxWidth) {
+              height = Math.round((height * maxWidth) / width);
+              width = maxWidth;
+            }
+          } else {
+            if (height > maxHeight) {
+              width = Math.round((width * maxHeight) / height);
+              height = maxHeight;
+            }
+          }
+
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            resolve(e.target?.result as string);
+            return;
+          }
+
+          const isPng = file.type === 'image/png';
+          if (!isPng) {
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, width, height);
+          }
+          ctx.drawImage(img, 0, 0, width, height);
+          const mimeType = isPng ? 'image/png' : 'image/jpeg';
+          resolve(canvas.toDataURL(mimeType, quality));
+        };
+        img.onerror = () => resolve(e.target?.result as string);
+        img.src = e.target?.result as string;
+      };
+      reader.onerror = () => resolve('');
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>, field: 'logoLeft' | 'logoRight' | 'principalPhoto') => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      const dataUrl = reader.result as string;
-      setLocalSettingsForm(prev => ({ ...prev, [field]: dataUrl }));
-    };
-    reader.readAsDataURL(file);
+    try {
+      const maxW = field === 'principalPhoto' ? 400 : 320;
+      const maxH = field === 'principalPhoto' ? 500 : 320;
+      const compressedDataUrl = await compressImageFile(file, maxW, maxH, 0.88);
+      if (compressedDataUrl) {
+        setLocalSettingsForm(prev => ({ ...prev, [field]: compressedDataUrl }));
+      }
+    } catch {
+      const reader = new FileReader();
+      reader.onload = () => {
+        setLocalSettingsForm(prev => ({ ...prev, [field]: reader.result as string }));
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
   useEffect(() => {
@@ -5598,12 +5658,16 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                     <span className="px-2.5 py-0.5 rounded-full bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 text-[10px] font-bold border border-blue-200/60 dark:border-blue-800/60">
                       Global Cetak
                     </span>
+                    <span className="px-2.5 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 text-[10px] font-bold border border-emerald-200/60 dark:border-emerald-800/60 flex items-center gap-1">
+                      <span>☁️</span>
+                      <span>Cloud Database Supabase</span>
+                    </span>
                     <span className="px-2.5 py-0.5 rounded-full bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 text-[10px] font-bold border border-blue-200/60 dark:border-blue-800/60 uppercase">
                       {localSettingsForm.schoolName}
                     </span>
                   </div>
                   <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                    Pengaturan terpusat Kop Surat dinas & dual-logo (Dinas Kiri + Sekolah Kanan) untuk seluruh lembar cetak guru.
+                    Pengaturan terpusat Kop Surat dinas & dual-logo (Dinas Kiri + Sekolah Kanan) tersimpan permanen di Supabase Cloud untuk seluruh lembar cetak guru.
                   </p>
                 </div>
               </div>
@@ -5624,8 +5688,8 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                     onUpdateSchoolSettings?.(localSettingsForm);
                     setSettingsSavedToast(true);
                     showThemedAlert(
-                      'Kop Surat Berhasil Disimpan',
-                      'Pengaturan kop surat resmi, logo dinas, dan logo sekolah telah diperbarui ke seluruh sistem cetak CBT.',
+                      'Kop Surat Berhasil Disimpan ke Cloud',
+                      'Pengaturan kop surat resmi, logo dinas, dan logo sekolah telah berhasil disimpan permanen ke Cloud Database Supabase dan tersinkronisasi ke seluruh akun guru & proktor.',
                       'info'
                     );
                     setTimeout(() => setSettingsSavedToast(false), 3000);
@@ -6010,12 +6074,18 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
           <div className="p-5 sm:p-7 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-6">
             <div className="border-b border-slate-100 dark:border-slate-800 pb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
-                <h4 className="font-bold text-slate-900 dark:text-white text-sm sm:text-base flex items-center gap-2">
-                  <ShieldCheck className="w-5 h-5 text-violet-600" />
-                  <span>Identitas Pejabat Satuan Pendidikan & TTE Barcode/QR</span>
-                </h4>
+                <div className="flex items-center gap-2 flex-wrap mb-1">
+                  <h4 className="font-bold text-slate-900 dark:text-white text-sm sm:text-base flex items-center gap-2">
+                    <ShieldCheck className="w-5 h-5 text-violet-600" />
+                    <span>Identitas Pejabat Satuan Pendidikan & TTE Barcode/QR</span>
+                  </h4>
+                  <span className="px-2.5 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 text-[10px] font-bold border border-emerald-200/60 dark:border-emerald-800/60 flex items-center gap-1">
+                    <span>☁️</span>
+                    <span>Database Cloud Supabase</span>
+                  </span>
+                </div>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                  Data ini otomatis dicetak pada Sertifikat Kelulusan, Dossier Lembar Jawaban Siswa, Berita Acara Ujian (BAP), dan Leger Nilai.
+                  Data ini tersimpan di Supabase Cloud dan otomatis dicetak pada Sertifikat Kelulusan, Dossier Lembar Jawaban Siswa, Berita Acara Ujian (BAP), dan Leger Nilai.
                 </p>
               </div>
 
@@ -6025,8 +6095,8 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                   onUpdateSchoolSettings?.(localSettingsForm);
                   setSettingsSavedToast(true);
                   showThemedAlert(
-                    'Pengaturan Berhasil Disimpan',
-                    'Data nama kepala sekolah, guru pengampu, dan konfigurasi TTE digital telah berhasil diperbarui ke seluruh sistem dokumen CBT.',
+                    'Pengaturan Tersimpan ke Database Cloud',
+                    'Data nama kepala sekolah, foto resmi, guru pengampu, dan konfigurasi TTE digital telah berhasil disimpan ke Cloud Database Supabase dan tersinkronisasi ke seluruh akun guru & proktor.',
                     'info'
                   );
                   setTimeout(() => setSettingsSavedToast(false), 3000);

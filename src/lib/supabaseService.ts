@@ -1,5 +1,5 @@
 import { supabase } from './supabaseClient';
-import { Subject, Question, ExamResult, ScoringRules, ExamNotification, ExamMessage, Student, Teacher } from '@/types/cbt';
+import { Subject, Question, ExamResult, ScoringRules, ExamNotification, ExamMessage, Student, Teacher, SchoolSettings } from '@/types/cbt';
 import { initialSubject, sampleSubjects, sampleQuestions } from './mockData';
 import { initialStudents } from './rosterStudents';
 import { initialTeachers } from './rosterTeachers';
@@ -1744,13 +1744,16 @@ export async function fetchTeachers(): Promise<Teacher[]> {
     const { data, error } = await supabase
       .from('teachers')
       .select('*')
+      .neq('id', '__cbt_school_settings__')
       .order('name', { ascending: true });
 
     if (error || !data || data.length === 0) {
       return initialTeachers;
     }
 
-    const supabaseTeachers: Teacher[] = data.map(t => ({
+    const supabaseTeachers: Teacher[] = data
+      .filter(t => t.id !== '__cbt_school_settings__' && t.nip !== 'CFG-SCHOOL-SETTINGS')
+      .map(t => ({
       id: t.id,
       nip: t.nip,
       name: t.name,
@@ -1792,6 +1795,162 @@ export async function updateTeacherStatusInSupabase(
   } catch (err) {
     console.error('Exception updateTeacherStatusInSupabase:', err);
     return false;
+  }
+}
+
+/**
+ * Pengaturan Default Sekolah Resmi (Kop Surat, Pejabat & TTE)
+ */
+export const defaultSchoolSettings: SchoolSettings = {
+  institution1: 'PEMERINTAH KOTA PALEMBANG',
+  institution2: 'DINAS PENDIDIKAN',
+  schoolName: 'SMP NEGERI 58 PALEMBANG',
+  schoolAddress: 'Jln. Komering II, Kelurahan Demang Lebar Daun, Kecamatan Ilir Barat I, Kota Palembang, Sumatera Selatan 30151',
+  schoolContact: 'Website: https://smpn58.vercel.app/',
+  logoLeft: '/logo-dinas.png',
+  logoRight: '/logo-sekolah.png',
+  principalName: 'Hj. Rohana, S.Pd., M.Si.',
+  principalNip: '19680512 199412 2 001',
+  principalPhoto: '',
+  teacherName: 'Hendra Wijaya, S.Pd',
+  teacherNip: '19870420 201201 1 004',
+  city: 'Palembang',
+  enableTTE: true,
+  tteType: 'qrcode',
+  isolateTeacherDossier: true
+};
+
+/**
+ * Mengambil Pengaturan Satuan Pendidikan, Kop Surat & Pejabat dari Database Supabase
+ * Memeriksa tabel `school_settings`, lalu fallback ke row `__cbt_school_settings__` di tabel `teachers`.
+ */
+export async function fetchSchoolSettingsFromSupabase(): Promise<SchoolSettings | null> {
+  try {
+    // 1. Coba baca dari tabel school_settings jika sudah dibuat
+    try {
+      const { data: directData, error: directErr } = await supabase
+        .from('school_settings')
+        .select('*')
+        .eq('id', 'default')
+        .maybeSingle();
+
+      if (!directErr && directData) {
+        return {
+          institution1: directData.institution1 || defaultSchoolSettings.institution1,
+          institution2: directData.institution2 || defaultSchoolSettings.institution2,
+          schoolName: directData.school_name || defaultSchoolSettings.schoolName,
+          schoolAddress: directData.school_address || defaultSchoolSettings.schoolAddress,
+          schoolContact: directData.school_contact || defaultSchoolSettings.schoolContact,
+          logoLeft: directData.logo_left || defaultSchoolSettings.logoLeft,
+          logoRight: directData.logo_right || defaultSchoolSettings.logoRight,
+          principalName: directData.principal_name || defaultSchoolSettings.principalName,
+          principalNip: directData.principal_nip || defaultSchoolSettings.principalNip,
+          principalPhoto: directData.principal_photo || '',
+          teacherName: directData.teacher_name || defaultSchoolSettings.teacherName,
+          teacherNip: directData.teacher_nip || defaultSchoolSettings.teacherNip,
+          city: directData.city || defaultSchoolSettings.city,
+          enableTTE: directData.enable_tte !== false,
+          tteType: (directData.tte_type === 'barcode' ? 'barcode' : 'qrcode'),
+          isolateTeacherDossier: directData.isolate_teacher_dossier !== false
+        };
+      }
+    } catch {}
+
+    // 2. Fallback: Baca dari row config di tabel teachers (langsung berfungsi tanpa perlu modifikasi skema manual)
+    const { data: teacherCfg, error: cfgErr } = await supabase
+      .from('teachers')
+      .select('assignments')
+      .eq('id', '__cbt_school_settings__')
+      .maybeSingle();
+
+    if (!cfgErr && teacherCfg && teacherCfg.assignments && typeof teacherCfg.assignments === 'object') {
+      const cfg = teacherCfg.assignments as Partial<SchoolSettings>;
+      if (cfg && (cfg.schoolName || cfg.principalName)) {
+        return {
+          ...defaultSchoolSettings,
+          ...cfg,
+          logoLeft: cfg.logoLeft || defaultSchoolSettings.logoLeft,
+          logoRight: cfg.logoRight || defaultSchoolSettings.logoRight
+        };
+      }
+    }
+
+    return null;
+  } catch (err) {
+    console.warn('Gagal fetchSchoolSettingsFromSupabase:', err);
+    return null;
+  }
+}
+
+/**
+ * Menyimpan Pengaturan Satuan Pendidikan, Kop Surat & Pejabat ke Database Supabase
+ * Tersimpan secara permanen ke Supabase Cloud, tersinkronisasi ke seluruh akun guru & proktor.
+ */
+export async function saveSchoolSettingsToSupabase(settings: SchoolSettings): Promise<{ success: boolean; error?: string }> {
+  let savedToDirect = false;
+
+  // 1. Coba simpan ke tabel school_settings jika tersedia
+  try {
+    const { error: directError } = await supabase
+      .from('school_settings')
+      .upsert({
+        id: 'default',
+        institution1: settings.institution1 || defaultSchoolSettings.institution1,
+        institution2: settings.institution2 || defaultSchoolSettings.institution2,
+        school_name: settings.schoolName || defaultSchoolSettings.schoolName,
+        school_address: settings.schoolAddress || defaultSchoolSettings.schoolAddress,
+        school_contact: settings.schoolContact || defaultSchoolSettings.schoolContact,
+        logo_left: settings.logoLeft || defaultSchoolSettings.logoLeft,
+        logo_right: settings.logoRight || defaultSchoolSettings.logoRight,
+        principal_name: settings.principalName || defaultSchoolSettings.principalName,
+        principal_nip: settings.principalNip || defaultSchoolSettings.principalNip,
+        principal_photo: settings.principalPhoto || '',
+        teacher_name: settings.teacherName || defaultSchoolSettings.teacherName,
+        teacher_nip: settings.teacherNip || defaultSchoolSettings.teacherNip,
+        city: settings.city || defaultSchoolSettings.city,
+        enable_tte: settings.enableTTE !== false,
+        tte_type: settings.tteType || 'qrcode',
+        isolate_teacher_dossier: settings.isolateTeacherDossier !== false,
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'id' });
+
+    if (!directError) {
+      savedToDirect = true;
+    }
+  } catch (e: any) {
+    // school_settings mungkin belum dibuat di Supabase
+  }
+
+  // 2. Selalu simpan juga ke config row di tabel teachers sebagai penyimpanan persisten cloud yang pasti ada
+  try {
+    const { error: teacherError } = await supabase
+      .from('teachers')
+      .upsert({
+        id: '__cbt_school_settings__',
+        nip: 'CFG-SCHOOL-SETTINGS',
+        name: 'Sistem Pengaturan Sekolah',
+        email: 'school-settings@system.cbt',
+        subject: 'CBT Config',
+        classes: [],
+        assignments: settings,
+        role: 'admin',
+        pin: 'SYSTEM',
+        avatar_color: 'bg-slate-900',
+        status: 'System',
+        last_login: new Date().toISOString()
+      }, { onConflict: 'id' });
+
+    if (!teacherError) {
+      return { success: true };
+    } else {
+      console.warn('Gagal simpan ke fallback config row:', teacherError.message);
+      if (savedToDirect) return { success: true };
+      return { success: false, error: teacherError.message };
+    }
+  } catch (err: any) {
+    console.error('Exception saveSchoolSettingsToSupabase:', err);
+    if (savedToDirect) return { success: true };
+    return { success: false, error: err?.message || 'Database connection error' };
   }
 }
 

@@ -16,6 +16,8 @@ import {
   QrCode
 } from 'lucide-react';
 import Link from 'next/link';
+import { fetchSchoolSettingsFromSupabase } from '@/lib/supabaseService';
+import { SchoolSettings } from '@/types/cbt';
 
 function VerifyDetails() {
   const searchParams = useSearchParams();
@@ -39,12 +41,22 @@ function VerifyDetails() {
       timeStyle: 'medium'
     }));
 
+    // Coba baca dari localStorage lokal
     try {
       const stored = localStorage.getItem('cbt_school_settings');
       if (stored) {
         setSettings(JSON.parse(stored));
       }
     } catch {}
+
+    // Muat data resmi terbaru dari Database Supabase (Cloud) agar verifikasi dari HP pihak luar selalu menampilkan logo & foto valid
+    fetchSchoolSettingsFromSupabase().then(dbSettings => {
+      if (dbSettings) {
+        setSettings(dbSettings);
+      }
+    }).catch(err => {
+      console.warn('Gagal memuat pengaturan sekolah untuk verifikasi:', err);
+    });
   }, []);
 
   return (

@@ -58,7 +58,10 @@ import {
   updateTeacherStatusInSupabase,
   mergeTeachers,
   findMatchingSubject,
-  checkSubjectIsActive
+  checkSubjectIsActive,
+  fetchSchoolSettingsFromSupabase,
+  saveSchoolSettingsToSupabase,
+  defaultSchoolSettings
 } from '@/lib/supabaseService';
 import { useTheme } from '@/context/ThemeContext';
 import { useLanguage } from '@/context/LanguageContext';
@@ -160,51 +163,67 @@ export default function Home() {
   const [isVerifyingLogin, setIsVerifyingLogin] = useState(false);
   const [isStartingExam, setIsStartingExam] = useState(false);
 
-  // State Pengaturan Satuan Pendidikan, Pejabat & TTE Barcode
-  const defaultSchoolSettings: SchoolSettings = {
-    institution1: 'PEMERINTAH KOTA PALEMBANG',
-    institution2: 'DINAS PENDIDIKAN',
-    schoolName: 'SMP NEGERI 58 PALEMBANG',
-    schoolAddress: 'Jln. Komering II, Kelurahan Demang Lebar Daun, Kecamatan Ilir Barat I, Kota Palembang, Sumatera Selatan 30151',
-    schoolContact: 'Website: https://smpn58.vercel.app/',
-    logoLeft: '/logo-dinas.png',
-    logoRight: '/logo-sekolah.png',
-    principalName: 'Hj. Rohana, S.Pd., M.Si.',
-    principalNip: '19680512 199412 2 001',
-    principalPhoto: '',
-    teacherName: 'Hendra Wijaya, S.Pd',
-    teacherNip: '19870420 201201 1 004',
-    city: 'Palembang',
-    enableTTE: true,
-    tteType: 'qrcode',
-    isolateTeacherDossier: true
-  };
+  // State Pengaturan Satuan Pendidikan, Pejabat & TTE Barcode (Terhubung ke Supabase Cloud & Local Storage)
   const [schoolSettings, setSchoolSettings] = useState<SchoolSettings>(defaultSchoolSettings);
 
   useEffect(() => {
+    // 1. Muat dari localStorage seketika agar tidak terjadi kedip/blank
     if (typeof window !== 'undefined') {
       try {
         const stored = localStorage.getItem('cbt_school_settings');
         if (stored) {
           const parsed = JSON.parse(stored);
-          setSchoolSettings({
+          setSchoolSettings(prev => ({
             ...defaultSchoolSettings,
+            ...prev,
             ...parsed,
-            // Pastikan logo default terisi jika belum ada
-            logoLeft: parsed.logoLeft || '/logo-dinas.png',
-            logoRight: parsed.logoRight || '/logo-sekolah.png'
-          });
+            logoLeft: parsed.logoLeft || defaultSchoolSettings.logoLeft,
+            logoRight: parsed.logoRight || defaultSchoolSettings.logoRight
+          }));
         }
-      } catch {}
+      } catch (err) {
+        console.warn('Gagal membaca cbt_school_settings dari localStorage:', err);
+      }
     }
+
+    // 2. Muat data resmi terbaru dari Database Supabase Cloud (Permanen & Lintas Perangkat)
+    fetchSchoolSettingsFromSupabase().then(dbSettings => {
+      if (dbSettings) {
+        setSchoolSettings(dbSettings);
+        if (typeof window !== 'undefined') {
+          try {
+            localStorage.setItem('cbt_school_settings', JSON.stringify(dbSettings));
+          } catch {}
+        }
+      }
+    }).catch(err => {
+      console.warn('Gagal sinkron school settings dari Supabase:', err);
+    });
   }, []);
 
-  const handleUpdateSchoolSettings = (newSettings: SchoolSettings) => {
+  const handleUpdateSchoolSettings = async (newSettings: SchoolSettings) => {
+    // 1. Perbarui state UI seketika
     setSchoolSettings(newSettings);
+
+    // 2. Simpan ke localStorage lokal browser
     if (typeof window !== 'undefined') {
       try {
         localStorage.setItem('cbt_school_settings', JSON.stringify(newSettings));
-      } catch {}
+      } catch (err) {
+        console.warn('Peringatan kuota localStorage saat menyimpan pengaturan:', err);
+      }
+    }
+
+    // 3. Simpan permanen ke Database Supabase Cloud agar seluruh guru & perangkat tersinkronisasi
+    try {
+      const res = await saveSchoolSettingsToSupabase(newSettings);
+      if (res.success) {
+        console.log('✅ Pengaturan kop surat & sekolah tersimpan ke Supabase Database.');
+      } else {
+        console.warn('⚠️ Gagal menyimpan ke Supabase:', res.error);
+      }
+    } catch (err) {
+      console.error('Exception simpan school settings ke Supabase:', err);
     }
   };
 

@@ -194,21 +194,10 @@ export default function Home() {
         const stored = localStorage.getItem('cbt_school_settings');
         if (stored) {
           const parsed = JSON.parse(stored);
-          const isStaleDummy = parsed.principalNip === '196803151992032011' || parsed.principalName?.includes('Maya');
-          if (isStaleDummy) {
-            parsed.principalName = defaultSchoolSettings.principalName;
-            parsed.principalNip = defaultSchoolSettings.principalNip;
-            parsed.teacherName = defaultSchoolSettings.teacherName;
-            parsed.teacherNip = defaultSchoolSettings.teacherNip;
-          }
           setSchoolSettings(prev => ({
             ...defaultSchoolSettings,
             ...prev,
             ...parsed,
-            principalName: isStaleDummy ? defaultSchoolSettings.principalName : (parsed.principalName || defaultSchoolSettings.principalName),
-            principalNip: isStaleDummy ? defaultSchoolSettings.principalNip : (parsed.principalNip || defaultSchoolSettings.principalNip),
-            teacherName: parsed.teacherName || defaultSchoolSettings.teacherName,
-            teacherNip: parsed.teacherNip || defaultSchoolSettings.teacherNip,
             logoLeft: parsed.logoLeft || defaultSchoolSettings.logoLeft,
             logoRight: parsed.logoRight || defaultSchoolSettings.logoRight
           }));

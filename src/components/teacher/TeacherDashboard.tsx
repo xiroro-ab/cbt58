@@ -6473,16 +6473,16 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                         settings={localSettingsForm}
                         documentId="PREVIEW-KEPSEK"
                         signerName={localSettingsForm.principalName || 'Nama Kepala Sekolah'}
-                        signerTitle="Kepala Sekolah SMPN 58"
+                        signerTitle={localSettingsForm.principalTitle || 'Kepala Sekolah SMPN 58'}
                         signerNip={localSettingsForm.principalNip}
                       />
                     ) : (
                       <TTESignatureSeal
                         settings={localSettingsForm}
                         documentId="PREVIEW-GURU"
-                        signerName={localSettingsForm.teacherName || currentTeacher?.name || 'Nama Guru Pengampu'}
+                        signerName={currentTeacher?.name || localSettingsForm.teacherName || 'Nama Guru Pengampu'}
                         signerTitle="Guru Pengampu / Proktor"
-                        signerNip={localSettingsForm.teacherNip || currentTeacher?.nip}
+                        signerNip={currentTeacher?.nip || localSettingsForm.teacherNip}
                       />
                     )}
                   </div>

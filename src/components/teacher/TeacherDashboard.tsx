@@ -212,8 +212,9 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
 
   const dossierQuestions = useMemo(() => {
     if (!selectedResult) return [];
-    if (questions.length > 0 && questions[0]?.subjectId === selectedResult.subjectId) {
-      return questions;
+    const directMatches = questions.filter(q => q.subjectId === selectedResult.subjectId);
+    if (directMatches.length > 0) {
+      return directMatches;
     }
     if (typeof window !== 'undefined') {
       try {
@@ -224,7 +225,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
         }
       } catch {}
     }
-    return questions;
+    return directMatches;
   }, [selectedResult, questions]);
 
   useEffect(() => {
@@ -535,11 +536,38 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
     );
   }, [accessibleSubjects, selectedBankSubjectId, subject]);
 
+  // Helper menghitung jumlah butir soal per mapel secara konsisten (Memory + Fail-safe Cache)
+  const getSubjectQuestionCount = (subId: string) => {
+    const inMem = questions.filter(q => q.subjectId === subId).length;
+    if (inMem > 0) return inMem;
+    if (typeof window !== 'undefined' && subId) {
+      try {
+        const stored = localStorage.getItem(`cbt_questions_${subId}`);
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed.length;
+        }
+      } catch {}
+    }
+    return 0;
+  };
+
   // Butir soal milik mapel yang sedang aktif dipilih
   const bankSubjectQuestions = useMemo(() => {
-    return questions.filter(
+    const inMem = questions.filter(
       q => q.subjectId === selectedBankSubjectId || (!q.subjectId && selectedBankSubjectId === subject.id)
     );
+    if (inMem.length > 0) return inMem;
+    if (typeof window !== 'undefined' && selectedBankSubjectId) {
+      try {
+        const stored = localStorage.getItem(`cbt_questions_${selectedBankSubjectId}`);
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        }
+      } catch {}
+    }
+    return inMem;
   }, [questions, selectedBankSubjectId, subject.id]);
 
   // Butir soal terfilter pencarian & jenis soal di level detail
@@ -3480,7 +3508,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
                   {filteredCatalogSubjects.map(subItem => {
                     const theme = getSubjectTheme(subItem.title);
-                    const qCount = questions.filter(q => q.subjectId === subItem.id).length;
+                    const qCount = getSubjectQuestionCount(subItem.id);
 
                     return (
                       <div
@@ -3689,7 +3717,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                   </div>
                 ) : (
                   filteredBankQuestions.map((q, idx) => {
-                    const weight = currentBankSubject.scoringRules?.[q.type] || 1;
+                    const weight = currentBankSubject.scoringRules?.[q.type as QuestionType] || 1;
                     return (
                       <div
                         key={q.id}
@@ -4346,7 +4374,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
           {/* DAFTAR CARD JADWAL UJIAN */}
           <div className="space-y-4">
             {accessibleSubjects.map(subItem => {
-              const qCount = questions.filter(q => q.subjectId === subItem.id).length;
+              const qCount = getSubjectQuestionCount(subItem.id);
               const isCopied = copiedTokenSubjectId === subItem.id;
 
               return (

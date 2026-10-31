@@ -18,6 +18,7 @@ import {
   fetchActiveSubject,
   fetchAllSubjects,
   fetchQuestionsBySubject,
+  fetchAllQuestions,
   insertQuestion,
   updateQuestion,
   removeQuestion,
@@ -275,9 +276,14 @@ export default function Home() {
           setSubject(activeSub);
           // Siswa wajib memilih kelas & memasukkan token sendiri (tanpa prefill)
 
-          // Muat soal dan hasil ujian dari Supabase langsung untuk activeSub
-          const qList = await fetchQuestionsBySubject(activeSub.id);
-          setQuestions(qList || []);
+          // Muat seluruh bank soal untuk semua mapel guru agar tidak saling me-reset jadi 0
+          const allQList = await fetchAllQuestions();
+          if (allQList && allQList.length > 0) {
+            setQuestions(allQList);
+          } else {
+            const qList = await fetchQuestionsBySubject(activeSub.id);
+            setQuestions(qList || []);
+          }
 
           const resList = await fetchExamResults(activeSub.id);
           setResults(resList || []);
@@ -1669,7 +1675,10 @@ export default function Home() {
               if (selectedSub.id) {
                 try {
                   const qList = await fetchQuestionsBySubject(selectedSub.id);
-                  setQuestions(qList || []);
+                  setQuestions(prev => {
+                    const otherQuestions = prev.filter(q => q.subjectId && q.subjectId !== selectedSub.id);
+                    return [...otherQuestions, ...(qList || [])];
+                  });
                   const resList = await fetchExamResults(selectedSub.id);
                   setResults(resList || []);
                 } catch (err) {

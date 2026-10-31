@@ -227,6 +227,78 @@ export async function fetchQuestionsBySubject(subjectId: string): Promise<Questi
 /**
  * Menyimpan soal baru ke Supabase & fail-safe localStorage
  */
+/**
+ * Mengambil seluruh butir soal dari semua mata pelajaran (dengan fallback localStorage lintas mapel)
+ */
+export async function fetchAllQuestions(): Promise<Question[]> {
+  try {
+    const { data, error } = await supabase
+      .from('questions')
+      .select('*')
+      .order('order_index', { ascending: true });
+
+    if (!error && data && data.length > 0) {
+      const parsed: Question[] = data.map(row => ({
+        id: row.id,
+        subjectId: row.subject_id,
+        type: row.type,
+        questionText: row.question_text,
+        mediaUrl: row.media_url,
+        options: row.options || [],
+        answer: row.answer,
+        orderIndex: row.order_index
+      }));
+
+      if (typeof window !== 'undefined') {
+        const bySubject: Record<string, Question[]> = {};
+        parsed.forEach(q => {
+          if (q.subjectId) {
+            if (!bySubject[q.subjectId]) bySubject[q.subjectId] = [];
+            bySubject[q.subjectId].push(q);
+          }
+        });
+        Object.entries(bySubject).forEach(([sId, qList]) => {
+          try {
+            localStorage.setItem('cbt_questions_' + sId, JSON.stringify(qList));
+          } catch {}
+        });
+      }
+
+      return parsed;
+    }
+  } catch (err) {
+    console.error('Error fetchAllQuestions:', err);
+  }
+
+  // Fallback: Gabungkan semua soal dari localStorage dengan prefix cbt_questions_
+  if (typeof window !== 'undefined') {
+    try {
+      const all: Question[] = [];
+      const seenIds = new Set<string>();
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith('cbt_questions_')) {
+          const stored = localStorage.getItem(key);
+          if (stored) {
+            const list = JSON.parse(stored);
+            if (Array.isArray(list)) {
+              list.forEach((item: Question) => {
+                if (item && item.id && !seenIds.has(item.id)) {
+                  seenIds.add(item.id);
+                  all.push(item);
+                }
+              });
+            }
+          }
+        }
+      }
+      if (all.length > 0) return all;
+    } catch {}
+  }
+
+  return [];
+}
+
 export async function insertQuestion(q: Question): Promise<boolean> {
   // Simpan segera ke localStorage agar soal yang baru dibuat guru tidak pernah hilang saat refresh
   if (typeof window !== 'undefined' && q.subjectId) {

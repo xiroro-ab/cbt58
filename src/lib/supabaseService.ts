@@ -346,9 +346,9 @@ export async function insertQuestion(q: Question): Promise<boolean> {
       type: q.type,
       question_text: q.questionText,
       media_url: q.mediaUrl || null,
-      options: q.options,
-      answer: q.answer,
-      order_index: q.orderIndex
+      options: q.options || [],
+      answer: q.answer !== undefined && q.answer !== null ? q.answer : '',
+      order_index: q.orderIndex || 1
     });
 
     if (error) {
@@ -382,9 +382,9 @@ export async function updateQuestion(q: Question): Promise<boolean> {
       type: q.type,
       question_text: q.questionText,
       media_url: q.mediaUrl || null,
-      options: q.options,
-      answer: q.answer,
-      order_index: q.orderIndex
+      options: q.options || [],
+      answer: q.answer !== undefined && q.answer !== null ? q.answer : '',
+      order_index: q.orderIndex || 1
     }).eq('id', q.id);
 
     if (error) {
@@ -946,9 +946,9 @@ export async function updateQuestionInSupabase(q: Question): Promise<boolean> {
         type: q.type,
         question_text: q.questionText,
         media_url: q.mediaUrl || null,
-        options: q.options,
-        answer: q.answer,
-        order_index: q.orderIndex
+        options: q.options || [],
+        answer: q.answer !== undefined && q.answer !== null ? q.answer : '',
+        order_index: q.orderIndex || 1
       })
       .eq('id', q.id);
 

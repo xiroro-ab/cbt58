@@ -143,8 +143,6 @@ export const ClassRecapModal: React.FC<ClassRecapModalProps> = ({
     }
   }, [isOpen, initialClass, targetClasses, availableClasses]);
 
-  if (!isOpen) return null;
-
   // Resolusi Identitas Sekolah & Kop Surat Resmi
   const effectiveSettings: SchoolSettings = {
     institution1: schoolSettings?.institution1 || 'PEMERINTAH KOTA PALEMBANG',
@@ -314,6 +312,8 @@ export const ClassRecapModal: React.FC<ClassRecapModalProps> = ({
     link.click();
     document.body.removeChild(link);
   };
+
+  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-3 sm:p-6 overflow-y-auto print:p-0 print:bg-white print:static print:overflow-visible">

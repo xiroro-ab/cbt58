@@ -439,8 +439,49 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
     reader.readAsDataURL(file);
   };
 
-    // Filter Mata Pelajaran khusus Tabel Database Nilai
+    // Rombel Siswa Unik & Helper Pemilihan Rombel Target Ujian
+  const studentClasses = useMemo(() => {
+    const set = new Set<string>();
+    students?.forEach(s => {
+      if (s.className && s.className.trim()) {
+        set.add(s.className.trim());
+      }
+    });
+    const arr = Array.from(set);
+    if (arr.length === 0) {
+      return ['VII.1', 'VII.2', 'VII.3', 'VIII.1', 'VIII.2', 'VIII.3', 'IX.1', 'IX.2', 'IX.3'];
+    }
+    return arr.sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
+  }, [students]);
+
+// Filter Multidimensi Database Nilai (Mapel, Jenjang, Rombel, Status KKM)
   const [resultsSubjectFilter, setResultsSubjectFilter] = useState<string>('ALL');
+  const [resultsGradeFilter, setResultsGradeFilter] = useState<string>('ALL');
+  const [resultsClassFilter, setResultsClassFilter] = useState<string>('ALL');
+  const [resultsStatusFilter, setResultsStatusFilter] = useState<string>('ALL');
+
+  // Daftar Rombel Tersedia Berdasarkan Jenjang Terpilih
+  const availableRombelsForResults = useMemo(() => {
+    const list = studentClasses && studentClasses.length > 0
+      ? studentClasses
+      : ['VII.1', 'VII.2', 'VII.3', 'VIII.1', 'VIII.2', 'VIII.3', 'IX.1', 'IX.2', 'IX.3'];
+
+    if (resultsGradeFilter === 'ALL') return list;
+    return list.filter(cls => {
+      const u = cls.toUpperCase();
+      if (resultsGradeFilter === 'VII') return u.startsWith('VII.') || u.startsWith('7') || u.includes('VII');
+      if (resultsGradeFilter === 'VIII') return u.startsWith('VIII.') || u.startsWith('8') || u.includes('VIII');
+      if (resultsGradeFilter === 'IX') return u.startsWith('IX.') || u.startsWith('9') || u.includes('IX');
+      return true;
+    });
+  }, [studentClasses, resultsGradeFilter]);
+
+  // Reset rombel filter jika jenjang berubah dan rombel sebelumnya tidak ada di jenjang baru
+  useEffect(() => {
+    if (resultsClassFilter !== 'ALL' && !availableRombelsForResults.includes(resultsClassFilter)) {
+      setResultsClassFilter('ALL');
+    }
+  }, [resultsGradeFilter, availableRombelsForResults, resultsClassFilter]);
 
   // Live Filtering dari Search Bar dengan Deduplikasi Ketat per Nama Siswa
   const filteredResults = useMemo(() => {
@@ -453,18 +494,45 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
       if (!r || !r.studentName) continue;
       const key = `${r.subjectId}_${r.studentName.toLowerCase().trim()}`;
       if (!dedupedMap.has(key)) {
+        const resolvedClass = resolveStudentSingleClass(r.studentName, r.className, students) || r.className || 'Umum';
         dedupedMap.set(key, {
           ...r,
+          className: resolvedClass,
           subjectTitle: r.subjectTitle || subTitleMap.get(r.subjectId) || (r.subjectId === subject.id ? subject.title : '')
         });
       }
     }
     let cleanResults = Array.from(dedupedMap.values());
 
+    // Filter 1: Mapel / Paket Ujian (ALL = 1 Sekolah)
     if (resultsSubjectFilter !== 'ALL') {
       cleanResults = cleanResults.filter(r => r.subjectId === resultsSubjectFilter);
     }
 
+    // Filter 2: Jenjang Tingkat (VII, VIII, IX)
+    if (resultsGradeFilter !== 'ALL') {
+      cleanResults = cleanResults.filter(r => {
+        const u = (r.className || '').toUpperCase();
+        if (resultsGradeFilter === 'VII') return u.startsWith('VII.') || u.startsWith('7') || u.includes('VII');
+        if (resultsGradeFilter === 'VIII') return u.startsWith('VIII.') || u.startsWith('8') || u.includes('VIII');
+        if (resultsGradeFilter === 'IX') return u.startsWith('IX.') || u.startsWith('9') || u.includes('IX');
+        return true;
+      });
+    }
+
+    // Filter 3: Rombel Spesifik (misal VIII.1)
+    if (resultsClassFilter !== 'ALL') {
+      cleanResults = cleanResults.filter(r => r.className === resultsClassFilter);
+    }
+
+    // Filter 4: Status Ketuntasan KKM
+    if (resultsStatusFilter === 'PASSED') {
+      cleanResults = cleanResults.filter(r => (r.score || 0) >= 75);
+    } else if (resultsStatusFilter === 'REMEDIAL') {
+      cleanResults = cleanResults.filter(r => (r.score || 0) < 75);
+    }
+
+    // Filter 5: Pencarian teks bebas
     if (!searchQuery.trim()) return cleanResults;
     const q = searchQuery.toLowerCase();
     return cleanResults.filter(
@@ -474,7 +542,22 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
         (r.subjectTitle && r.subjectTitle.toLowerCase().includes(q)) ||
         String(r.score).includes(q)
     );
-  }, [results, searchQuery, resultsSubjectFilter, allSubjects, subject]);
+  }, [results, searchQuery, resultsSubjectFilter, resultsGradeFilter, resultsClassFilter, resultsStatusFilter, allSubjects, subject, students]);
+
+  // Metrik Rangkuman Nilai Terfilter (Realtime School Metrics)
+  const filteredMetrics = useMemo(() => {
+    const total = filteredResults.length;
+    if (total === 0) {
+      return { total: 0, avg: 0, passed: 0, passedPct: 0, remedial: 0, remedialPct: 0 };
+    }
+    const sum = filteredResults.reduce((acc, curr) => acc + (curr.score || 0), 0);
+    const avg = Math.round((sum / total) * 10) / 10;
+    const passed = filteredResults.filter(r => (r.score || 0) >= 75).length;
+    const passedPct = Math.round((passed / total) * 100);
+    const remedial = total - passed;
+    const remedialPct = Math.round((remedial / total) * 100);
+    return { total, avg, passed, passedPct, remedial, remedialPct };
+  }, [filteredResults]);
 
   // Helper tampilan nama mapel rapi tanpa prefix berlebih
   const formatSubjectTitle = (title: string) => {
@@ -1243,21 +1326,6 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   // Data statistik periode aktif yang ditampilkan (Harian atau Bulanan)
   const activePeriodStats = examPeriodMode === 'daily' ? dailyExamStats : monthlyExamStats;
 
-  // Rombel Siswa Unik & Helper Pemilihan Rombel Target Ujian
-  const studentClasses = useMemo(() => {
-    const set = new Set<string>();
-    students?.forEach(s => {
-      if (s.className && s.className.trim()) {
-        set.add(s.className.trim());
-      }
-    });
-    const arr = Array.from(set);
-    if (arr.length === 0) {
-      return ['VII.1', 'VII.2', 'VII.3', 'VIII.1', 'VIII.2', 'VIII.3', 'IX.1', 'IX.2', 'IX.3'];
-    }
-    return arr.sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
-  }, [students]);
-
   // Analisis Performa dan Ketuntasan per Kelas / Rombel (100% Data Siswa Riil)
   const classPerformanceStats = useMemo(() => {
     const list = studentClasses && studentClasses.length > 0
@@ -1644,7 +1712,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   // Real CSV Export Function
   const exportResultsToCSV = () => {
     if (filteredResults.length === 0) return;
-    const headers = ['Nama Siswa', 'Kelas', 'Mata Pelajaran', 'Skor Akhir (%)', 'Poin Diperoleh', 'Poin Maksimal', 'Jumlah Pelanggaran', 'Waktu Selesai'];
+    const headers = ['Nama Siswa', 'Kelas / Rombel', 'Mata Pelajaran', 'Skor Akhir (%)', 'Poin Diperoleh', 'Poin Maksimal', 'Status KKM', 'Jumlah Pelanggaran', 'Waktu Selesai'];
     const rows = filteredResults.map(r => [
       `"${r.studentName}"`,
       `"${r.className}"`,
@@ -1652,14 +1720,27 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
       r.score,
       r.totalEarned,
       r.totalMax,
+      `"${r.score >= 75 ? 'Tuntas KKM' : 'Remedial'}"`,
       r.violationCount,
       `"${r.submittedAt}"`
     ]);
-    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
-    const encodedUri = encodeURI(csvContent);
+    const csvContent = 'data:text/csv;charset=utf-8,%EF%BB%BF' + encodeURIComponent([headers.join(','), ...rows.map(e => e.join(','))].join('\n'));
     const link = document.createElement('a');
-    link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `Rekap_Nilai_CBT_${subject.title.replace(/\s+/g, '_')}.csv`);
+    link.setAttribute('href', csvContent);
+
+    let filename = 'rekap_nilai';
+    if (resultsSubjectFilter !== 'ALL') {
+      const sub = (allSubjects || []).find(s => s.id === resultsSubjectFilter);
+      if (sub) filename += `_${sub.title.replace(/[^a-zA-Z0-9]/g, '_')}`;
+    } else {
+      filename += '_1Sekolah_SemuaMapel';
+    }
+    if (resultsClassFilter !== 'ALL') {
+      filename += `_${resultsClassFilter.replace(/[^a-zA-Z0-9]/g, '_')}`;
+    }
+    filename += `_${Date.now()}.csv`;
+
+    link.setAttribute('download', filename);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -3209,31 +3290,68 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
       {/* ============================================================== */}
       {(currentNav === 'dashboard' || currentNav === 'results') && (
         <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl shadow-xs overflow-hidden">
+          {/* A. HEADER UTAMA: TITLE & AKSI CETAK / EKSPOR */}
           <div className="p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800">
             <div>
-              <h4 className="font-bold text-sm text-slate-900 dark:text-white flex items-center gap-2">
-                <span>{t.tableTitle}</span>
-                {searchQuery && (
-                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-violet-100 dark:bg-violet-950 text-violet-600 dark:text-violet-400 font-bold">
-                    Filter: &ldquo;{searchQuery}&rdquo;
-                  </span>
-                )}
-              </h4>
-              <p className="text-xs text-slate-400 dark:text-slate-500">
-                {t.tableSubtitle}
-              </p>
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-violet-100 dark:bg-violet-950/60 text-violet-600 dark:text-violet-400 flex items-center justify-center font-bold shadow-2xs">
+                  <Database className="w-4.5 h-4.5" />
+                </div>
+                <div>
+                  <h4 className="font-bold text-sm text-slate-900 dark:text-white flex items-center gap-2">
+                    <span>{t.tableTitle}</span>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-violet-100 dark:bg-violet-950 text-violet-600 dark:text-violet-400 font-bold">
+                      {filteredResults.length} Nilai Ditampilkan
+                    </span>
+                    {searchQuery && (
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 font-bold">
+                        Pencarian: &ldquo;{searchQuery}&rdquo;
+                      </span>
+                    )}
+                  </h4>
+                  <p className="text-xs text-slate-400 dark:text-slate-500">
+                    {t.tableSubtitle}
+                  </p>
+                </div>
+              </div>
             </div>
 
             <div className="flex items-center gap-2 flex-wrap">
-              {/* Filter Paket Ujian / Mapel */}
-              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs shadow-2xs">
-                <Filter className="w-3.5 h-3.5 text-violet-600 dark:text-violet-400 shrink-0" />
+              {/* Tombol Cetak Sertifikat Aktif */}
+              <button
+                onClick={() => {
+                  const firstSelected = results.find(r => selectedResultIds.includes(r.id)) || filteredResults[0] || results[0];
+                  onOpenCertificates?.(firstSelected);
+                }}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition cursor-pointer"
+              >
+                <Award className="w-3.5 h-3.5 text-violet-600" />
+                <span>{t.sendCertificatesBtn}</span>
+              </button>
+
+              {/* Tombol Ekspor CSV / Excel Aktif */}
+              <button
+                onClick={exportResultsToCSV}
+                className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-xs font-semibold shadow-xs transition cursor-pointer"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>{t.exportCsvBtn}</span>
+              </button>
+            </div>
+          </div>
+
+          {/* B. BILAH FILTER MULTIDIMENSI 1 SEKOLAH (MAPEL, JENJANG, ROMBEL, STATUS KKM) */}
+          <div className="p-4 bg-slate-50/70 dark:bg-slate-800/40 border-b border-slate-100 dark:border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-3 flex-wrap">
+            <div className="flex items-center gap-2.5 flex-wrap flex-1">
+              {/* Filter 1: Mata Pelajaran / Paket Ujian */}
+              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs shadow-2xs">
+                <BookOpen className="w-3.5 h-3.5 text-violet-600 dark:text-violet-400 shrink-0" />
                 <select
                   value={resultsSubjectFilter}
                   onChange={e => setResultsSubjectFilter(e.target.value)}
                   className="bg-transparent text-xs font-semibold text-slate-700 dark:text-slate-200 focus:outline-none cursor-pointer pr-1"
                 >
-                  <option value="ALL">Semua Paket Ujian ({results.length} Siswa)</option>
+                  <option value="ALL">Semua Mapel (1 Sekolah) • {results.length} Siswa</option>
                   {(allSubjects || []).map(s => {
                     const count = results.filter(r => r.subjectId === s.id).length;
                     return (
@@ -3245,26 +3363,103 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                 </select>
               </div>
 
-              {/* Tombol Cetak Sertifikat Aktif */}
-              <button
-                onClick={() => {
-                  const firstSelected = results.find(r => selectedResultIds.includes(r.id)) || results[0];
-                  onOpenCertificates?.(firstSelected);
-                }}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition"
-              >
-                <Award className="w-3.5 h-3.5 text-violet-600" />
-                <span>{t.sendCertificatesBtn}</span>
-              </button>
+              {/* Filter 2: Jenjang Tingkat */}
+              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs shadow-2xs">
+                <GraduationCap className="w-3.5 h-3.5 text-violet-600 dark:text-violet-400 shrink-0" />
+                <select
+                  value={resultsGradeFilter}
+                  onChange={e => setResultsGradeFilter(e.target.value)}
+                  className="bg-transparent text-xs font-semibold text-slate-700 dark:text-slate-200 focus:outline-none cursor-pointer pr-1"
+                >
+                  <option value="ALL">Semua Jenjang (Kelas 7, 8, 9)</option>
+                  <option value="VII">Jenjang Kelas 7 (VII)</option>
+                  <option value="VIII">Jenjang Kelas 8 (VIII)</option>
+                  <option value="IX">Jenjang Kelas 9 (IX)</option>
+                </select>
+              </div>
 
-              {/* Tombol Ekspor CSV / Excel Aktif */}
-              <button
-                onClick={exportResultsToCSV}
-                className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-xs font-semibold shadow-xs transition"
-              >
-                <Download className="w-3.5 h-3.5" />
-                <span>{t.exportCsvBtn}</span>
-              </button>
+              {/* Filter 3: Rombel / Kelas Spesifik */}
+              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs shadow-2xs">
+                <Users className="w-3.5 h-3.5 text-violet-600 dark:text-violet-400 shrink-0" />
+                <select
+                  value={resultsClassFilter}
+                  onChange={e => setResultsClassFilter(e.target.value)}
+                  className="bg-transparent text-xs font-semibold text-slate-700 dark:text-slate-200 focus:outline-none cursor-pointer pr-1"
+                >
+                  <option value="ALL">Semua Rombel Kelas</option>
+                  {availableRombelsForResults.map(cls => {
+                    const count = results.filter(r => {
+                      const resolved = resolveStudentSingleClass(r.studentName, r.className, students);
+                      return resolved === cls;
+                    }).length;
+                    return (
+                      <option key={cls} value={cls}>
+                        Hanya Rombel {cls} ({count} Siswa)
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
+
+              {/* Filter 4: Status Ketuntasan KKM */}
+              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs shadow-2xs">
+                <CheckCircle2 className="w-3.5 h-3.5 text-violet-600 dark:text-violet-400 shrink-0" />
+                <select
+                  value={resultsStatusFilter}
+                  onChange={e => setResultsStatusFilter(e.target.value)}
+                  className="bg-transparent text-xs font-semibold text-slate-700 dark:text-slate-200 focus:outline-none cursor-pointer pr-1"
+                >
+                  <option value="ALL">Semua Status KKM</option>
+                  <option value="PASSED">Tuntas KKM (&ge; 75)</option>
+                  <option value="REMEDIAL">Perlu Remedial (&lt; 75)</option>
+                </select>
+              </div>
+
+              {/* Tombol Reset Filter jika ada yang aktif */}
+              {(resultsSubjectFilter !== 'ALL' || resultsGradeFilter !== 'ALL' || resultsClassFilter !== 'ALL' || resultsStatusFilter !== 'ALL' || searchQuery.trim()) && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setResultsSubjectFilter('ALL');
+                    setResultsGradeFilter('ALL');
+                    setResultsClassFilter('ALL');
+                    setResultsStatusFilter('ALL');
+                  }}
+                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-bold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 transition cursor-pointer"
+                  title="Kembalikan semua filter ke tampilan 1 Sekolah"
+                >
+                  <RotateCcw className="w-3 h-3" />
+                  <span>Reset Filter</span>
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* C. MINI SUMMARY CARDS REALTIME SESUAI FILTER */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-4 border-b border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs">
+            <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/60 dark:border-slate-700/60">
+              <span className="text-[10px] text-slate-400 font-semibold block">Total Lembar Nilai</span>
+              <p className="text-base sm:text-lg font-black text-slate-900 dark:text-white mt-0.5">
+                {filteredMetrics.total} <span className="text-xs font-normal text-slate-400">Siswa</span>
+              </p>
+            </div>
+            <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/60 dark:border-slate-700/60">
+              <span className="text-[10px] text-slate-400 font-semibold block">Rata-Rata Nilai</span>
+              <p className={`text-base sm:text-lg font-black mt-0.5 ${filteredMetrics.avg >= 75 ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-500'}`}>
+                {filteredMetrics.avg} <span className="text-xs font-normal text-slate-400">/ 100</span>
+              </p>
+            </div>
+            <div className="p-3 rounded-xl bg-emerald-50/60 dark:bg-emerald-950/30 border border-emerald-200/60 dark:border-emerald-800/50">
+              <span className="text-[10px] text-emerald-700 dark:text-emerald-400 font-semibold block">Tuntas KKM (&ge; 75)</span>
+              <p className="text-base sm:text-lg font-black text-emerald-600 dark:text-emerald-400 mt-0.5">
+                {filteredMetrics.passed} <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-400">({filteredMetrics.passedPct}%)</span>
+              </p>
+            </div>
+            <div className="p-3 rounded-xl bg-rose-50/60 dark:bg-rose-950/30 border border-rose-200/60 dark:border-rose-800/50">
+              <span className="text-[10px] text-rose-700 dark:text-rose-400 font-semibold block">Perlu Remedial (&lt; 75)</span>
+              <p className="text-base sm:text-lg font-black text-rose-600 dark:text-rose-400 mt-0.5">
+                {filteredMetrics.remedial} <span className="text-xs font-semibold text-rose-700 dark:text-rose-400">({filteredMetrics.remedialPct}%)</span>
+              </p>
             </div>
           </div>
 

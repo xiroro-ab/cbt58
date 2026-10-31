@@ -1,11 +1,12 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { ExamResult, Subject, Student } from '@/types/cbt';
+import { ExamResult, Subject, Student, SchoolSettings } from '@/types/cbt';
 import { resolveStudentSingleClass } from '@/lib/rosterStudents';
 import { extractSubjectAndGrade } from '@/lib/aiQuestionGenerator';
 import { useLanguage } from '@/context/LanguageContext';
-import { Award, Printer, X, CheckCircle, ShieldCheck } from 'lucide-react';
+import { TTESignatureSeal } from '@/components/common/TTESignatureSeal';
+import { Award, Printer, X, ShieldCheck } from 'lucide-react';
 
 interface CertificateModalProps {
   isOpen: boolean;
@@ -14,6 +15,7 @@ interface CertificateModalProps {
   selectedStudentResult?: ExamResult | null;
   allSubjects?: Subject[];
   students?: Student[];
+  schoolSettings?: SchoolSettings;
 }
 
 export const CertificateModal: React.FC<CertificateModalProps> = ({
@@ -22,9 +24,10 @@ export const CertificateModal: React.FC<CertificateModalProps> = ({
   results,
   selectedStudentResult,
   allSubjects = [],
-  students = []
+  students = [],
+  schoolSettings
 }) => {
-  const { language, t } = useLanguage();
+  const { language } = useLanguage();
   const [activeStudentId, setActiveStudentId] = useState<string>(
     selectedStudentResult ? selectedStudentResult.id : results[0]?.id || ''
   );
@@ -66,149 +69,169 @@ export const CertificateModal: React.FC<CertificateModalProps> = ({
   const nisn = matchedStudent?.nisn || '-';
   const cleanClass = resolveStudentSingleClass(currentResult?.studentName, currentResult?.className, students);
 
+  const principalName = schoolSettings?.principalName || 'Hj. Rohana, S.Pd., M.Si.';
+  const principalNip = schoolSettings?.principalNip || '19680512 199412 2 001';
+  const schoolName = schoolSettings?.schoolName || 'SMP NEGERI 58 PALEMBANG';
+  const city = schoolSettings?.city || 'Palembang';
+
   return (
-    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 print:p-0 print:bg-white">
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-4xl w-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden print:border-none print:shadow-none print:max-w-none print:max-h-none">
-        {/* Modal Controls (Hidden in Print) */}
-        <div className="p-4 sm:p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between print:hidden">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-violet-100 dark:bg-violet-950/60 text-violet-600 dark:text-violet-400 flex items-center justify-center font-bold">
-              <Award className="w-5 h-5" />
+    <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 print:p-0 print:bg-white print:static print:z-auto print:block">
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl sm:rounded-3xl max-w-4xl w-full max-h-[92vh] sm:max-h-[90vh] flex flex-col shadow-2xl overflow-hidden print:border-none print:shadow-none print:max-w-none print:max-h-none print:overflow-visible">
+        {/* Modal Controls (Hidden in Print) - 100% RESPONSIVE FOR MOBILE & PC */}
+        <div className="p-3 sm:p-5 border-b border-slate-100 dark:border-slate-800 space-y-2.5 print:hidden">
+          {/* Top Row: Title & Action Buttons */}
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+              <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-violet-100 dark:bg-violet-950/60 text-violet-600 dark:text-violet-400 flex items-center justify-center font-bold shrink-0">
+                <Award className="w-4 h-4 sm:w-5 sm:h-5" />
+              </div>
+              <div className="min-w-0">
+                <h3 className="font-bold text-slate-900 dark:text-white text-xs sm:text-base truncate">
+                  {language === 'id' ? 'Cetak Sertifikat & SKL Ujian Siswa' : 'Print Student Exam Certificates'}
+                </h3>
+                <p className="text-[10px] sm:text-xs text-slate-400 hidden sm:block truncate">
+                  {language === 'id' ? 'Pilih siswa untuk menampilkan dan mencetak sertifikat resmi' : 'Select student to preview and print certificate'}
+                </p>
+              </div>
             </div>
-            <div>
-              <h3 className="font-bold text-slate-900 dark:text-white text-sm sm:text-base">
-                {language === 'id' ? 'Cetak Sertifikat & SKL Ujian Siswa' : 'Print Student Exam Certificates'}
-              </h3>
-              <p className="text-xs text-slate-400">
-                {language === 'id' ? 'Pilih siswa untuk menampilkan dan mencetak sertifikat resmi' : 'Select student to preview and print certificate'}
-              </p>
+
+            <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+              <button
+                onClick={handlePrint}
+                className="flex items-center gap-1.5 px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-semibold text-xs shadow-md shadow-violet-600/20 transition cursor-pointer"
+              >
+                <Printer className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                <span>{language === 'id' ? 'Cetak / PDF' : 'Print / PDF'}</span>
+              </button>
+
+              <button
+                onClick={onClose}
+                className="p-1.5 sm:p-2 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
+                aria-label="Tutup"
+              >
+                <X className="w-4 h-4 sm:w-5 sm:h-5" />
+              </button>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            {results.length > 1 && (
+          {/* Bottom Row: Full Width Student Selector (Super friendly on Mobile & PC) */}
+          {results.length > 1 && (
+            <div className="flex items-center gap-2 pt-0.5">
+              <span className="text-[11px] font-semibold text-slate-400 shrink-0 hidden md:inline">
+                Pilih Siswa:
+              </span>
               <select
                 value={activeStudentId}
                 onChange={e => setActiveStudentId(e.target.value)}
-                className="text-xs p-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 [color-scheme:light] dark:[color-scheme:dark] [&>option]:bg-white [&>option]:text-slate-900 [&>option]:dark:bg-slate-900 [&>option]:dark:text-slate-100 font-semibold cursor-pointer max-w-xs"
+                className="text-xs p-2 sm:p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 [color-scheme:light] dark:[color-scheme:dark] [&>option]:bg-white [&>option]:text-slate-900 [&>option]:dark:bg-slate-900 [&>option]:dark:text-slate-100 font-semibold cursor-pointer w-full focus:outline-none focus:ring-2 focus:ring-violet-500"
               >
                 {results.map(r => {
                   const sub = (allSubjects || []).find(s => s.id === r.subjectId)?.title || r.subjectTitle;
                   const cls = resolveStudentSingleClass(r.studentName, r.className, students);
                   return (
                     <option key={r.id} value={r.id}>
-                      {r.studentName} ({cls} • {r.score}%{sub ? ` • ${sub}` : ''})
+                      {r.studentName} ({cls} • Skor {r.score}%{sub ? ` • ${sub}` : ''})
                     </option>
                   );
                 })}
               </select>
-            )}
-
-            <button
-              onClick={handlePrint}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-semibold text-xs shadow-md shadow-violet-600/20 transition cursor-pointer"
-            >
-              <Printer className="w-4 h-4" />
-              <span>{language === 'id' ? 'Cetak / PDF' : 'Print / PDF'}</span>
-            </button>
-
-            <button
-              onClick={onClose}
-              className="p-2 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
-            >
-              <X className="w-5 h-5" />
-            </button>
-          </div>
+            </div>
+          )}
         </div>
 
         {/* Certificate Sheet Area (Formatted for Print) */}
-        <div className="p-6 sm:p-12 overflow-y-auto flex-1 bg-slate-50 dark:bg-slate-950/50 print:bg-white print:p-8">
+        <div className="p-3 sm:p-6 md:p-10 overflow-y-auto flex-1 bg-slate-50 dark:bg-slate-950/50 print:bg-white print:p-4 print:overflow-visible">
           {!currentResult ? (
-            <div className="text-center py-12 text-slate-400">
+            <div className="text-center py-12 text-slate-400 text-xs sm:text-sm">
               {language === 'id' ? 'Belum ada data nilai siswa untuk dicetak.' : 'No student results available to print.'}
             </div>
           ) : (
-            <div className="max-w-3xl mx-auto bg-white border-8 border-double border-slate-300 rounded-3xl p-8 sm:p-12 text-slate-900 shadow-md relative print:shadow-none print:border-4">
+            <div className="max-w-3xl mx-auto bg-white border-4 sm:border-8 border-double border-slate-300 rounded-2xl sm:rounded-3xl p-5 sm:p-8 md:p-12 text-slate-900 shadow-md relative print:shadow-none print:border-4 print:max-w-none print:p-6">
               {/* Kop Surat Resmi */}
-              <div className="text-center pb-6 border-b-2 border-slate-900 space-y-1">
-                <p className="text-xs tracking-widest font-bold uppercase text-slate-600">
+              <div className="text-center pb-4 sm:pb-6 border-b-2 border-slate-900 space-y-0.5 sm:space-y-1">
+                <p className="text-[10px] sm:text-xs tracking-widest font-bold uppercase text-slate-600">
                   PEMERINTAH KOTA PALEMBANG • DINAS PENDIDIKAN
                 </p>
-                <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-wide">
-                  SMP NEGERI 58 PALEMBANG
+                <h2 className="text-base sm:text-xl md:text-2xl font-black text-slate-900 tracking-wide uppercase">
+                  {schoolName}
                 </h2>
-                <p className="text-[11px] text-slate-500">
+                <p className="text-[9px] sm:text-[11px] text-slate-500">
                   Jl. Pangeran Ratu, Jakabaring, Kec. Seberang Ulu I, Kota Palembang, Sumatera Selatan • Telepon: (0711) 351234
                 </p>
               </div>
 
               {/* Judul Piagam */}
-              <div className="text-center py-8 space-y-2">
-                <span className="text-xs font-semibold uppercase tracking-widest text-violet-600">
+              <div className="text-center py-5 sm:py-7 space-y-1 sm:space-y-2">
+                <span className="text-[10px] sm:text-xs font-semibold uppercase tracking-widest text-violet-600">
                   Computer-Based Test (CBT) Assessment
                 </span>
-                <h1 className="text-2xl sm:text-3xl font-black text-slate-900 uppercase tracking-tight">
+                <h1 className="text-xl sm:text-2xl md:text-3xl font-black text-slate-900 uppercase tracking-tight">
                   SURAT HASIL KELULUSAN UJIAN
                 </h1>
-                <p className="text-xs text-slate-500 font-mono">
+                <p className="text-[10px] sm:text-xs text-slate-500 font-mono">
                   Nomor: 421.3/CBT-58/{new Date().getFullYear()}/{currentResult.id.slice(0, 6)}
                 </p>
               </div>
 
               {/* Pernyataan Kelulusan */}
-              <div className="text-center space-y-4 max-w-lg mx-auto py-2">
-                <p className="text-sm text-slate-600">
-                  Kepala SMP Negeri 58 Palembang menerangkan bahwa:
+              <div className="text-center space-y-3 sm:space-y-4 max-w-lg mx-auto py-1 sm:py-2">
+                <p className="text-xs sm:text-sm text-slate-600">
+                  Kepala {schoolName} menerangkan bahwa:
                 </p>
-                <div className="py-2 border-b-2 border-violet-600 inline-block px-8">
-                  <h3 className="text-2xl sm:text-3xl font-extrabold text-slate-900 font-serif">
+                <div className="py-1.5 sm:py-2 border-b-2 border-violet-600 inline-block px-4 sm:px-8 max-w-full">
+                  <h3 className="text-lg sm:text-2xl md:text-3xl font-extrabold text-slate-900 font-serif break-words">
                     {currentResult.studentName}
                   </h3>
                 </div>
-                <p className="text-xs text-slate-600 pt-1">
+                <p className="text-[11px] sm:text-xs text-slate-600 pt-0.5">
                   NISN: <strong className="font-mono text-slate-900 font-bold">{nisn}</strong> • Rombel: <strong className="text-slate-900 font-bold">{cleanClass}</strong>
                 </p>
-                <p className="text-sm text-slate-700 leading-relaxed pt-2">
+                <p className="text-xs sm:text-sm text-slate-700 leading-relaxed pt-1 sm:pt-2">
                   Telah mengikuti dan menyelesaikan Ujian Penilaian Berbasis Komputer (CBT) mata pelajaran{' '}
                   <strong className="text-slate-900 font-bold underline">{cleanSubject}</strong>
                   {rawSubjectTitle && rawSubjectTitle.toLowerCase() !== cleanSubject.toLowerCase() && (
-                    <span className="text-xs text-slate-500 block mt-0.5 font-sans">({rawSubjectTitle})</span>
+                    <span className="text-[10px] sm:text-xs text-slate-500 block mt-0.5 font-sans">({rawSubjectTitle})</span>
                   )}{' '}
                   dengan perolehan hasil sebagai berikut:
                 </p>
               </div>
 
               {/* Kotak Nilai Besar */}
-              <div className="my-6 max-w-xs mx-auto p-4 rounded-2xl bg-slate-50 border border-slate-200 text-center space-y-1">
-                <span className="text-xs text-slate-500 uppercase font-semibold">Skor Akhir Siswa</span>
-                <div className="text-4xl sm:text-5xl font-black text-violet-700">
+              <div className="my-4 sm:my-6 max-w-xs mx-auto p-3 sm:p-4 rounded-2xl bg-slate-50 border border-slate-200 text-center space-y-0.5 sm:space-y-1">
+                <span className="text-[10px] sm:text-xs text-slate-500 uppercase font-semibold">Skor Akhir Siswa</span>
+                <div className="text-3xl sm:text-4xl md:text-5xl font-black text-violet-700">
                   {currentResult.score}%
                 </div>
-                <div className={`text-xs font-bold ${pred.color}`}>
+                <div className={`text-[11px] sm:text-xs font-bold ${pred.color}`}>
                   PREDIKAT: {pred.label}
                 </div>
               </div>
 
-              {/* Tanda Tangan & QR Validasi */}
-              <div className="pt-8 flex items-end justify-between text-xs">
-                {/* QR Code Mockup */}
-                <div className="space-y-1 text-center">
-                  <div className="w-20 h-20 bg-slate-100 border border-slate-300 rounded-xl flex items-center justify-center p-2 mx-auto">
-                    <ShieldCheck className="w-10 h-10 text-emerald-600" />
+              {/* Tanda Tangan & TTE Validasi */}
+              <div className="pt-6 sm:pt-8 flex flex-col sm:flex-row items-center sm:items-end justify-between gap-6 text-xs">
+                {/* Bagian Kiri: Verifikasi Keaslian Digital */}
+                <div className="space-y-1 text-center sm:text-left">
+                  <div className="flex items-center justify-center sm:justify-start gap-2 text-emerald-700 font-bold text-[11px]">
+                    <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                    <span>Dokumen Resmi Terverifikasi</span>
                   </div>
-                  <span className="text-[10px] text-slate-400 block font-mono">Digital Verified</span>
+                  <p className="text-[10px] text-slate-400 font-mono">
+                    ID Sertifikat: CBT58-{currentResult.id.slice(0, 10).toUpperCase()}
+                  </p>
+                  <p className="text-[9px] text-slate-400">
+                    Diterbitkan otomatis dari Server CBT SMPN 58 Palembang
+                  </p>
                 </div>
 
-                {/* Tanda Tangan */}
-                <div className="text-right space-y-1">
-                  <p className="text-slate-500">Palembang, {new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
-                  <p className="font-semibold text-slate-800">Kepala Sekolah SMPN 58,</p>
-                  <div className="h-14 flex items-center justify-end">
-                    <span className="font-serif italic text-slate-400 text-lg">Hj. Rohana, S.Pd., M.Si.</span>
-                  </div>
-                  <p className="font-bold text-slate-900 underline">Hj. Rohana, S.Pd., M.Si.</p>
-                  <p className="text-[10px] text-slate-500 font-mono">NIP. 19680512 199412 2 001</p>
-                </div>
+                {/* Bagian Kanan: TTE Kepala Sekolah */}
+                <TTESignatureSeal
+                  settings={schoolSettings}
+                  documentId={currentResult.id}
+                  signerName={principalName}
+                  signerTitle="Kepala Sekolah SMPN 58"
+                  signerNip={principalNip}
+                  className="sm:text-right"
+                />
               </div>
             </div>
           )}

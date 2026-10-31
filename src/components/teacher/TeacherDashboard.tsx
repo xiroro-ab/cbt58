@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { Subject, Question, QuestionType, ExamResult, Student, Teacher, ScoringRules, ExamSession } from '@/types/cbt';
+import { Subject, Question, QuestionType, ExamResult, Student, Teacher, ScoringRules, ExamSession, SchoolSettings } from '@/types/cbt';
 import { NavItem } from '../layout/Sidebar';
 import { useLanguage } from '@/context/LanguageContext';
 import { StudentManagement } from './StudentManagement';
@@ -9,8 +9,9 @@ import { AiQuestionGeneratorModal } from './AiQuestionGeneratorModal';
 import { extractSubjectAndGrade } from '@/lib/aiQuestionGenerator';
 import { evaluateFullExam, calculateSingleQuestionScore } from '@/lib/scoringEngine';
 import { sendProctorCommand, subscribeToLiveSessions, removeStudentSession, broadcastAnnouncementToStudents } from '@/lib/liveMonitoringService';
-import { clearStudentAutolockInSupabase, insertMessage } from '@/lib/supabaseService';
+import { clearStudentAutolockInSupabase, insertMessage, fetchQuestionsBySubject } from '@/lib/supabaseService';
 import { resolveStudentSingleClass, isClassInGrade } from '@/lib/rosterStudents';
+import { TTESignatureSeal } from '@/components/common/TTESignatureSeal';
 import {
   TrendingUp,
   Award,
@@ -96,6 +97,8 @@ interface TeacherDashboardProps {
   onStartStudentExam?: () => void;
   searchQuery?: string;
   onOpenCertificates?: (selectedResult?: ExamResult) => void;
+  schoolSettings?: SchoolSettings;
+  onUpdateSchoolSettings?: (settings: SchoolSettings) => void;
 }
 
 export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
@@ -126,7 +129,9 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   onOpenAddModal,
   onStartStudentExam,
   searchQuery = '',
-  onOpenCertificates
+  onOpenCertificates,
+  schoolSettings,
+  onUpdateSchoolSettings
 }) => {
   const { language, t } = useLanguage();
   const [selectedResult, setSelectedResult] = useState<ExamResult | null>(null);
@@ -135,6 +140,27 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   const [essaySavedNotice, setEssaySavedNotice] = useState(false);
   const [essayMaxNotice, setEssayMaxNotice] = useState<string | null>(null);
   const [dossierSuccessToast, setDossierSuccessToast] = useState<string | null>(null);
+
+  // Pengaturan Dokumen, Pejabat & TTE Digital
+  const effectiveSchoolSettings: SchoolSettings = useMemo(() => {
+    return schoolSettings || {
+      principalName: 'Hj. Rohana, S.Pd., M.Si.',
+      principalNip: '19680512 199412 2 001',
+      teacherName: currentTeacher?.name || 'Hendra Wijaya, S.Pd',
+      teacherNip: currentTeacher?.nip || '19870420 201201 1 004',
+      schoolName: 'SMP NEGERI 58 PALEMBANG',
+      city: 'Palembang',
+      enableTTE: true,
+      tteType: 'qrcode'
+    };
+  }, [schoolSettings, currentTeacher]);
+
+  const [localSettingsForm, setLocalSettingsForm] = useState<SchoolSettings>(effectiveSchoolSettings);
+  const [settingsSavedToast, setSettingsSavedToast] = useState(false);
+
+  useEffect(() => {
+    setLocalSettingsForm(effectiveSchoolSettings);
+  }, [effectiveSchoolSettings]);
 
   // ==========================================
   // CUSTOM THEMED MODAL DIALOG STATE (ANTI-SLOP BROWSER POPUPS)
@@ -213,10 +239,20 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
 
   const dossierQuestions = useMemo(() => {
     if (!selectedResult) return [];
+    // 1. Direct match by subjectId
     const directMatches = questions.filter(q => q.subjectId === selectedResult.subjectId);
-    if (directMatches.length > 0) {
-      return directMatches;
+    if (directMatches.length > 0) return directMatches;
+
+    // 2. Direct match by subject title
+    if (selectedResult.subjectTitle) {
+      const titleMatches = questions.filter(q => {
+        const sub = (allSubjects || []).find(s => s.id === q.subjectId);
+        return sub && sub.title.toLowerCase().trim() === selectedResult.subjectTitle.toLowerCase().trim();
+      });
+      if (titleMatches.length > 0) return titleMatches;
     }
+
+    // 3. Fallback localStorage specific key
     if (typeof window !== 'undefined') {
       try {
         const stored = localStorage.getItem(`cbt_questions_${selectedResult.subjectId}`);
@@ -225,9 +261,65 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
           if (Array.isArray(parsed) && parsed.length > 0) return parsed;
         }
       } catch {}
+
+      // 4. Fallback search across all cbt_questions_ in localStorage
+      try {
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key && key.startsWith('cbt_questions_')) {
+            const stored = localStorage.getItem(key);
+            if (stored) {
+              const parsed = JSON.parse(stored);
+              if (Array.isArray(parsed) && parsed.some(q => (selectedResult.answers || []).some(a => a.questionId === q.id))) {
+                return parsed;
+              }
+            }
+          }
+        }
+      } catch {}
     }
+
+    // 5. Fallback reconstruction from selectedResult.details
+    if (selectedResult.details && selectedResult.details.length > 0) {
+      return selectedResult.details.map((d, idx) => ({
+        id: d.questionId,
+        subjectId: selectedResult.subjectId,
+        type: d.type,
+        questionText: `Butir Soal #${idx + 1} (${d.type})`,
+        options: [],
+        answer: d.correctAnswer,
+        orderIndex: idx
+      } as Question));
+    }
+
+    // 6. Fallback reconstruction from selectedResult.answers
+    if (selectedResult.answers && selectedResult.answers.length > 0) {
+      return selectedResult.answers.map((a, idx) => ({
+        id: a.questionId,
+        subjectId: selectedResult.subjectId,
+        type: 'Pilihan Ganda',
+        questionText: `Butir Soal #${idx + 1}`,
+        options: [],
+        answer: null,
+        orderIndex: idx
+      } as Question));
+    }
+
     return directMatches;
-  }, [selectedResult, questions]);
+  }, [selectedResult, questions, allSubjects]);
+
+  useEffect(() => {
+    if (selectedResult?.subjectId) {
+      const hasQ = questions.some(q => q.subjectId === selectedResult.subjectId);
+      if (!hasQ) {
+        fetchQuestionsBySubject(selectedResult.subjectId).then(fetched => {
+          if (fetched && fetched.length > 0) {
+            fetched.forEach(q => onAddQuestion(q));
+          }
+        }).catch(() => {});
+      }
+    }
+  }, [selectedResult?.subjectId]);
 
   useEffect(() => {
     if (selectedResult) {
@@ -246,6 +338,82 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
       manualEssayScores
     );
   }, [selectedResult, dossierQuestions, dossierSubject.scoringRules, manualEssayScores]);
+
+  const dossierStats = useMemo(() => {
+    let correctCount = 0;
+    let wrongCount = 0;
+    let partialCount = 0;
+    let unansweredCount = 0;
+    let essayCount = 0;
+
+    const itemEvaluations: Array<{
+      qNum: number;
+      qId: string;
+      type: QuestionType;
+      status: 'correct' | 'wrong' | 'partial' | 'unanswered' | 'essay';
+      earned: number;
+      maxPoints: number;
+      studentAns: any;
+      correctAns: any;
+    }> = [];
+
+    dossierQuestions.forEach((q, idx) => {
+      const maxPoints = (dossierSubject.scoringRules as any)?.[q.type] || 1;
+      const studentAnswerItem = (selectedResult?.answers || []).find(a => a.questionId === q.id);
+      const rawStudentAns = studentAnswerItem ? studentAnswerItem.answer : null;
+      const isEssay = q.type === 'Esai';
+
+      let earned = 0;
+      if (isEssay) {
+        earned = Math.min(manualEssayScores[q.id] || 0, maxPoints);
+        essayCount++;
+      } else {
+        earned = calculateSingleQuestionScore(q, rawStudentAns, maxPoints);
+      }
+
+      const isFull = earned === maxPoints;
+      const isPartial = earned > 0 && earned < maxPoints;
+      const isUnanswered = rawStudentAns === null || rawStudentAns === undefined || rawStudentAns === '' || (Array.isArray(rawStudentAns) && rawStudentAns.length === 0);
+
+      let status: 'correct' | 'wrong' | 'partial' | 'unanswered' | 'essay' = 'wrong';
+      if (isEssay) {
+        status = 'essay';
+      } else if (isUnanswered) {
+        status = 'unanswered';
+        unansweredCount++;
+      } else if (isFull) {
+        status = 'correct';
+        correctCount++;
+      } else if (isPartial) {
+        status = 'partial';
+        partialCount++;
+      } else {
+        status = 'wrong';
+        wrongCount++;
+      }
+
+      itemEvaluations.push({
+        qNum: idx + 1,
+        qId: q.id,
+        type: q.type,
+        status,
+        earned,
+        maxPoints,
+        studentAns: rawStudentAns,
+        correctAns: q.answer
+      });
+    });
+
+    return {
+      total: dossierQuestions.length,
+      correctCount,
+      wrongCount,
+      partialCount,
+      unansweredCount,
+      essayCount,
+      itemEvaluations
+    };
+  }, [dossierQuestions, selectedResult, dossierSubject.scoringRules, manualEssayScores]);
 
   // ==========================================
   // EDIT QUESTION STATE
@@ -1750,7 +1918,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   };
 
   return (
-    <div className="p-6 sm:p-8 space-y-6 max-w-7xl mx-auto w-full transition-colors">
+    <div className={`p-3 sm:p-6 md:p-8 space-y-6 max-w-7xl mx-auto w-full transition-colors ${selectedResult ? 'print:hidden' : ''}`}>
       {/* ============================================================== */}
       {/* 1. TAMPILAN DASHBOARD UTAMA (100% REAL DATA DRIVEN)             */}
       {/* ============================================================== */}
@@ -4318,8 +4486,8 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                     <div className="space-y-16">
                       <p>Pengawas Ruang Ujian,</p>
                       <div>
-                        <strong className="underline block font-bold text-slate-900">{currentTeacher?.name || 'Hendra Wijaya, S.Pd'}</strong>
-                        <span className="text-[11px] text-slate-500">NIP: {currentTeacher?.nip || '198704202012011004'}</span>
+                        <strong className="underline block font-bold text-slate-900">{effectiveSchoolSettings.teacherName}</strong>
+                        <span className="text-[11px] text-slate-500">NIP: {effectiveSchoolSettings.teacherNip}</span>
                       </div>
                     </div>
 
@@ -4332,10 +4500,10 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                     </div>
 
                     <div className="space-y-16">
-                      <p>Mengetahui,<br />Kepala SMP Negeri 58,</p>
+                      <p>Mengetahui,<br />Kepala {effectiveSchoolSettings.schoolName},</p>
                       <div>
-                        <strong className="underline block font-bold text-slate-900">Hj. Rohana, S.Pd., M.Si.</strong>
-                        <span className="text-[11px] text-slate-500">NIP: 196805121994122001</span>
+                        <strong className="underline block font-bold text-slate-900">{effectiveSchoolSettings.principalName}</strong>
+                        <span className="text-[11px] text-slate-500">NIP: {effectiveSchoolSettings.principalNip}</span>
                       </div>
                     </div>
                   </div>
@@ -4401,13 +4569,13 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
 
                 <div className="flex justify-between items-end pt-8 text-xs font-sans">
                   <div>
-                    <p className="text-[11px] text-slate-500">* Dokumen presensi resmi dicetak otomatis dari sistem CBT SMPN 58 Palembang</p>
+                    <p className="text-[11px] text-slate-500">* Dokumen presensi resmi dicetak otomatis dari sistem CBT {effectiveSchoolSettings.schoolName}</p>
                   </div>
                   <div className="text-center space-y-16">
-                    <p>Palembang, 30 Oktober 2026<br />Pengawas Ruang,</p>
+                    <p>{effectiveSchoolSettings.city}, {new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}<br />Pengawas Ruang,</p>
                     <div>
-                      <strong className="underline block font-bold text-slate-900">{currentTeacher?.name || 'Hendra Wijaya, S.Pd'}</strong>
-                      <span className="text-[11px] text-slate-500">NIP: {currentTeacher?.nip || '198704202012011004'}</span>
+                      <strong className="underline block font-bold text-slate-900">{effectiveSchoolSettings.teacherName}</strong>
+                      <span className="text-[11px] text-slate-500">NIP: {effectiveSchoolSettings.teacherNip}</span>
                     </div>
                   </div>
                 </div>
@@ -4542,18 +4710,18 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
 
                 <div className="grid grid-cols-2 gap-8 pt-8 text-center text-xs font-sans">
                   <div className="space-y-16">
-                    <p>Mengetahui,<br />Kepala SMP Negeri 58,</p>
+                    <p>Mengetahui,<br />Kepala {effectiveSchoolSettings.schoolName},</p>
                     <div>
-                      <strong className="underline block font-bold text-slate-900">Hj. Rohana, S.Pd., M.Si.</strong>
-                      <span className="text-[11px] text-slate-500">NIP: 196805121994122001</span>
+                      <strong className="underline block font-bold text-slate-900">{effectiveSchoolSettings.principalName}</strong>
+                      <span className="text-[11px] text-slate-500">NIP: {effectiveSchoolSettings.principalNip}</span>
                     </div>
                   </div>
 
                   <div className="space-y-16">
-                    <p>Palembang, 30 Oktober 2026<br />Guru Mata Pelajaran,</p>
+                    <p>{effectiveSchoolSettings.city}, {new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}<br />Guru Mata Pelajaran,</p>
                     <div>
-                      <strong className="underline block font-bold text-slate-900">{currentTeacher?.name || 'Guru Pengampu'}</strong>
-                      <span className="text-[11px] text-slate-500">NIP: {currentTeacher?.nip || '198704202012011004'}</span>
+                      <strong className="underline block font-bold text-slate-900">{effectiveSchoolSettings.teacherName}</strong>
+                      <span className="text-[11px] text-slate-500">NIP: {effectiveSchoolSettings.teacherNip}</span>
                     </div>
                   </div>
                 </div>
@@ -5279,15 +5447,232 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
       })()}
 
       {/* ============================================================== */}
-      {/* 6. TAMPILAN SETTINGS / SUPABASE INTEGRASI                      */}
+      {/* 6. TAMPILAN SETTINGS / SUPABASE INTEGRASI & PENGATURAN TTE      */}
       {/* ============================================================== */}
       {currentNav === 'settings' && (
         <div className="space-y-6">
-          <div>
-            <h3 className="text-base font-bold text-slate-900 dark:text-white">{t.navSettings}</h3>
-            <p className="text-xs text-slate-400 dark:text-slate-500">Konfigurasi arsitektur cloud, anti-cheat, dan keamanan ujian</p>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <h3 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <Sliders className="w-5 h-5 text-violet-600" />
+                <span>{t.navSettings} & Konfigurasi Dokumen</span>
+              </h3>
+              <p className="text-xs text-slate-400 dark:text-slate-500">
+                Atur identitas pejabat penandatangan, tanda tangan elektronik (TTE barcode/QR), serta status server cloud.
+              </p>
+            </div>
+
+            {settingsSavedToast && (
+              <div className="px-4 py-2 rounded-xl bg-emerald-600 text-white font-bold text-xs flex items-center gap-2 animate-in fade-in shadow-md">
+                <CheckCircle2 className="w-4 h-4" />
+                <span>Pengaturan berhasil disimpan!</span>
+              </div>
+            )}
           </div>
 
+          {/* SECTION 1: PENGATURAN PEJABAT & TANDA TANGAN ELEKTRONIK (TTE) */}
+          <div className="p-5 sm:p-7 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-6">
+            <div className="border-b border-slate-100 dark:border-slate-800 pb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <h4 className="font-bold text-slate-900 dark:text-white text-sm sm:text-base flex items-center gap-2">
+                  <ShieldCheck className="w-5 h-5 text-violet-600" />
+                  <span>Identitas Pejabat Satuan Pendidikan & TTE Barcode/QR</span>
+                </h4>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                  Data ini otomatis dicetak pada Sertifikat Kelulusan, Dossier Lembar Jawaban Siswa, Berita Acara Ujian (BAP), dan Leger Nilai.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  onUpdateSchoolSettings?.(localSettingsForm);
+                  setSettingsSavedToast(true);
+                  showThemedAlert(
+                    'Pengaturan Berhasil Disimpan',
+                    'Data nama kepala sekolah, guru pengampu, dan konfigurasi TTE digital telah berhasil diperbarui ke seluruh sistem dokumen CBT.',
+                    'info'
+                  );
+                  setTimeout(() => setSettingsSavedToast(false), 3000);
+                }}
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-bold text-xs shadow-md shadow-violet-600/20 transition cursor-pointer shrink-0"
+              >
+                <Save className="w-4 h-4" />
+                <span>Simpan Pengaturan Pejabat & TTE</span>
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* Form Input Pejabat */}
+              <div className="lg:col-span-2 space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {/* Nama Satuan Pendidikan */}
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                      Nama Satuan Pendidikan:
+                    </label>
+                    <input
+                      type="text"
+                      value={localSettingsForm.schoolName}
+                      onChange={e => setLocalSettingsForm(prev => ({ ...prev, schoolName: e.target.value }))}
+                      placeholder="SMP NEGERI 58 PALEMBANG"
+                      className="w-full p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500"
+                    />
+                  </div>
+
+                  {/* Kota */}
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                      Kota Penerbitan Dokumen:
+                    </label>
+                    <input
+                      type="text"
+                      value={localSettingsForm.city}
+                      onChange={e => setLocalSettingsForm(prev => ({ ...prev, city: e.target.value }))}
+                      placeholder="Palembang"
+                      className="w-full p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1 border-t border-slate-100 dark:border-slate-800">
+                  {/* Nama Kepala Sekolah */}
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                      Nama Lengkap Kepala Sekolah & Gelar:
+                    </label>
+                    <input
+                      type="text"
+                      value={localSettingsForm.principalName}
+                      onChange={e => setLocalSettingsForm(prev => ({ ...prev, principalName: e.target.value }))}
+                      placeholder="Hj. Rohana, S.Pd., M.Si."
+                      className="w-full p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500"
+                    />
+                  </div>
+
+                  {/* NIP Kepala Sekolah */}
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                      NIP Kepala Sekolah:
+                    </label>
+                    <input
+                      type="text"
+                      value={localSettingsForm.principalNip}
+                      onChange={e => setLocalSettingsForm(prev => ({ ...prev, principalNip: e.target.value }))}
+                      placeholder="19680512 199412 2 001"
+                      className="w-full p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-mono font-semibold text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1 border-t border-slate-100 dark:border-slate-800">
+                  {/* Nama Guru Pengampu */}
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                      Nama Guru Pengampu / Proktor:
+                    </label>
+                    <input
+                      type="text"
+                      value={localSettingsForm.teacherName}
+                      onChange={e => setLocalSettingsForm(prev => ({ ...prev, teacherName: e.target.value }))}
+                      placeholder="Hendra Wijaya, S.Pd"
+                      className="w-full p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500"
+                    />
+                  </div>
+
+                  {/* NIP Guru */}
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                      NIP Guru Pengampu / Proktor:
+                    </label>
+                    <input
+                      type="text"
+                      value={localSettingsForm.teacherNip}
+                      onChange={e => setLocalSettingsForm(prev => ({ ...prev, teacherNip: e.target.value }))}
+                      placeholder="19870420 201201 1 004"
+                      className="w-full p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-mono font-semibold text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500"
+                    />
+                  </div>
+                </div>
+
+                {/* Switch TTE Barcode & Format */}
+                <div className="pt-3 border-t border-slate-100 dark:border-slate-800 space-y-3">
+                  <div className="flex items-center justify-between p-3.5 rounded-2xl bg-violet-50/60 dark:bg-violet-950/30 border border-violet-200/80 dark:border-violet-800/60">
+                    <div>
+                      <span className="font-bold text-xs text-slate-900 dark:text-white block">
+                        Tanda Tangan Elektronik (TTE) Digital
+                      </span>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                        Sematkan stempel QR Code / Barcode pengesahan resmi digital pada dokumen cetak
+                      </p>
+                    </div>
+
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={localSettingsForm.enableTTE}
+                        onChange={e => setLocalSettingsForm(prev => ({ ...prev, enableTTE: e.target.checked }))}
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-violet-600"></div>
+                    </label>
+                  </div>
+
+                  {localSettingsForm.enableTTE && (
+                    <div className="flex items-center gap-4 text-xs font-semibold text-slate-700 dark:text-slate-300 p-2">
+                      <span className="text-xs text-slate-500">Pilih Model TTE:</span>
+                      <label className="inline-flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="tteType"
+                          value="qrcode"
+                          checked={localSettingsForm.tteType === 'qrcode'}
+                          onChange={() => setLocalSettingsForm(prev => ({ ...prev, tteType: 'qrcode' }))}
+                          className="text-violet-600 focus:ring-violet-500"
+                        />
+                        <span>QR Code Terverifikasi (BSrE Style)</span>
+                      </label>
+                      <label className="inline-flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="tteType"
+                          value="barcode"
+                          checked={localSettingsForm.tteType === 'barcode'}
+                          onChange={() => setLocalSettingsForm(prev => ({ ...prev, tteType: 'barcode' }))}
+                          className="text-violet-600 focus:ring-violet-500"
+                        />
+                        <span>Barcode Garis Dokumen (Code 128)</span>
+                      </label>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Live Preview TTE Digital Seal */}
+              <div className="p-5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800 space-y-3 flex flex-col justify-between">
+                <div>
+                  <span className="text-[11px] font-bold uppercase text-slate-400 block tracking-wider mb-2">
+                    Pratinjau Tampilan TTE Cetak:
+                  </span>
+                  <div className="p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xs">
+                    <TTESignatureSeal
+                      settings={localSettingsForm}
+                      documentId="PREVIEW-2026"
+                      signerName={localSettingsForm.principalName || 'Nama Kepala Sekolah'}
+                      signerTitle="Kepala Sekolah"
+                      signerNip={localSettingsForm.principalNip}
+                    />
+                  </div>
+                </div>
+
+                <div className="text-[10px] text-slate-500 dark:text-slate-400 leading-relaxed bg-white/60 dark:bg-slate-900/60 p-2.5 rounded-xl border border-slate-200/60 dark:border-slate-800/60">
+                  💡 Format tanda tangan di atas akan otomatis disematkan pada sudut dokumen resmi cetak untuk memastikan keaslian hasil ujian.
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* SECTION 2: STATUS KONEKSI & ANTI-CHEAT */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-xs">
             {/* Status Supabase */}
             <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-4">
@@ -6128,6 +6513,110 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                 </div>
               </div>
 
+              {/* RINGKASAN HASIL EVALUASI JAWABAN SISWA (BENAR / SALAH / KOSONG) */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 p-3 sm:p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 print:bg-slate-100 border border-slate-200 dark:border-slate-700/80 print:border-slate-300 text-xs">
+                {/* 1. Benar */}
+                <div className="p-2.5 rounded-xl bg-white dark:bg-slate-900 print:bg-white border border-emerald-200 dark:border-emerald-800 print:border-slate-300 flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-lg bg-emerald-100 dark:bg-emerald-950/80 text-emerald-600 flex items-center justify-center font-bold text-sm shrink-0">
+                    ✔
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-slate-500 font-semibold block">Jawaban Benar</span>
+                    <strong className="text-sm font-black text-emerald-700 dark:text-emerald-400 print:text-black">
+                      {dossierStats.correctCount} Soal
+                    </strong>
+                  </div>
+                </div>
+
+                {/* 2. Salah */}
+                <div className="p-2.5 rounded-xl bg-white dark:bg-slate-900 print:bg-white border border-rose-200 dark:border-rose-800 print:border-slate-300 flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-lg bg-rose-100 dark:bg-rose-950/80 text-rose-600 flex items-center justify-center font-bold text-sm shrink-0">
+                    ✘
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-slate-500 font-semibold block">Jawaban Salah</span>
+                    <strong className="text-sm font-black text-rose-600 dark:text-rose-400 print:text-black">
+                      {dossierStats.wrongCount} Soal
+                    </strong>
+                  </div>
+                </div>
+
+                {/* 3. Sebagian Benar */}
+                <div className="p-2.5 rounded-xl bg-white dark:bg-slate-900 print:bg-white border border-amber-200 dark:border-amber-800 print:border-slate-300 flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-lg bg-amber-100 dark:bg-amber-950/80 text-amber-600 flex items-center justify-center font-bold text-sm shrink-0">
+                    ⚠
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-slate-500 font-semibold block">Sebagian Benar</span>
+                    <strong className="text-sm font-black text-amber-600 dark:text-amber-400 print:text-black">
+                      {dossierStats.partialCount} Soal
+                    </strong>
+                  </div>
+                </div>
+
+                {/* 4. Tidak Dijawab */}
+                <div className="p-2.5 rounded-xl bg-white dark:bg-slate-900 print:bg-white border border-slate-200 dark:border-slate-700 print:border-slate-300 flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-500 flex items-center justify-center font-bold text-sm shrink-0">
+                    ⚪
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-slate-500 font-semibold block">Tidak Dijawab</span>
+                    <strong className="text-sm font-black text-slate-700 dark:text-slate-300 print:text-black">
+                      {dossierStats.unansweredCount} Soal
+                    </strong>
+                  </div>
+                </div>
+              </div>
+
+              {/* MATRIKS KISI HASIL EVALUASI CEPAT NOMOR 1 s/d N */}
+              {dossierStats.itemEvaluations.length > 0 && (
+                <div className="p-3 sm:p-4 rounded-2xl bg-white dark:bg-slate-900 print:bg-white border border-slate-200 dark:border-slate-800 print:border-slate-300 space-y-2">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                    <span className="text-[11px] font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
+                      Matriks Hasil Evaluasi Butir Soal ({dossierStats.total} Butir Soal)
+                    </span>
+                    <div className="flex items-center gap-2.5 text-[10px] font-semibold flex-wrap">
+                      <span className="flex items-center gap-1 text-emerald-600"><span className="w-2 h-2 rounded-full bg-emerald-500 inline-block"></span> Benar</span>
+                      <span className="flex items-center gap-1 text-rose-500"><span className="w-2 h-2 rounded-full bg-rose-500 inline-block"></span> Salah</span>
+                      {dossierStats.partialCount > 0 && <span className="flex items-center gap-1 text-amber-500"><span className="w-2 h-2 rounded-full bg-amber-500 inline-block"></span> Sebagian</span>}
+                      {dossierStats.unansweredCount > 0 && <span className="flex items-center gap-1 text-slate-400"><span className="w-2 h-2 rounded-full bg-slate-400 inline-block"></span> Kosong</span>}
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap gap-1.5 sm:gap-2 pt-1">
+                    {dossierStats.itemEvaluations.map((item) => {
+                      const isCor = item.status === 'correct';
+                      const isWro = item.status === 'wrong';
+                      const isPar = item.status === 'partial';
+                      const isEss = item.status === 'essay';
+
+                      return (
+                        <div
+                          key={item.qNum}
+                          className={`w-8 h-8 sm:w-9 sm:h-9 rounded-xl flex flex-col items-center justify-center font-mono text-[10px] sm:text-xs font-bold border transition ${
+                            isCor
+                              ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800'
+                              : isWro
+                              ? 'bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border-rose-300 dark:border-rose-900'
+                              : isPar
+                              ? 'bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border-amber-300 dark:border-amber-800'
+                              : isEss
+                              ? 'bg-violet-50 dark:bg-violet-950/60 text-violet-700 dark:text-violet-300 border-violet-300 dark:border-violet-800'
+                              : 'bg-slate-100 dark:bg-slate-800 text-slate-400 border-slate-300 dark:border-slate-700'
+                          }`}
+                          title={`Soal #${item.qNum}: ${isCor ? 'Benar' : isWro ? 'Salah' : isPar ? 'Sebagian Benar' : isEss ? 'Esai' : 'Tidak Dijawab'} (${item.earned}/${item.maxPoints} Poin)`}
+                        >
+                          <span className="leading-none text-[8.5px] font-sans text-slate-500">{item.qNum}</span>
+                          <span className="leading-none font-bold">
+                            {isCor ? '✔' : isWro ? '✘' : isPar ? '½' : isEss ? '✎' : '—'}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
               {/* NOTIFIKASI MAX POINTS WARNING */}
               {essayMaxNotice && (
                 <div className="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 rounded-xl text-xs font-semibold flex items-center justify-between animate-in fade-in print:hidden">
@@ -6170,6 +6659,8 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
 
                   const isFull = earned === maxPoints;
                   const isPartial = earned > 0 && earned < maxPoints;
+                  const isUnanswered = rawStudentAns === null || rawStudentAns === undefined || rawStudentAns === '' || (Array.isArray(rawStudentAns) && rawStudentAns.length === 0);
+                  const isWrong = !isEssay && !isFull && !isPartial;
 
                   return (
                     <div
@@ -6185,27 +6676,35 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                             {q.type}
                           </span>
                           <span className="px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 print:bg-slate-50 text-slate-500 print:text-slate-700 font-bold text-[10px] border border-slate-200 dark:border-slate-700 print:border-slate-300">
-                            Bobot Maksimal: {maxPoints} Poin
+                            Bobot: {maxPoints} Poin
                           </span>
                         </div>
 
-                        {/* BADGE POIN DIDAPAT */}
+                        {/* BADGE EVALUASI STATUS SOAL TEGAS (BENAR / SALAH / SEBAGIAN / KOSONG) */}
                         <div>
                           {isEssay ? (
-                            <span className="px-2.5 py-0.5 rounded-full bg-amber-50 dark:bg-amber-950/60 print:bg-slate-100 text-amber-700 dark:text-amber-300 print:text-slate-900 font-bold text-[11px] border border-amber-200 dark:border-amber-800 print:border-slate-300">
-                              Diperoleh: {earned} / {maxPoints} Poin
+                            <span className="px-3 py-1 rounded-full bg-amber-50 dark:bg-amber-950/60 print:bg-slate-100 text-amber-700 dark:text-amber-300 print:text-slate-900 font-bold text-[11px] border border-amber-200 dark:border-amber-800 print:border-slate-300">
+                              📝 Nilai Uraian: {earned} / {maxPoints} Poin
+                            </span>
+                          ) : isFull ? (
+                            <span className="px-3 py-1 rounded-full bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 print:bg-emerald-50 print:text-emerald-900 font-extrabold text-[11px] border border-emerald-300 dark:border-emerald-800 print:border-emerald-300 flex items-center gap-1 shadow-xs">
+                              <span>✔ JAWABAN BENAR</span>
+                              <span>(+{earned} Poin)</span>
+                            </span>
+                          ) : isPartial ? (
+                            <span className="px-3 py-1 rounded-full bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 print:bg-amber-50 print:text-amber-900 font-extrabold text-[11px] border border-amber-300 dark:border-amber-800 print:border-amber-300 flex items-center gap-1">
+                              <span>⚠ SEBAGIAN BENAR</span>
+                              <span>(+{earned} / {maxPoints} Poin)</span>
+                            </span>
+                          ) : isUnanswered ? (
+                            <span className="px-3 py-1 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 print:bg-slate-100 print:text-slate-800 font-extrabold text-[11px] border border-slate-300 dark:border-slate-600 print:border-slate-300 flex items-center gap-1">
+                              <span>⚪ TIDAK DIJAWAB</span>
+                              <span>(0 Poin)</span>
                             </span>
                           ) : (
-                            <span
-                              className={`px-2.5 py-0.5 rounded-full font-bold text-[11px] border ${
-                                isFull
-                                  ? 'bg-emerald-50 dark:bg-emerald-950/60 print:bg-emerald-50 text-emerald-700 dark:text-emerald-300 print:text-emerald-800 border-emerald-200 dark:border-emerald-800 print:border-emerald-300'
-                                  : isPartial
-                                  ? 'bg-amber-50 dark:bg-amber-950/60 print:bg-amber-50 text-amber-700 dark:text-amber-300 print:text-amber-800 border-amber-200 dark:border-amber-800 print:border-amber-300'
-                                  : 'bg-rose-50 dark:bg-rose-950/60 print:bg-rose-50 text-rose-700 dark:text-rose-300 print:text-rose-800 border-rose-200 dark:border-rose-900 print:border-rose-300'
-                              }`}
-                            >
-                              Poin: {earned} / {maxPoints}
+                            <span className="px-3 py-1 rounded-full bg-rose-100 dark:bg-rose-950/80 text-rose-800 dark:text-rose-300 print:bg-rose-50 print:text-rose-900 font-extrabold text-[11px] border border-rose-300 dark:border-rose-900 print:border-rose-300 flex items-center gap-1 shadow-xs">
+                              <span>✘ JAWABAN SALAH</span>
+                              <span>(0 / {maxPoints} Poin)</span>
                             </span>
                           )}
                         </div>
@@ -6230,17 +6729,47 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                       {/* REVIEW JAWABAN SISWA VS KUNCI GURU */}
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
                         {/* JAWABAN SISWA */}
-                        <div className="p-3 rounded-xl bg-white dark:bg-slate-900 print:bg-slate-50 border border-slate-200 dark:border-slate-800 print:border-slate-300 space-y-1.5">
-                          <span className="text-[10px] font-bold uppercase text-slate-400 print:text-slate-600 block tracking-wider">
-                            Jawaban Siswa:
-                          </span>
-                          <div className="text-slate-800 dark:text-slate-100 print:text-black font-semibold break-words">
+                        <div className={`p-3 rounded-xl border space-y-1.5 ${
+                          isFull
+                            ? 'bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-300 dark:border-emerald-800/80 print:bg-emerald-50/40 print:border-emerald-300'
+                            : isWrong
+                            ? 'bg-rose-50/50 dark:bg-rose-950/20 border-rose-300 dark:border-rose-800/80 print:bg-rose-50/40 print:border-rose-300'
+                            : isPartial
+                            ? 'bg-amber-50/50 dark:bg-amber-950/20 border-amber-300 dark:border-amber-800/80 print:bg-amber-50/40 print:border-amber-300'
+                            : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 print:bg-slate-50 print:border-slate-300'
+                        }`}>
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] font-bold uppercase text-slate-500 print:text-slate-600 block tracking-wider">
+                              Jawaban Siswa:
+                            </span>
+                            {isFull ? (
+                              <span className="px-1.5 py-0.5 rounded bg-emerald-200 dark:bg-emerald-900 text-emerald-800 dark:text-emerald-200 font-bold text-[9px]">
+                                ✔ Tepat
+                              </span>
+                            ) : isWrong ? (
+                              <span className="px-1.5 py-0.5 rounded bg-rose-200 dark:bg-rose-900 text-rose-800 dark:text-rose-200 font-bold text-[9px]">
+                                ✘ Tidak Tepat
+                              </span>
+                            ) : isPartial ? (
+                              <span className="px-1.5 py-0.5 rounded bg-amber-200 dark:bg-amber-900 text-amber-800 dark:text-amber-200 font-bold text-[9px]">
+                                ⚠ Parsial
+                              </span>
+                            ) : null}
+                          </div>
+
+                          <div className={`font-semibold break-words ${
+                            isFull
+                              ? 'text-emerald-900 dark:text-emerald-200 print:text-black'
+                              : isWrong
+                              ? 'text-rose-700 dark:text-rose-300 print:text-black font-bold'
+                              : 'text-slate-800 dark:text-slate-100 print:text-black'
+                          }`}>
                             {(() => {
                               if (rawStudentAns === null || rawStudentAns === undefined || rawStudentAns === '') {
-                                return <span className="text-rose-500 italic font-normal">(Tidak dijawab)</span>;
+                                return <span className="text-rose-500 italic font-normal">(Tidak dijawab / Kosong)</span>;
                               }
                               if (Array.isArray(rawStudentAns)) {
-                                if (rawStudentAns.length === 0) return <span className="text-rose-500 italic font-normal">(Tidak dijawab)</span>;
+                                if (rawStudentAns.length === 0) return <span className="text-rose-500 italic font-normal">(Tidak dijawab / Kosong)</span>;
                                 if (typeof rawStudentAns[0] === 'object' && rawStudentAns[0] !== null) {
                                   return (
                                     <div className="flex flex-wrap gap-1.5">
@@ -6287,9 +6816,9 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                         </div>
 
                         {/* KUNCI REFERENSI GURU */}
-                        <div className="p-3 rounded-xl bg-emerald-50/60 dark:bg-emerald-950/30 print:bg-slate-50 border border-emerald-200/80 dark:border-emerald-800/60 print:border-slate-300 space-y-1.5">
-                          <span className="text-[10px] font-bold uppercase text-emerald-600 dark:text-emerald-400 print:text-slate-600 block tracking-wider">
-                            {isEssay ? 'Kunci / Rubrik Referensi Guru:' : 'Kunci Jawaban Benar:'}
+                        <div className="p-3 rounded-xl bg-emerald-50/60 dark:bg-emerald-950/30 print:bg-slate-50 border border-emerald-300/80 dark:border-emerald-800/60 print:border-slate-300 space-y-1.5">
+                          <span className="text-[10px] font-bold uppercase text-emerald-700 dark:text-emerald-400 print:text-slate-600 block tracking-wider">
+                            {isEssay ? 'Kunci / Rubrik Referensi Guru:' : 'Kunci Jawaban yang Benar:'}
                           </span>
                           <div className="text-emerald-950 dark:text-emerald-200 print:text-black font-semibold break-words">
                             {(() => {
@@ -6372,22 +6901,28 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                 })}
               </div>
 
-              {/* TANDA TANGAN FORMAL LEMBAR HASIL UJIAN (PRINT ONLY) */}
+              {/* TANDA TANGAN FORMAL LEMBAR HASIL UJIAN (PRINT ONLY) WITH TTE DIGITAL */}
               <div className="hidden print:grid grid-cols-2 gap-8 pt-8 text-center text-xs font-sans print:break-inside-avoid">
-                <div className="space-y-16">
-                  <p>Siswa Peserta Ujian,</p>
+                <div className="space-y-12">
+                  <p className="font-semibold text-slate-800">Siswa Peserta Ujian,</p>
+                  <div className="h-14 flex items-center justify-center">
+                    <span className="font-serif italic text-slate-400 text-sm">(Tanda Tangan Siswa)</span>
+                  </div>
                   <div>
                     <strong className="underline block font-bold text-slate-900 uppercase">{selectedResult.studentName}</strong>
-                    <span className="text-[11px] text-slate-600 block">NISN: {dossierNisn}</span>
+                    <span className="text-[11px] text-slate-600 block font-mono">NISN: {dossierNisn}</span>
                   </div>
                 </div>
 
-                <div className="space-y-16">
-                  <p>Palembang, {selectedResult.submittedAt ? selectedResult.submittedAt.split(' ')[0] : '30 Oktober 2026'}<br />Guru Pengampu / Proktor,</p>
-                  <div>
-                    <strong className="underline block font-bold text-slate-900">{currentTeacher?.name || 'Guru Pengampu'}</strong>
-                    <span className="text-[11px] text-slate-600 block">NIP: {currentTeacher?.nip || '198704202012011004'}</span>
-                  </div>
+                <div>
+                  <TTESignatureSeal
+                    settings={effectiveSchoolSettings}
+                    documentId={selectedResult.id}
+                    signerName={effectiveSchoolSettings.teacherName || currentTeacher?.name || 'Guru Pengampu'}
+                    signerTitle="Guru Pengampu / Proktor"
+                    signerNip={effectiveSchoolSettings.teacherNip || currentTeacher?.nip}
+                    signDate={selectedResult.submittedAt ? selectedResult.submittedAt.split(' ')[0] : undefined}
+                  />
                 </div>
               </div>
 

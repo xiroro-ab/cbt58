@@ -4,7 +4,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { initialSubject } from '@/lib/mockData';
 import { initialStudents, resolveStudentSingleClass } from '@/lib/rosterStudents';
 import { initialTeachers } from '@/lib/rosterTeachers';
-import { Subject, Question, ExamResult, ExamNotification, ExamMessage, Student, Teacher } from '@/types/cbt';
+import { Subject, Question, ExamResult, ExamNotification, ExamMessage, Student, Teacher, SchoolSettings } from '@/types/cbt';
 import { shuffleQuestionsGroupedByType } from '@/lib/questionRandomizer';
 import { Sidebar, NavItem } from '@/components/layout/Sidebar';
 import { Navbar } from '@/components/layout/Navbar';
@@ -159,6 +159,39 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(true);
   const [isVerifyingLogin, setIsVerifyingLogin] = useState(false);
   const [isStartingExam, setIsStartingExam] = useState(false);
+
+  // State Pengaturan Satuan Pendidikan, Pejabat & TTE Barcode
+  const defaultSchoolSettings: SchoolSettings = {
+    principalName: 'Hj. Rohana, S.Pd., M.Si.',
+    principalNip: '19680512 199412 2 001',
+    teacherName: 'Hendra Wijaya, S.Pd',
+    teacherNip: '19870420 201201 1 004',
+    schoolName: 'SMP NEGERI 58 PALEMBANG',
+    city: 'Palembang',
+    enableTTE: true,
+    tteType: 'qrcode'
+  };
+  const [schoolSettings, setSchoolSettings] = useState<SchoolSettings>(defaultSchoolSettings);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const stored = localStorage.getItem('cbt_school_settings');
+        if (stored) {
+          setSchoolSettings(JSON.parse(stored));
+        }
+      } catch {}
+    }
+  }, []);
+
+  const handleUpdateSchoolSettings = (newSettings: SchoolSettings) => {
+    setSchoolSettings(newSettings);
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('cbt_school_settings', JSON.stringify(newSettings));
+      } catch {}
+    }
+  };
 
   // State Modal Briefing & Informasi Ujian Sebelum Masuk Soal
   const [showBriefModal, setShowBriefModal] = useState(false);
@@ -668,7 +701,10 @@ export default function Home() {
 
         if (matchedSub.id) {
           const qList = await fetchQuestionsBySubject(matchedSub.id);
-          setQuestions(qList || []);
+          setQuestions(prev => {
+            const otherQuestions = prev.filter(q => q.subjectId && q.subjectId !== matchedSub.id);
+            return [...otherQuestions, ...(qList || [])];
+          });
           const resList = await fetchExamResults(matchedSub.id);
           setResults(prev => {
             const otherResults = prev.filter(r => r.subjectId && r.subjectId !== matchedSub.id);
@@ -707,7 +743,10 @@ export default function Home() {
       if (matchedSub.id) {
         try {
           const qList = await fetchQuestionsBySubject(matchedSub.id);
-          setQuestions(qList || []);
+          setQuestions(prev => {
+            const otherQuestions = prev.filter(q => q.subjectId && q.subjectId !== matchedSub.id);
+            return [...otherQuestions, ...(qList || [])];
+          });
           const resList = await fetchExamResults(matchedSub.id);
           setResults(prev => {
             const otherResults = prev.filter(r => r.subjectId && r.subjectId !== matchedSub.id);
@@ -1667,7 +1706,7 @@ export default function Home() {
         />
 
         {/* DASHBOARD CONTENT BODY */}
-        <main className="flex-1">
+        <main className={`flex-1 ${isCertificatesModalOpen ? 'print:hidden' : ''}`}>
           <TeacherDashboard
             currentNav={currentNav}
             subject={subject}
@@ -1721,6 +1760,8 @@ export default function Home() {
             onStartStudentExam={() => setViewMode('student_login')}
             searchQuery={searchQuery}
             onOpenCertificates={handleOpenCertificates}
+            schoolSettings={schoolSettings}
+            onUpdateSchoolSettings={handleUpdateSchoolSettings}
           />
         </main>
       </div>
@@ -1739,6 +1780,7 @@ export default function Home() {
         selectedStudentResult={certificateTargetResult}
         allSubjects={subjects}
         students={students}
+        schoolSettings={schoolSettings}
       />
     </div>
   );

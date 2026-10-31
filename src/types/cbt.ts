@@ -105,6 +105,17 @@ export interface Teacher {
   lastLogin?: string;
 }
 
+export interface SchoolSettings {
+  principalName: string;
+  principalNip: string;
+  teacherName: string;
+  teacherNip: string;
+  schoolName: string;
+  city: string;
+  enableTTE: boolean;
+  tteType: 'qrcode' | 'barcode';
+}
+
 export interface QuestionScoreDetail {
   questionId: string;
   type: QuestionType;

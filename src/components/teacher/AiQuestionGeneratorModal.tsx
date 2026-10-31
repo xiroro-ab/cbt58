@@ -10,7 +10,8 @@ import {
   getRecommendedTopics,
   buildAiQuestionPrompt,
   validateAndConvertRawQuestions,
-  sanitizeAndParseAiJson
+  sanitizeAndParseAiJson,
+  extractSubjectAndGrade
 } from '@/lib/aiQuestionGenerator';
 import {
   Sparkles,
@@ -66,6 +67,28 @@ export function AiQuestionGeneratorModal({
   const activeSubject = useMemo(() => {
     return allSubjects.find(s => s.id === targetSubjectId) || currentSubject || allSubjects[0];
   }, [allSubjects, targetSubjectId, currentSubject]);
+
+  // Inputan Eksplisit Mata Pelajaran & Jenjang Kelas (Bisa diedit bebas oleh guru)
+  const [subjectName, setSubjectName] = useState<string>(() => {
+    return extractSubjectAndGrade(currentSubject?.title, currentSubject?.className).cleanSubject || 'Informatika';
+  });
+  const [gradeLevel, setGradeLevel] = useState<string>(() => {
+    return extractSubjectAndGrade(currentSubject?.title, currentSubject?.className).grade || 'Kelas 9 (IX)';
+  });
+
+  // Sinkronisasi saat activeSubject berganti
+  useEffect(() => {
+    if (activeSubject) {
+      const ext = extractSubjectAndGrade(activeSubject.title, activeSubject.className);
+      setSubjectName(ext.cleanSubject);
+      setGradeLevel(ext.grade);
+    }
+  }, [activeSubject?.id, activeSubject?.title, activeSubject?.className]);
+
+  // Rekomendasi Topik Cepat Berdasarkan Mapel Terpilih
+  const recommendedTopics = useMemo(() => {
+    return getRecommendedTopics(subjectName || activeSubject?.title || 'Informatika');
+  }, [subjectName, activeSubject?.title]);
 
   // 1. STANDAR & KEDALAMAN SOAL (MULTI-CENTANG CHECKBOX)
   const [selectedStandards, setSelectedStandards] = useState<StandardBadge[]>(['AKM', 'TKA']);
@@ -223,10 +246,15 @@ export function AiQuestionGeneratorModal({
 
   // Salin prompt untuk dipakai di gemini.google.com
   const handleCopyPrompt = () => {
+    const finalSubject = subjectName.trim() || activeSubject?.title || 'Informatika';
+    const finalGrade = gradeLevel.trim() || activeSubject?.className || 'Kelas 9 (IX)';
+    const defaultTopic = recommendedTopics[0] || 'Berpikir Komputasional dan Jaringan Komputer';
+    const finalTopic = topic.trim() || defaultTopic;
+
     const promptText = buildAiQuestionPrompt({
-      subjectTitle: activeSubject?.title || 'Mata Pelajaran',
-      className: activeSubject?.className || 'Kelas VIII',
-      topic: topic.trim() || 'Materi Pembelajaran Pokok',
+      subjectTitle: finalSubject,
+      className: finalGrade,
+      topic: finalTopic,
       difficulty,
       selectedStandards,
       counts,
@@ -262,14 +290,19 @@ export function AiQuestionGeneratorModal({
       setLoadingStepText('Memvalidasi format data CBT...');
     }, 8000);
 
+    const finalSubject = subjectName.trim() || activeSubject?.title || 'Informatika';
+    const finalGrade = gradeLevel.trim() || activeSubject?.className || 'Kelas 9 (IX)';
+    const defaultTopic = recommendedTopics[0] || 'Berpikir Komputasional dan Jaringan Komputer';
+    const finalTopic = topic.trim() || defaultTopic;
+
     try {
       const response = await fetch('/api/ai/generate-questions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          subjectTitle: activeSubject?.title || 'Mata Pelajaran',
-          className: activeSubject?.className || 'Kelas VIII',
-          topic: topic.trim() || 'Materi Pembelajaran Pokok',
+          subjectTitle: finalSubject,
+          className: finalGrade,
+          topic: finalTopic,
           difficulty,
           selectedStandards,
           counts,
@@ -405,8 +438,6 @@ export function AiQuestionGeneratorModal({
 
   if (!isOpen) return null;
 
-  const recommendedTopics = getRecommendedTopics(activeSubject?.title || '');
-
   // Deskripsi ringkas sintesis standar yang dicentang
   const activeStandardsObjects = STANDARDS_OPTIONS.filter(s => selectedStandards.includes(s.id));
   const standardsSummaryText =
@@ -453,37 +484,99 @@ export function AiQuestionGeneratorModal({
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
           {currentStep === 'config' ? (
             <>
-              {/* TARGET MATA PELAJARAN */}
-              <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div className="flex items-center gap-2.5">
-                  <div className="p-2 rounded-xl bg-violet-100 dark:bg-violet-950/80 text-violet-600 dark:text-violet-400">
-                    <BookOpen className="w-4 h-4" />
+              {/* TARGET MATA PELAJARAN & JENJANG KELAS (INPUT EKSPLISIT GURU) */}
+              <div className="p-4 rounded-2xl bg-gradient-to-r from-violet-50/70 via-slate-50 to-slate-50 dark:from-violet-950/30 dark:via-slate-800/60 dark:to-slate-800/60 border border-violet-200/60 dark:border-violet-900/40 space-y-3.5 shadow-2xs">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200/70 dark:border-slate-700/60 pb-2.5">
+                  <div className="flex items-center gap-2">
+                    <div className="p-1.5 rounded-lg bg-violet-600 text-white shadow-2xs">
+                      <BookOpen className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-bold text-slate-900 dark:text-white">
+                        Target Mata Pelajaran & Jenjang Kelas
+                      </h4>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                        Pastikan mapel dan jenjang kelas sesuai agar AI Gemini fokus pada materi kurikulum yang tepat
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">
-                      Target Mata Pelajaran & Kelas
-                    </span>
-                    <span className="text-sm font-bold text-slate-900 dark:text-white">
-                      {activeSubject?.title || 'Mata Pelajaran'} • {activeSubject?.className || 'Semua Kelas'}
-                    </span>
-                  </div>
+
+                  {allSubjects.length > 1 && (
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[10px] text-slate-400 font-semibold whitespace-nowrap">Paket Ujian:</span>
+                      <select
+                        value={targetSubjectId}
+                        onChange={e => setTargetSubjectId(e.target.value)}
+                        className="text-xs font-semibold px-2.5 py-1.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500 cursor-pointer [color-scheme:light] dark:[color-scheme:dark] [&>option]:bg-white [&>option]:text-slate-900 [&>option]:dark:bg-slate-900 [&>option]:dark:text-slate-100"
+                      >
+                        {allSubjects.map(sub => (
+                          <option key={sub.id} value={sub.id}>
+                            {sub.title} ({sub.className})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
                 </div>
 
-                {allSubjects.length > 1 && (
-                  <div className="sm:w-56">
-                    <select
-                      value={targetSubjectId}
-                      onChange={e => setTargetSubjectId(e.target.value)}
-                      className="w-full text-xs font-semibold px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500 cursor-pointer"
-                    >
-                      {allSubjects.map(sub => (
-                        <option key={sub.id} value={sub.id}>
-                          {sub.title} ({sub.className})
-                        </option>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {/* Kolom 1: Nama Mata Pelajaran (Disiplin Ilmu) */}
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center justify-between">
+                      <span className="flex items-center gap-1">
+                        <span>Nama Mata Pelajaran *</span>
+                        <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold">(Disiplin Ilmu)</span>
+                      </span>
+                      <span className="text-[10px] text-slate-400">Bisa diedit</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={subjectName}
+                      onChange={e => setSubjectName(e.target.value)}
+                      placeholder="Contoh: Informatika, Matematika, IPA..."
+                      className="w-full text-xs font-bold px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-violet-700 dark:text-violet-300 focus:outline-none focus:ring-2 focus:ring-violet-500 shadow-2xs"
+                    />
+                    {/* Tombol Pilihan Cepat Mapel */}
+                    <div className="flex items-center gap-1 flex-wrap pt-0.5">
+                      {['Informatika', 'Matematika', 'IPA', 'Bahasa Indonesia', 'Bahasa Inggris', 'IPS', 'PPKn', 'PAI', 'PJOK'].map(sub => (
+                        <button
+                          key={sub}
+                          type="button"
+                          onClick={() => setSubjectName(sub)}
+                          className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-md transition cursor-pointer ${
+                            subjectName.toLowerCase() === sub.toLowerCase()
+                              ? 'bg-violet-600 text-white shadow-2xs'
+                              : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+                          }`}
+                        >
+                          {sub}
+                        </button>
                       ))}
-                    </select>
+                    </div>
                   </div>
-                )}
+
+                  {/* Kolom 2: Jenjang / Tingkat Kelas */}
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center justify-between">
+                      <span>Jenjang / Tingkat Kelas *</span>
+                      <span className="text-[10px] text-slate-400">Sasaran Soal</span>
+                    </label>
+                    <select
+                      value={gradeLevel}
+                      onChange={e => setGradeLevel(e.target.value)}
+                      className="w-full text-xs font-bold px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500 cursor-pointer shadow-2xs [color-scheme:light] dark:[color-scheme:dark] [&>option]:bg-white [&>option]:text-slate-900 [&>option]:dark:bg-slate-900 [&>option]:dark:text-slate-100"
+                    >
+                      <option value="Kelas 9 (IX)">Kelas 9 (IX SMP)</option>
+                      <option value="Kelas 8 (VIII)">Kelas 8 (VIII SMP)</option>
+                      <option value="Kelas 7 (VII)">Kelas 7 (VII SMP)</option>
+                      <option value="Semua Tingkat (SMP)">Semua Tingkat (SMP)</option>
+                    </select>
+
+                    <div className="text-[10px] text-slate-400 dark:text-slate-500 flex items-center gap-1 pt-0.5">
+                      <span>Rombel paket ujian: <b>{activeSubject?.className || 'Semua Rombel'}</b></span>
+                    </div>
+                  </div>
+                </div>
               </div>
 
               {/* 1. TOMBOL CENTANG STANDAR KEDALAMAN SOAL (BISA PILIH LEBIH DARI 1) */}
@@ -573,19 +666,23 @@ export function AiQuestionGeneratorModal({
                     type="text"
                     value={topic}
                     onChange={e => setTopic(e.target.value)}
-                    placeholder="Contoh: Teorema Pythagoras, Teks Eksplanasi, Sistem Peredaran Darah..."
-                    className="w-full text-xs font-medium px-3.5 py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500"
+                    placeholder={`Contoh: ${recommendedTopics.slice(0, 2).join(', ')}...`}
+                    className="w-full text-xs font-medium px-3.5 py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500 shadow-2xs"
                   />
 
                   {/* Rekomendasi Topik Cepat */}
                   <div className="flex items-center gap-1.5 flex-wrap pt-1">
-                    <span className="text-[10px] text-slate-400 font-semibold">Pilihan Cepat:</span>
-                    {recommendedTopics.slice(0, 4).map((recTopic, i) => (
+                    <span className="text-[10px] text-slate-400 font-semibold">Pilihan Cepat Topik {subjectName}:</span>
+                    {recommendedTopics.map((recTopic, i) => (
                       <button
                         key={i}
                         type="button"
                         onClick={() => setTopic(recTopic)}
-                        className="text-[10px] font-medium px-2 py-0.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-violet-100 dark:hover:bg-violet-950 hover:text-violet-700 dark:hover:text-violet-300 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700 transition cursor-pointer"
+                        className={`text-[10px] font-medium px-2 py-0.5 rounded-lg border transition cursor-pointer ${
+                          topic === recTopic
+                            ? 'bg-violet-600 text-white border-violet-600 shadow-2xs'
+                            : 'bg-slate-100 dark:bg-slate-800 hover:bg-violet-100 dark:hover:bg-violet-950 hover:text-violet-700 dark:hover:text-violet-300 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700'
+                        }`}
                       >
                         + {recTopic}
                       </button>
@@ -600,7 +697,7 @@ export function AiQuestionGeneratorModal({
                   <select
                     value={difficulty}
                     onChange={e => setDifficulty(e.target.value as any)}
-                    className="w-full text-xs font-semibold px-3 py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500 cursor-pointer"
+                    className="w-full text-xs font-semibold px-3 py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500 cursor-pointer shadow-2xs [color-scheme:light] dark:[color-scheme:dark] [&>option]:bg-white [&>option]:text-slate-900 [&>option]:dark:bg-slate-900 [&>option]:dark:text-slate-100"
                   >
                     <option value="Campuran">Campuran Proporsional</option>
                     <option value="Mudah">Mudah (Dasar / Pemahaman)</option>

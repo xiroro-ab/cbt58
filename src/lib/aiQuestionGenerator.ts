@@ -26,7 +26,7 @@ export const STANDARDS_OPTIONS: StandardOption[] = [
     sublabel: 'Literasi & Numerasi Berbasis Stimulus',
     badge: 'Literasi & Numerasi',
     description: 'Menyajikan stimulus teks bacaan informasional, infografis/tabel kontekstual kehidupan nyata yang menguji daya nalar kritis siswa.',
-    focusGuideline: 'WAJIB sertakan stimulus bacaan naratif/informasional atau data tabel kontekstual kehidupan nyata sebelum pertanyaan. Uji daya literasi dan numerasi kritis.',
+    focusGuideline: 'WAJIB sertakan stimulus bacaan kontekstual atau data tabel/infografis kehidupan nyata yang menguji pemahaman konsep mata pelajaran terkait sebelum pertanyaan. Uji daya literasi sains/teknologi dan numerasi kritis pada kasus nyata (BUKAN sekadar tes membaca teks sastra/kebahasaan).',
     colorScheme: {
       bg: 'bg-violet-50/50 dark:bg-violet-950/20',
       border: 'border-violet-200 dark:border-violet-800',
@@ -41,7 +41,7 @@ export const STANDARDS_OPTIONS: StandardOption[] = [
     sublabel: 'HOTS & Pemecahan Masalah Nyata',
     badge: 'HOTS & Problem Solving',
     description: 'Menekankan penalaran tingkat tinggi (Higher Order Thinking Skills), pemecahan masalah fenomena empiris, berpikir logis, dan argumentasi ilmiah.',
-    focusGuideline: 'WAJIB tekankan Higher Order Thinking Skills (HOTS level C4-C6), analisis masalah empiris dunia nyata, perumusan hipotesis, dan telaah argumentasi berbasis bukti.',
+    focusGuideline: 'WAJIB tekankan Higher Order Thinking Skills (HOTS level C4-C6), studi kasus pemecahan masalah empiris dunia nyata, logika analisis terapan, dan argumentasi ilmiah sesuai disiplin materi pelajaran terkait.',
     colorScheme: {
       bg: 'bg-fuchsia-50/50 dark:bg-fuchsia-950/20',
       border: 'border-fuchsia-200 dark:border-fuchsia-800',
@@ -173,11 +173,12 @@ export const TOPIC_RECOMMENDATIONS: Record<string, string[]> = {
     'Bhinneka Tunggal Ika dan Pencegahan Konflik Sosial'
   ],
   informatika: [
-    'Berpikir Komputasional: Algoritma, Pola, dan Abstraksi',
-    'Teknologi Informasi & Komunikasi: Perangkat Lunak Pengolah Data',
-    'Sistem Komputer: Interaksi Hardware, Software, dan Brainware',
-    'Jaringan Komputer dan Internet: Topologi & Enkripsi',
-    'Dampak Sosial Informatika: Jejak Digital & Keamanan Siber'
+    'Berpikir Komputasional: Algoritma, Pengenalan Pola, dan Abstraksi',
+    'Jaringan Komputer & Internet: Topologi Jaringan, IP Address, dan Enkripsi',
+    'Sistem Komputer: Perangkat Keras, Sistem Operasi, dan Gerbang Logika',
+    'Analisis Data & Spreadsheet: Formula, Pengolahan Tabel, dan Grafik',
+    'Algoritma & Pemrograman: Flowchart, Pseudocode, dan Logika Percabangan/Perulangan',
+    'Dampak Sosial Informatika: Jejak Digital, Etika Komputasi, dan Keamanan Siber'
   ],
   pai: [
     'Iman Kepada Kitab-Kitab Allah SWT',
@@ -210,6 +211,78 @@ export function getRecommendedTopics(subjectTitle: string): string[] {
   ];
 }
 
+export interface ExtractedSubjectInfo {
+  cleanSubject: string;
+  grade: string;
+}
+
+/**
+ * Mengekstrak nama mata pelajaran inti (disiplin ilmu) dan jenjang kelas secara bersih dari judul ujian
+ * Contoh: "ASAS GANJIL INFORMATIKA KELAS 9" -> { cleanSubject: "Informatika", grade: "Kelas 9 (IX)" }
+ */
+export function extractSubjectAndGrade(title?: string, rawClass?: string): ExtractedSubjectInfo {
+  const t = (title || '').trim();
+  const c = (rawClass || '').trim();
+
+  // 1. Deteksi Jenjang (Grade)
+  let grade = 'Kelas 9 (IX)';
+  if (/\b(9|IX|kelas\s*9|kelas\s*ix)\b/i.test(t) || /\b(9|IX)\b/i.test(c)) {
+    grade = 'Kelas 9 (IX)';
+  } else if (/\b(8|VIII|kelas\s*8|kelas\s*viii)\b/i.test(t) || /\b(8|VIII)\b/i.test(c)) {
+    grade = 'Kelas 8 (VIII)';
+  } else if (/\b(7|VII|kelas\s*7|kelas\s*vii)\b/i.test(t) || /\b(7|VII)\b/i.test(c)) {
+    grade = 'Kelas 7 (VII)';
+  }
+
+  // 2. Deteksi Mapel Standar
+  const KNOWN_SUBJECTS = [
+    { key: 'informatika', label: 'Informatika' },
+    { key: 'komputer', label: 'Informatika' },
+    { key: 'tik', label: 'Informatika' },
+    { key: 'matematika', label: 'Matematika' },
+    { key: 'mtk', label: 'Matematika' },
+    { key: 'ipa', label: 'Ilmu Pengetahuan Alam (IPA)' },
+    { key: 'sains', label: 'Ilmu Pengetahuan Alam (IPA)' },
+    { key: 'bahasa indonesia', label: 'Bahasa Indonesia' },
+    { key: 'b. indo', label: 'Bahasa Indonesia' },
+    { key: 'bahasa inggris', label: 'Bahasa Inggris' },
+    { key: 'english', label: 'Bahasa Inggris' },
+    { key: 'ips', label: 'Ilmu Pengetahuan Sosial (IPS)' },
+    { key: 'ppkn', label: 'Pendidikan Pancasila (PPKn)' },
+    { key: 'pancasila', label: 'Pendidikan Pancasila' },
+    { key: 'pkn', label: 'Pendidikan Pancasila (PPKn)' },
+    { key: 'pai', label: 'Pendidikan Agama Islam (PAI)' },
+    { key: 'agama', label: 'Pendidikan Agama Islam (PAI)' },
+    { key: 'pjok', label: 'PJOK / Penjas' },
+    { key: 'penjas', label: 'PJOK / Penjas' },
+    { key: 'seni budaya', label: 'Seni Budaya' },
+    { key: 'seni', label: 'Seni Budaya' },
+    { key: 'prakarya', label: 'Prakarya' },
+    { key: 'bk', label: 'Bimbingan Konseling (BK)' }
+  ];
+
+  const lower = t.toLowerCase();
+  for (const s of KNOWN_SUBJECTS) {
+    const reg = new RegExp('\\b' + s.key + '\\b', 'i');
+    if (reg.test(lower)) {
+      return { cleanSubject: s.label, grade };
+    }
+  }
+
+  // Jika belum cocok, bersihkan kata-kata ujian umum
+  let cleaned = t
+    .replace(/\b(ASAS|ASTS|PTS|PAS|PAT|US|UJIAN|SUMATIF|FORMATIF|HARIAN|PENILAIAN|SEMESTER|GANJIL|GENAP|TAHUN|AJARAN|\d{4}\/\d{4})\b/gi, '')
+    .replace(/\b(KELAS|ROMBEL)\s*(VII|VIII|IX|\d+)?\b/gi, '')
+    .replace(/[\.\,\-\_\:\;]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  return {
+    cleanSubject: cleaned || title || 'Informatika',
+    grade
+  };
+}
+
 export interface PromptBuildParams {
   subjectTitle: string;
   className: string;
@@ -232,6 +305,18 @@ export function buildAiQuestionPrompt(params: PromptBuildParams): string {
     customInstructions
   } = params;
 
+  // Ekstraksi disiplin ilmu murni untuk memastikan AI tidak keliru mata pelajaran
+  const extracted = extractSubjectAndGrade(subjectTitle, className);
+  const targetDiscipline = extracted.cleanSubject || subjectTitle;
+  const targetGrade = extracted.grade || className;
+
+  // Pastikan topik tidak kosong atau sekadar generik
+  let resolvedTopic = (topic || '').trim();
+  if (!resolvedTopic || resolvedTopic === 'Materi Pembelajaran Pokok' || resolvedTopic === 'Materi Pembelajaran Umum') {
+    const recommended = getRecommendedTopics(targetDiscipline);
+    resolvedTopic = recommended.slice(0, 3).join(', ');
+  }
+
   const totalCount =
     (counts.pg || 0) +
     (counts.pgk || 0) +
@@ -248,15 +333,32 @@ export function buildAiQuestionPrompt(params: PromptBuildParams): string {
     .map((s, idx) => `${idx + 1}. [${s.label}]: ${s.focusGuideline}`)
     .join('\n');
 
-  return `Anda adalah Pakar Asesmen Pendidikan Nasional dan Pembuat Soal Ujian Berbasis Komputer (CBT) SMP Indonesia yang menguasai kedalaman Kurikulum Merdeka, Standar AKM (Kemendikbud), Standar PISA (OECD), Standar TKA (Akademik/ASAS), dan Soal Harian Formatif.
+  return `Anda adalah Pakar Asesmen Pendidikan Nasional dan Pembuat Soal Ujian Berbasis Komputer (CBT) SMP Indonesia yang menguasai Kurikulum Merdeka, Standar AKM (Kemendikbud), Standar PISA (OECD), Standar TKA (Akademik/ASAS), dan Soal Harian Formatif.
+
+========================================================================
+PERINGATAN SANGAT PENTING: BATASAN DISIPLIN ILMU MATA PELAJARAN
+========================================================================
+1. MATA PELAJARAN INTI (DISIPLIN ILMU): "${targetDiscipline}"
+2. TINGKAT / JENJANG SISWA: "${targetGrade}"
+3. MATERI / TOPIK POKOK: "${resolvedTopic}"
+4. TINGKAT KESULITAN: "${difficulty}"
+5. STANDAR KEDALAMAN: "${standardNames}"
+
+ATURAN WAJIB DISIPLIN ILMU:
+- Seluruh isi butir soal, stimulus narasi, tabel data, pilihan jawaban, dan kunci jawaban WAJIB 100% MEMBAHAS MATERI BIDANG STUDI "${targetDiscipline}"!
+- DILARANG KERAS menyajikan soal pemahaman bacaan umum fiksi/sastra, tata bahasa/kebahasaan, kalimat utama, majas, atau materi di luar "${targetDiscipline}", KECUALI jika mata pelajaran yang diminta memang "Bahasa Indonesia"!
+- Jika Standar AKM (Literasi/Numerasi) atau Standar PISA dipilih:
+  Stimulus bacaan HARUS berupa studi kasus nyata, artikel sains/teknologi terapan, simulasi masalah, atau data statistik yang menguji konsep "${targetDiscipline}".
+  (Contoh jika Informatika: studi kasus serangan phishing, simulasi rute jaringan LAN, perbandingan algoritma sorting, arsitektur IoT, formula spreadsheet, dsb. Pertanyaan menguji logika komputasi dan analisis data "${targetDiscipline}", BUKAN menguji kemampuan membaca bahasa!).
+========================================================================
 
 TUGAS UTAMA:
 Buatkan ${totalCount} butir soal ujian dengan komposisi tipe dan tingkat kedalaman yang diminta oleh Guru:
-- Mata Pelajaran: ${subjectTitle}
-- Jenjang / Target Rombel: ${className}
-- Topik / Materi Pokok: ${topic}
-- Tingkat Kesulitan Kognitif: ${difficulty}
-- Standar Kedalaman Soal yang Dipilih Guru: ${standardNames}
+- Bidang Studi / Mata Pelajaran: ${targetDiscipline} (Label Ujian: ${subjectTitle})
+- Jenjang: ${targetGrade} (Target Rombel: ${className})
+- Topik / Materi Pokok: ${resolvedTopic}
+- Tingkat Kesulitan: ${difficulty}
+- Standar Kedalaman: ${standardNames}
 ${customInstructions ? `- Catatan Khusus Guru: ${customInstructions}` : ''}
 
 PEDOMAN KEDALAMAN KARAKTERISTIK SOAL (WAJIB DIIKUTI SECARA PROPORSIONAL):

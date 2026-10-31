@@ -727,13 +727,16 @@ export function AiQuestionGeneratorModal({
                 </div>
               </div>
 
-              {/* 4. MODEL GEMINI KESUKAAN & KUNCI API GURU */}
+              {/* 4. STATUS KONEKSI GEMINI & PENGATURAN MANUAL */}
               <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-800 space-y-3">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                   <div className="flex items-center gap-2 flex-wrap">
                     <Cpu className="w-4 h-4 text-violet-600 dark:text-violet-400" />
                     <span className="text-xs font-bold text-slate-900 dark:text-white">
-                      Model Gemini & Kunci API
+                      Koneksi AI Gemini
+                    </span>
+                    <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-violet-100 dark:bg-violet-950 text-violet-700 dark:text-violet-300 border border-violet-200 dark:border-violet-800">
+                      Model: {activeModelId}
                     </span>
                     {hasServerKey && !apiKey && (
                       <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 flex items-center gap-1">
@@ -755,114 +758,118 @@ export function AiQuestionGeneratorModal({
                   <button
                     type="button"
                     onClick={() => setShowApiKeyInput(!showApiKeyInput)}
-                    className="text-[11px] font-bold text-violet-600 dark:text-violet-400 hover:underline cursor-pointer"
+                    className="text-[11px] font-bold text-violet-600 dark:text-violet-400 hover:underline cursor-pointer flex items-center gap-1"
                   >
-                    {showApiKeyInput ? 'Tutup Pengaturan Model & Key' : 'Atur Model & API Key'}
+                    <Sliders className="w-3.5 h-3.5" />
+                    <span>{showApiKeyInput ? 'Tutup Pengaturan Manual' : 'Atur Model & API Key Manual'}</span>
                   </button>
                 </div>
 
-                {/* Banner Status Kunci Vercel */}
+                {/* Banner Status Kunci Vercel (Terlihat saat server terhubung) */}
                 {hasServerKey && !apiKey && (
                   <div className="p-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900/40 text-[11px] text-emerald-800 dark:text-emerald-300 flex items-center gap-2">
                     <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
                     <span>
-                      <strong>Vercel Terhubung:</strong> Server Vercel sudah terpasang API Key Gemini. Semua guru dapat langsung membuat soal tanpa perlu menginputkan kunci!
+                      <strong>Vercel Terhubung:</strong> Server Vercel sudah terpasang API Key Gemini. Semua guru dapat langsung membuat soal tanpa perlu menginputkan kunci maupun model secara manual!
                     </span>
                   </div>
                 )}
 
-                {/* Dropdown Pemilihan Model Gemini */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-                  <div>
-                    <label className="text-[11px] font-semibold text-slate-600 dark:text-slate-400 block mb-1">
-                      Pilih Versi Model Gemini AI:
-                    </label>
-                    <select
-                      value={isCustomModel ? 'custom' : selectedModel}
-                      onChange={e => {
-                        if (e.target.value === 'custom') {
-                          setIsCustomModel(true);
-                        } else {
-                          setIsCustomModel(false);
-                          setSelectedModel(e.target.value);
-                          if (typeof window !== 'undefined') {
-                            localStorage.setItem('cbt_gemini_model', e.target.value);
-                          }
-                        }
-                      }}
-                      className="w-full text-xs font-semibold px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500 cursor-pointer"
-                    >
-                      {GEMINI_MODELS.map(m => (
-                        <option key={m.id} value={m.id}>
-                          {m.name} — {m.tag}
-                        </option>
-                      ))}
-                      <option value="custom">Model Kustom Lainnya (Ketik Manual)...</option>
-                    </select>
-
-                    {isCustomModel && (
-                      <div className="mt-2">
-                        <input
-                          type="text"
-                          value={customModelName}
-                          onChange={e => setCustomModelName(e.target.value)}
-                          placeholder="Masukkan nama model (contoh: gemini-1.5-flash-8b)"
-                          className="w-full text-xs px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-violet-400 text-slate-900 dark:text-white font-mono"
-                        />
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="text-[11px] text-slate-500 dark:text-slate-400 flex flex-col justify-center">
-                    <p>
-                      <strong>Model Aktif:</strong>{' '}
-                      <span className="font-mono text-violet-600 dark:text-violet-400 font-bold">
-                        {activeModelId}
-                      </span>
-                    </p>
-                    <p className="text-[10px] text-slate-400 mt-1">
-                      {GEMINI_MODELS.find(m => m.id === selectedModel)?.description ||
-                        'Model Gemini kustom sesuai preferensi guru.'}
-                    </p>
-                  </div>
-                </div>
-
-                {/* Input Kunci API Pribadi */}
+                {/* Bagian Penginputan Model & API Key Manual (Hanya muncul saat diklik) */}
                 {showApiKeyInput && (
-                  <div className="mt-3 pt-3 border-t border-slate-200 dark:border-slate-700/80 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <label className="text-[11px] font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-                        <KeyRound className="w-3.5 h-3.5 text-amber-600" />
-                        <span>Kunci Google Gemini API Pribadi (Opsional):</span>
-                      </label>
-                      <a
-                        href="https://aistudio.google.com/app/apikey"
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-[10px] font-bold text-violet-600 dark:text-violet-400 hover:underline"
-                      >
-                        Dapatkan API Key Gratis di Google AI Studio →
-                      </a>
+                  <div className="mt-3 pt-3 border-t border-slate-200 dark:border-slate-700/80 space-y-3.5 animate-fade-in">
+                    {/* 1. Penginputan / Pemilihan Versi Model Gemini */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-[11px] font-semibold text-slate-700 dark:text-slate-300 block mb-1">
+                          Pilih Versi Model Gemini AI:
+                        </label>
+                        <select
+                          value={isCustomModel ? 'custom' : selectedModel}
+                          onChange={e => {
+                            if (e.target.value === 'custom') {
+                              setIsCustomModel(true);
+                            } else {
+                              setIsCustomModel(false);
+                              setSelectedModel(e.target.value);
+                              if (typeof window !== 'undefined') {
+                                localStorage.setItem('cbt_gemini_model', e.target.value);
+                              }
+                            }
+                          }}
+                          className="w-full text-xs font-semibold px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500 cursor-pointer"
+                        >
+                          {GEMINI_MODELS.map(m => (
+                            <option key={m.id} value={m.id}>
+                              {m.name} — {m.tag}
+                            </option>
+                          ))}
+                          <option value="custom">Model Kustom Lainnya (Ketik Manual)...</option>
+                        </select>
+
+                        {isCustomModel && (
+                          <div className="mt-2">
+                            <input
+                              type="text"
+                              value={customModelName}
+                              onChange={e => setCustomModelName(e.target.value)}
+                              placeholder="Masukkan nama model (contoh: gemini-1.5-flash-8b)"
+                              className="w-full text-xs px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-violet-400 text-slate-900 dark:text-white font-mono"
+                            />
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="text-[11px] text-slate-500 dark:text-slate-400 flex flex-col justify-center">
+                        <p>
+                          <strong>Model yang Dipilih:</strong>{' '}
+                          <span className="font-mono text-violet-600 dark:text-violet-400 font-bold">
+                            {activeModelId}
+                          </span>
+                        </p>
+                        <p className="text-[10px] text-slate-400 mt-1">
+                          {GEMINI_MODELS.find(m => m.id === selectedModel)?.description ||
+                            'Model Gemini kustom sesuai preferensi guru.'}
+                        </p>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="password"
-                        value={apiKey}
-                        onChange={e => setApiKey(e.target.value)}
-                        placeholder="AIzaSy... (Kosongkan jika menggunakan API Key sekolah / salin prompt)"
-                        className="flex-1 text-xs px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white font-mono"
-                      />
-                      <button
-                        type="button"
-                        onClick={handleSaveGeminiSettings}
-                        className="px-3.5 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-bold text-xs transition cursor-pointer"
-                      >
-                        Simpan Pengaturan
-                      </button>
+
+                    {/* 2. Penginputan Kunci API Pribadi */}
+                    <div className="space-y-2 pt-1">
+                      <div className="flex items-center justify-between">
+                        <label className="text-[11px] font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                          <KeyRound className="w-3.5 h-3.5 text-amber-600" />
+                          <span>Kunci Google Gemini API Pribadi (Opsional):</span>
+                        </label>
+                        <a
+                          href="https://aistudio.google.com/app/apikey"
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-[10px] font-bold text-violet-600 dark:text-violet-400 hover:underline"
+                        >
+                          Dapatkan API Key Gratis di Google AI Studio →
+                        </a>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="password"
+                          value={apiKey}
+                          onChange={e => setApiKey(e.target.value)}
+                          placeholder="AIzaSy... (Kosongkan jika menggunakan API Key Vercel sekolah)"
+                          className="flex-1 text-xs px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white font-mono"
+                        />
+                        <button
+                          type="button"
+                          onClick={handleSaveGeminiSettings}
+                          className="px-3.5 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-bold text-xs transition cursor-pointer shrink-0"
+                        >
+                          Simpan Pengaturan
+                        </button>
+                      </div>
+                      <p className="text-[10px] text-slate-400 leading-relaxed">
+                        💡 <strong>Catatan:</strong> Jika Anda mengosongkan kolom kunci di atas, sistem otomatis menggunakan kunci server Vercel sekolah.
+                      </p>
                     </div>
-                    <p className="text-[10px] text-slate-400 leading-relaxed">
-                      💡 <strong>Setup di Vercel:</strong> Pasang variabel <code className="font-mono bg-slate-200 dark:bg-slate-700 px-1 py-0.5 rounded text-violet-700 dark:text-violet-300">GEMINI_API_KEY</code> di Vercel Dashboard (Settings → Environment Variables). Setelah itu, seluruh guru yang tidak memasukkan API key pribadi akan otomatis menggunakan kuota server sekolah!
-                    </p>
                   </div>
                 )}
               </div>

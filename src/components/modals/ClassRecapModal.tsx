@@ -2,7 +2,7 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { ExamResult, Subject, Student, SchoolSettings, Teacher } from '@/types/cbt';
-import { resolveStudentSingleClass } from '@/lib/rosterStudents';
+import { resolveStudentSingleClass, isClassInGrade } from '@/lib/rosterStudents';
 import { TTESignatureSeal } from '@/components/common/TTESignatureSeal';
 import { 
   Printer, 
@@ -30,6 +30,29 @@ interface ClassRecapModalProps {
   initialSubjectId?: string;
 }
 
+// Helper mengecek apakah suatu rombel (misal 'VIII.1') termasuk dalam sasaran rombel mapel ini
+const isClassMatchSubject = (className: string, subjectClassStr?: string) => {
+  if (!subjectClassStr || subjectClassStr.trim() === 'Semua Kelas') return true;
+  const parts = subjectClassStr.split(',').map(p => p.trim()).filter(Boolean);
+  if (parts.length === 0) return true;
+  
+  if (parts.some(p => p.toLowerCase() === className.toLowerCase())) return true;
+  
+  return parts.some(p => {
+    const pUpper = p.toUpperCase();
+    if ((pUpper.includes('VII') && !pUpper.includes('VIII')) || pUpper.includes('7')) {
+      return isClassInGrade(className, 'VII');
+    }
+    if (pUpper.includes('VIII') || pUpper.includes('8')) {
+      return isClassInGrade(className, 'VIII');
+    }
+    if (pUpper.includes('IX') || pUpper.includes('9')) {
+      return isClassInGrade(className, 'IX');
+    }
+    return false;
+  });
+};
+
 export const ClassRecapModal: React.FC<ClassRecapModalProps> = ({
   isOpen,
   onClose,
@@ -41,7 +64,28 @@ export const ClassRecapModal: React.FC<ClassRecapModalProps> = ({
   initialClass = '',
   initialSubjectId = ''
 }) => {
-  // Daftar Rombel Kelas yang Tersedia (Diurutkan dari VII.1 sampai IX.4)
+  // Mapel Terpilih (Sesuai role akun login guru)
+  const [selectedSubjectId, setSelectedSubjectId] = useState<string>(() => {
+    if (initialSubjectId && allSubjects.some(s => s.id === initialSubjectId)) {
+      return initialSubjectId;
+    }
+    return allSubjects[0]?.id || '';
+  });
+
+  const activeSubject = useMemo(() => {
+    return allSubjects.find(s => s.id === selectedSubjectId) || allSubjects[0] || {
+      id: 'sub-default',
+      title: 'Asesmen Sumatif Tengah Semester',
+      className: 'Semua Kelas',
+      durationMinutes: 60,
+      violationLimit: 3,
+      token: 'CBT2026',
+      isActive: true,
+      scoringRules: { 'Pilihan Ganda': 1, 'Pilihan Ganda Kompleks': 2, 'Benar/Salah': 2, 'Menjodohkan': 2, 'Isian Singkat': 2, 'Esai': 4 }
+    };
+  }, [allSubjects, selectedSubjectId]);
+
+  // Daftar Seluruh Rombel Sekolah (Diurutkan dari VII.1 sampai IX.4)
   const availableClasses = useMemo(() => {
     const set = new Set<string>();
     students.forEach(s => {
@@ -55,25 +99,49 @@ export const ClassRecapModal: React.FC<ClassRecapModalProps> = ({
     return list.sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
   }, [students, results]);
 
-  // State Pilihan Rombel Kelas & Mapel
+  // Pemisahan Rombel: Sasaran Mapel Terpilih vs Rombel Lainnya
+  const { targetClasses, otherClasses } = useMemo(() => {
+    if (!activeSubject?.className || activeSubject.className.trim() === 'Semua Kelas') {
+      return { targetClasses: availableClasses, otherClasses: [] };
+    }
+    const target: string[] = [];
+    const other: string[] = [];
+    availableClasses.forEach(cls => {
+      if (isClassMatchSubject(cls, activeSubject.className)) {
+        target.push(cls);
+      } else {
+        other.push(cls);
+      }
+    });
+    return {
+      targetClasses: target.length > 0 ? target : availableClasses,
+      otherClasses: target.length > 0 ? other : []
+    };
+  }, [availableClasses, activeSubject]);
+
+  // State Pilihan Rombel Kelas & TTE
   const [selectedClass, setSelectedClass] = useState<string>('VII.1');
-  const [selectedSubjectId, setSelectedSubjectId] = useState<string>('');
   const [showTTE, setShowTTE] = useState<boolean>(true);
 
-  // Inisialisasi Pilihan Kelas & Mapel Saat Modal Terbuka
+  // Inisialisasi Pilihan Mapel Saat Modal Terbuka
   useEffect(() => {
-    if (initialClass && availableClasses.includes(initialClass)) {
-      setSelectedClass(initialClass);
-    } else if (availableClasses.length > 0 && !availableClasses.includes(selectedClass)) {
-      setSelectedClass(availableClasses[0]);
-    }
-
     if (initialSubjectId && allSubjects.some(s => s.id === initialSubjectId)) {
       setSelectedSubjectId(initialSubjectId);
     } else if (allSubjects.length > 0 && !allSubjects.some(s => s.id === selectedSubjectId)) {
       setSelectedSubjectId(allSubjects[0].id);
     }
-  }, [isOpen, initialClass, initialSubjectId, availableClasses, allSubjects]);
+  }, [isOpen, initialSubjectId, allSubjects]);
+
+  // Otomatis memilih rombel sasaran yang valid saat mapel dipilih / modal dibuka
+  useEffect(() => {
+    if (initialClass && targetClasses.includes(initialClass)) {
+      setSelectedClass(initialClass);
+    } else if (targetClasses.length > 0 && !targetClasses.includes(selectedClass)) {
+      setSelectedClass(targetClasses[0]);
+    } else if (availableClasses.length > 0 && !availableClasses.includes(selectedClass)) {
+      setSelectedClass(availableClasses[0]);
+    }
+  }, [isOpen, initialClass, targetClasses, availableClasses]);
 
   if (!isOpen) return null;
 
@@ -97,18 +165,6 @@ export const ClassRecapModal: React.FC<ClassRecapModalProps> = ({
     isolateTeacherDossier: schoolSettings?.isolateTeacherDossier !== false
   };
 
-  // Mapel Terpilih
-  const activeSubject = allSubjects.find(s => s.id === selectedSubjectId) || allSubjects[0] || {
-    id: 'sub-default',
-    title: 'Asesmen Sumatif Tengah Semester',
-    className: selectedClass,
-    durationMinutes: 60,
-    violationLimit: 3,
-    token: 'CBT2026',
-    isActive: true,
-    scoringRules: { 'Pilihan Ganda': 1, 'Pilihan Ganda Kompleks': 2, 'Benar/Salah': 2, 'Menjodohkan': 2, 'Isian Singkat': 2, 'Esai': 4 }
-  };
-
   // Kumpulan Seluruh Siswa di Rombel Kelas Terpilih Beserta Status Hasil Ujiannya
   const classRosterWithResults = useMemo(() => {
     if (!selectedClass) return [];
@@ -118,13 +174,13 @@ export const ClassRecapModal: React.FC<ClassRecapModalProps> = ({
       .filter(s => resolveStudentSingleClass(s.name, s.className, students) === selectedClass)
       .sort((a, b) => a.name.localeCompare(b.name));
 
-    // 2. Petakan hasil ujian untuk setiap siswa
+    // 2. Petakan hasil ujian untuk setiap siswa (Ketat terisolasi per mapel)
     const rows = rosterInClass.map(std => {
       const stdNameLower = std.name.toLowerCase().trim();
       const r = results.find(item => {
         if (!item || !item.studentName) return false;
         const nameMatch = item.studentName.toLowerCase().trim() === stdNameLower;
-        const subMatch = !selectedSubjectId || selectedSubjectId === 'ALL' || item.subjectId === selectedSubjectId;
+        const subMatch = item.subjectId === activeSubject.id;
         return nameMatch && subMatch;
       });
 
@@ -163,7 +219,7 @@ export const ClassRecapModal: React.FC<ClassRecapModalProps> = ({
       const resolvedCls = resolveStudentSingleClass(r.studentName, r.className, students);
       if (resolvedCls === selectedClass) {
         const alreadyExists = rows.some(item => item.name.toLowerCase().trim() === r.studentName.toLowerCase().trim());
-        if (!alreadyExists && (!selectedSubjectId || selectedSubjectId === 'ALL' || r.subjectId === selectedSubjectId)) {
+        if (!alreadyExists && r.subjectId === activeSubject.id) {
           const score = Number(r.score || 0);
           rows.push({
             nisn: '-',
@@ -183,7 +239,7 @@ export const ClassRecapModal: React.FC<ClassRecapModalProps> = ({
     });
 
     return rows.sort((a, b) => a.name.localeCompare(b.name));
-  }, [selectedClass, selectedSubjectId, students, results]);
+  }, [selectedClass, activeSubject.id, students, results]);
 
   // Statistik Kelas Rombel Terpilih
   const classStats = useMemo(() => {
@@ -293,14 +349,29 @@ export const ClassRecapModal: React.FC<ClassRecapModalProps> = ({
                 onChange={e => setSelectedClass(e.target.value)}
                 className="bg-transparent font-bold text-slate-800 dark:text-slate-100 focus:outline-none cursor-pointer [color-scheme:light] dark:[color-scheme:dark]"
               >
-                {availableClasses.map(cls => (
-                  <option key={cls} value={cls}>Rombel Kelas {cls}</option>
-                ))}
+                {otherClasses.length === 0 ? (
+                  targetClasses.map(cls => (
+                    <option key={cls} value={cls}>Rombel Kelas {cls}</option>
+                  ))
+                ) : (
+                  <>
+                    <optgroup label={`Sasaran Mapel (${activeSubject.className})`}>
+                      {targetClasses.map(cls => (
+                        <option key={cls} value={cls}>Rombel Kelas {cls}</option>
+                      ))}
+                    </optgroup>
+                    <optgroup label="Rombel Lainnya">
+                      {otherClasses.map(cls => (
+                        <option key={cls} value={cls}>Rombel Kelas {cls}</option>
+                      ))}
+                    </optgroup>
+                  </>
+                )}
               </select>
             </div>
 
-            {/* Pemilih Paket Mata Pelajaran */}
-            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs shadow-2xs max-w-[200px] sm:max-w-[240px]">
+            {/* Pemilih Paket Mata Pelajaran (Khusus Mapel Milik Guru Ini) */}
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs shadow-2xs max-w-[200px] sm:max-w-[260px]">
               <BookOpen className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
               <select
                 value={selectedSubjectId}
@@ -308,7 +379,9 @@ export const ClassRecapModal: React.FC<ClassRecapModalProps> = ({
                 className="bg-transparent font-bold text-slate-800 dark:text-slate-100 focus:outline-none cursor-pointer truncate [color-scheme:light] dark:[color-scheme:dark]"
               >
                 {allSubjects.map(s => (
-                  <option key={s.id} value={s.id}>{s.title}</option>
+                  <option key={s.id} value={s.id}>
+                    {s.title} ({s.className})
+                  </option>
                 ))}
               </select>
             </div>

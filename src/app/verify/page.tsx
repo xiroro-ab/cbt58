@@ -31,27 +31,47 @@ function VerifyDetails() {
   });
 
   const [verifyTime, setVerifyTime] = useState<string>('');
+  const [settings, setSettings] = useState<any>(null);
 
   useEffect(() => {
     setVerifyTime(new Date().toLocaleString('id-ID', {
       dateStyle: 'full',
       timeStyle: 'medium'
     }));
+
+    try {
+      const stored = localStorage.getItem('cbt_school_settings');
+      if (stored) {
+        setSettings(JSON.parse(stored));
+      }
+    } catch {}
   }, []);
 
   return (
     <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col items-center justify-center p-4 sm:p-6 print:bg-white print:text-black print:p-0">
       <div className="w-full max-w-xl bg-slate-800/90 backdrop-blur-md border border-slate-700/80 rounded-3xl shadow-2xl p-6 sm:p-8 space-y-6 print:border-none print:shadow-none print:bg-white print:p-4">
         
-        {/* KOP / Header Instansi */}
+        {/* KOP / Header Instansi dengan Dual Logo Resmi */}
         <div className="text-center space-y-2 pb-5 border-b border-slate-700/60 print:border-slate-300">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 mb-1">
-            <ShieldCheck className="w-8 h-8 text-emerald-400" />
+          <div className="flex items-center justify-center gap-3 sm:gap-4 mb-2">
+            <img
+              src={settings?.logoLeft || '/logo-dinas.png'}
+              alt="Logo Dinas"
+              className="w-12 h-12 sm:w-14 sm:h-14 object-contain shrink-0 drop-shadow-sm"
+            />
+            <div className="inline-flex items-center justify-center w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 shrink-0">
+              <ShieldCheck className="w-7 h-7 sm:w-8 sm:h-8 text-emerald-400" />
+            </div>
+            <img
+              src={settings?.logoRight || '/logo-sekolah.png'}
+              alt="Logo Sekolah"
+              className="w-12 h-12 sm:w-14 sm:h-14 object-contain shrink-0 drop-shadow-sm"
+            />
           </div>
-          <h1 className="text-lg sm:text-xl font-bold tracking-tight text-white print:text-black uppercase">
+          <h1 className="text-base sm:text-xl font-black tracking-tight text-white print:text-black uppercase">
             {school}
           </h1>
-          <p className="text-xs text-slate-400 print:text-slate-600 font-medium tracking-wider uppercase">
+          <p className="text-[10px] sm:text-xs text-slate-400 print:text-slate-600 font-medium tracking-wider uppercase">
             Layanan Verifikasi Dokumen & Tanda Tangan Elektronik (TTE)
           </p>
         </div>
@@ -108,9 +128,23 @@ function VerifyDetails() {
                 <UserCheck className="w-3.5 h-3.5 text-emerald-400" />
                 <span>Pejabat Penandatangan:</span>
               </div>
-              <p className="font-bold text-white print:text-black">
-                {signer}
-              </p>
+              <div className="flex items-center gap-2.5 pt-0.5">
+                {title.toLowerCase().includes('kepala') && settings?.principalPhoto && (
+                  <img
+                    src={settings.principalPhoto}
+                    alt="Foto Resmi Kepala Sekolah"
+                    className="w-9 h-11 rounded-lg object-cover border border-emerald-500/40 shrink-0 shadow-xs"
+                  />
+                )}
+                <div>
+                  <p className="font-bold text-white print:text-black leading-snug">
+                    {signer}
+                  </p>
+                  <span className="text-[10px] text-emerald-400 print:text-emerald-700 font-semibold block">
+                    ✓ Identitas Terotentikasi
+                  </span>
+                </div>
+              </div>
             </div>
 
             <div className="space-y-1 p-2.5 rounded-xl bg-slate-800/40 print:bg-white border border-slate-700/40 print:border-slate-200">

@@ -164,17 +164,45 @@ export const CertificateModal: React.FC<CertificateModalProps> = ({
             </div>
           ) : (
             <div className="max-w-3xl mx-auto bg-white border-4 sm:border-8 border-double border-slate-300 rounded-2xl sm:rounded-3xl p-5 sm:p-8 md:p-12 text-slate-900 shadow-md relative print:shadow-none print:border-4 print:max-w-none print:p-6">
-              {/* Kop Surat Resmi */}
-              <div className="text-center pb-4 sm:pb-6 border-b-2 border-slate-900 space-y-0.5 sm:space-y-1">
-                <p className="text-[10px] sm:text-xs tracking-widest font-bold uppercase text-slate-600">
-                  PEMERINTAH KOTA PALEMBANG • DINAS PENDIDIKAN
-                </p>
-                <h2 className="text-base sm:text-xl md:text-2xl font-black text-slate-900 tracking-wide uppercase">
-                  {schoolName}
-                </h2>
-                <p className="text-[9px] sm:text-[11px] text-slate-500">
-                  Jl. Pangeran Ratu, Jakabaring, Kec. Seberang Ulu I, Kota Palembang, Sumatera Selatan • Telepon: (0711) 351234
-                </p>
+              {/* Kop Surat Resmi Dual Logo */}
+              <div className="border-b-2 sm:border-b-4 border-double border-slate-900 pb-3 sm:pb-4 mb-3 sm:mb-5 text-center">
+                <div className="flex items-center justify-between gap-3 sm:gap-4">
+                  <div className="w-14 h-14 sm:w-16 sm:h-16 flex-shrink-0 flex items-center justify-center">
+                    <img
+                      src={schoolSettings?.logoLeft || '/logo-dinas.png'}
+                      alt="Logo Dinas"
+                      className="max-h-14 sm:max-h-16 max-w-14 sm:max-w-16 object-contain"
+                    />
+                  </div>
+
+                  <div className="flex-1 space-y-0.5 sm:space-y-1">
+                    <p className="text-[9px] sm:text-xs tracking-widest font-bold uppercase text-slate-700 leading-tight">
+                      {schoolSettings?.institution1 || 'PEMERINTAH KOTA PALEMBANG'}
+                    </p>
+                    <p className="text-[9px] sm:text-xs tracking-widest font-bold uppercase text-slate-700 leading-tight">
+                      {schoolSettings?.institution2 || 'DINAS PENDIDIKAN'}
+                    </p>
+                    <h2 className="text-sm sm:text-lg md:text-xl font-black text-slate-900 tracking-wide uppercase leading-tight">
+                      {schoolName}
+                    </h2>
+                    <p className="text-[8px] sm:text-[10px] text-slate-600 leading-tight">
+                      {schoolSettings?.schoolAddress || 'Jln. Komering II, Kelurahan Demang Lebar Daun, Kecamatan Ilir Barat I, Kota Palembang, Sumatera Selatan 30151'}
+                    </p>
+                    {schoolSettings?.schoolContact && (
+                      <p className="text-[7.5px] sm:text-[9px] text-slate-500 font-mono">
+                        {schoolSettings.schoolContact}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="w-14 h-14 sm:w-16 sm:h-16 flex-shrink-0 flex items-center justify-center">
+                    <img
+                      src={schoolSettings?.logoRight || '/logo-sekolah.png'}
+                      alt="Logo Sekolah"
+                      className="max-h-14 sm:max-h-16 max-w-14 sm:max-w-16 object-contain"
+                    />
+                  </div>
+                </div>
               </div>
 
               {/* Judul Piagam */}

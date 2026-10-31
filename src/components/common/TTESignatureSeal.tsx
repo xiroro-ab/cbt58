@@ -116,9 +116,17 @@ export const TTESignatureSeal: React.FC<TTESignatureSealProps> = ({
                 *{fullDocId}*
               </span>
               <div className="flex items-center gap-1 mt-0.5">
-                <ShieldCheck className="w-2.5 h-2.5 text-emerald-600" />
-                <span className="text-[7.5px] font-sans font-bold text-emerald-700 uppercase tracking-wider">
-                  TTE Barcode Sah • SMPN 58
+                {settings?.logoRight ? (
+                  <img
+                    src={settings.logoRight}
+                    alt="Logo"
+                    className="w-3 h-3 object-contain shrink-0"
+                  />
+                ) : (
+                  <ShieldCheck className="w-2.5 h-2.5 text-emerald-600 shrink-0" />
+                )}
+                <span className="text-[7.5px] font-sans font-bold text-emerald-700 uppercase tracking-wider truncate max-w-[140px]">
+                  TTE Barcode Sah • {settings?.schoolName ? settings.schoolName.replace('SMP NEGERI ', 'SMPN ') : 'SMPN 58'}
                 </span>
               </div>
               <span className="text-[7px] text-slate-400 font-sans print:hidden">
@@ -156,9 +164,17 @@ export const TTESignatureSeal: React.FC<TTESignatureSealProps> = ({
               </div>
 
               <div className="flex items-center gap-1">
-                <ShieldCheck className="w-2.5 h-2.5 text-emerald-600" />
-                <span className="text-[7.5px] font-sans font-bold text-emerald-700 uppercase tracking-wider">
-                  TTE Sah Terverifikasi
+                {settings?.logoRight ? (
+                  <img
+                    src={settings.logoRight}
+                    alt="Logo"
+                    className="w-3 h-3 object-contain shrink-0"
+                  />
+                ) : (
+                  <ShieldCheck className="w-2.5 h-2.5 text-emerald-600 shrink-0" />
+                )}
+                <span className="text-[7.5px] font-sans font-bold text-emerald-700 uppercase tracking-wider truncate max-w-[120px]">
+                  TTE Sah • {settings?.schoolName ? settings.schoolName.replace('SMP NEGERI ', 'SMPN ') : 'SMPN 58'}
                 </span>
               </div>
               

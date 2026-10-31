@@ -106,14 +106,31 @@ export interface Teacher {
 }
 
 export interface SchoolSettings {
+  // Identitas Kop Surat Resmi Sekolah
+  institution1?: string;       // Default: 'PEMERINTAH KOTA PALEMBANG'
+  institution2?: string;       // Default: 'DINAS PENDIDIKAN'
+  schoolName: string;          // Default: 'SMP NEGERI 58 PALEMBANG'
+  schoolAddress?: string;      // Alamat jalan lengkap
+  schoolContact?: string;      // Website, telp, email
+  logoLeft?: string;           // Base64 / URL logo kiri (Dinas / Pemda)
+  logoRight?: string;          // Base64 / URL logo kanan (Sekolah / Madrasah)
+
+  // Data & Foto Kepala Sekolah
   principalName: string;
   principalNip: string;
+  principalPhoto?: string;     // Base64 / URL foto formal kepala sekolah
+
+  // Data Default Guru / Proktor
   teacherName: string;
   teacherNip: string;
-  schoolName: string;
+
+  // Wilayah & Pengaturan TTE
   city: string;
   enableTTE: boolean;
   tteType: 'qrcode' | 'barcode';
+
+  // Privasi Multi-Guru: Isolasi Lembar Dossier berdasarkan akun login
+  isolateTeacherDossier?: boolean;
 }
 
 export interface QuestionScoreDetail {

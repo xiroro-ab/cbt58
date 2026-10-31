@@ -162,14 +162,22 @@ export default function Home() {
 
   // State Pengaturan Satuan Pendidikan, Pejabat & TTE Barcode
   const defaultSchoolSettings: SchoolSettings = {
+    institution1: 'PEMERINTAH KOTA PALEMBANG',
+    institution2: 'DINAS PENDIDIKAN',
+    schoolName: 'SMP NEGERI 58 PALEMBANG',
+    schoolAddress: 'Jln. Komering II, Kelurahan Demang Lebar Daun, Kecamatan Ilir Barat I, Kota Palembang, Sumatera Selatan 30151',
+    schoolContact: 'Website: https://smpn58.vercel.app/',
+    logoLeft: '/logo-dinas.png',
+    logoRight: '/logo-sekolah.png',
     principalName: 'Hj. Rohana, S.Pd., M.Si.',
     principalNip: '19680512 199412 2 001',
+    principalPhoto: '',
     teacherName: 'Hendra Wijaya, S.Pd',
     teacherNip: '19870420 201201 1 004',
-    schoolName: 'SMP NEGERI 58 PALEMBANG',
     city: 'Palembang',
     enableTTE: true,
-    tteType: 'qrcode'
+    tteType: 'qrcode',
+    isolateTeacherDossier: true
   };
   const [schoolSettings, setSchoolSettings] = useState<SchoolSettings>(defaultSchoolSettings);
 
@@ -178,7 +186,14 @@ export default function Home() {
       try {
         const stored = localStorage.getItem('cbt_school_settings');
         if (stored) {
-          setSchoolSettings(JSON.parse(stored));
+          const parsed = JSON.parse(stored);
+          setSchoolSettings({
+            ...defaultSchoolSettings,
+            ...parsed,
+            // Pastikan logo default terisi jika belum ada
+            logoLeft: parsed.logoLeft || '/logo-dinas.png',
+            logoRight: parsed.logoRight || '/logo-sekolah.png'
+          });
         }
       } catch {}
     }

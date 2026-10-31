@@ -202,8 +202,13 @@ CREATE TABLE IF NOT EXISTS students (
 );
 
 ALTER TABLE students ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Allow public all students" ON students FOR ALL USING (true);
-ALTER PUBLICATION supabase_realtime ADD TABLE students;
+DROP POLICY IF EXISTS "Allow public all students" ON students;
+CREATE POLICY "Allow public all students" ON students FOR ALL USING (true) WITH CHECK (true);
+
+DO $$ BEGIN
+    ALTER PUBLICATION supabase_realtime ADD TABLE students;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- ===============================================================
 -- 9. TABEL NOTIFIKASI EVENT SISTEM (Lonceng 🔔)
@@ -240,14 +245,23 @@ CREATE TABLE IF NOT EXISTS exam_messages (
 
 -- AKTIFKAN KEAMANAN RLS (Public read-write untuk aplikasi CBT)
 ALTER TABLE exam_notifications ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Allow public all notifications" ON exam_notifications FOR ALL USING (true);
+DROP POLICY IF EXISTS "Allow public all notifications" ON exam_notifications;
+CREATE POLICY "Allow public all notifications" ON exam_notifications FOR ALL USING (true) WITH CHECK (true);
 
 ALTER TABLE exam_messages ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Allow public all messages" ON exam_messages FOR ALL USING (true);
+DROP POLICY IF EXISTS "Allow public all messages" ON exam_messages;
+CREATE POLICY "Allow public all messages" ON exam_messages FOR ALL USING (true) WITH CHECK (true);
 
 -- AKTIFKAN SUPABASE REALTIME
-ALTER PUBLICATION supabase_realtime ADD TABLE exam_notifications;
-ALTER PUBLICATION supabase_realtime ADD TABLE exam_messages;
+DO $$ BEGIN
+    ALTER PUBLICATION supabase_realtime ADD TABLE exam_notifications;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$ BEGIN
+    ALTER PUBLICATION supabase_realtime ADD TABLE exam_messages;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- CONTOH DATA AWAL NOTIFIKASI & PESAN
 INSERT INTO exam_notifications (subject_id, student_name, type, title, message, is_read)

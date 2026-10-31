@@ -27,6 +27,7 @@ import {
   saveOrUpdateExamResult,
   deleteExamResult,
   fetchExamResults,
+  fetchAllExamResults,
   updateSubjectInSupabase,
   insertSubject,
   deleteSubject,
@@ -285,8 +286,14 @@ export default function Home() {
             setQuestions(qList || []);
           }
 
-          const resList = await fetchExamResults(activeSub.id);
-          setResults(resList || []);
+          // Muat seluruh hasil ujian dari semua mapel agar Database Nilai & Dashboard lengkap
+          const allResList = await fetchAllExamResults();
+          if (allResList && allResList.length > 0) {
+            setResults(allResList);
+          } else {
+            const resList = await fetchExamResults(activeSub.id);
+            setResults(resList || []);
+          }
         } else {
           activeSub = {
             id: '',
@@ -373,8 +380,8 @@ export default function Home() {
   useEffect(() => {
     if (!subject?.id) return;
 
-    // Realtime hasil ujian (Mendukung INSERT, UPDATE, dan DELETE seketika)
-    const unsubResults = subscribeToExamResults(subject.id, changePayload => {
+    // Realtime hasil ujian global (Mendukung INSERT, UPDATE, dan DELETE seketika untuk semua mapel)
+    const unsubResults = subscribeToExamResults('', changePayload => {
       if (changePayload.action === 'DELETE') {
         const cleanTarget = changePayload.studentName ? changePayload.studentName.toLowerCase().trim() : '';
         setResults(prev => prev.filter(r =>
@@ -433,7 +440,7 @@ export default function Home() {
     let isMounted = true;
     const interval = setInterval(async () => {
       try {
-        const cloudResults = await fetchExamResults(subject.id);
+        const cloudResults = await fetchAllExamResults();
         if (!isMounted || !cloudResults) return;
 
         setResults(prev => {
@@ -452,7 +459,7 @@ export default function Home() {
       isMounted = false;
       clearInterval(interval);
     };
-  }, [viewMode, subject?.id]);
+  }, [viewMode]);
 
   const handleUpdateSubject = async (updated: Subject) => {
     setSubject(updated);
@@ -663,7 +670,10 @@ export default function Home() {
           const qList = await fetchQuestionsBySubject(matchedSub.id);
           setQuestions(qList || []);
           const resList = await fetchExamResults(matchedSub.id);
-          setResults(resList || []);
+          setResults(prev => {
+            const otherResults = prev.filter(r => r.subjectId && r.subjectId !== matchedSub.id);
+            return [...(resList || []), ...otherResults];
+          });
         }
       }
     } catch (err) {
@@ -699,7 +709,10 @@ export default function Home() {
           const qList = await fetchQuestionsBySubject(matchedSub.id);
           setQuestions(qList || []);
           const resList = await fetchExamResults(matchedSub.id);
-          setResults(resList || []);
+          setResults(prev => {
+            const otherResults = prev.filter(r => r.subjectId && r.subjectId !== matchedSub.id);
+            return [...(resList || []), ...otherResults];
+          });
         } catch (err) {
           console.warn('Gagal fetch data assignment dari Supabase:', err);
         }
@@ -1680,7 +1693,10 @@ export default function Home() {
                     return [...otherQuestions, ...(qList || [])];
                   });
                   const resList = await fetchExamResults(selectedSub.id);
-                  setResults(resList || []);
+                  setResults(prev => {
+                    const otherResults = prev.filter(r => r.subjectId && r.subjectId !== selectedSub.id);
+                    return [...(resList || []), ...otherResults];
+                  });
                 } catch (err) {
                   console.warn('Gagal memuat soal/hasil untuk mapel:', err);
                 }

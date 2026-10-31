@@ -439,18 +439,31 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
     reader.readAsDataURL(file);
   };
 
+    // Filter Mata Pelajaran khusus Tabel Database Nilai
+  const [resultsSubjectFilter, setResultsSubjectFilter] = useState<string>('ALL');
+
   // Live Filtering dari Search Bar dengan Deduplikasi Ketat per Nama Siswa
   const filteredResults = useMemo(() => {
-    // 1. Deduplikasi mutlak: 1 nama siswa hanya boleh punya 1 baris hasil ujian
+    const subTitleMap = new Map<string, string>();
+    (allSubjects || []).forEach(s => subTitleMap.set(s.id, s.title));
+
+    // 1. Deduplikasi mutlak: 1 nama siswa hanya boleh punya 1 baris hasil ujian per mapel
     const dedupedMap = new Map<string, ExamResult>();
     for (const r of results) {
       if (!r || !r.studentName) continue;
       const key = `${r.subjectId}_${r.studentName.toLowerCase().trim()}`;
       if (!dedupedMap.has(key)) {
-        dedupedMap.set(key, r);
+        dedupedMap.set(key, {
+          ...r,
+          subjectTitle: r.subjectTitle || subTitleMap.get(r.subjectId) || (r.subjectId === subject.id ? subject.title : '')
+        });
       }
     }
-    const cleanResults = Array.from(dedupedMap.values());
+    let cleanResults = Array.from(dedupedMap.values());
+
+    if (resultsSubjectFilter !== 'ALL') {
+      cleanResults = cleanResults.filter(r => r.subjectId === resultsSubjectFilter);
+    }
 
     if (!searchQuery.trim()) return cleanResults;
     const q = searchQuery.toLowerCase();
@@ -458,9 +471,10 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
       r =>
         r.studentName.toLowerCase().includes(q) ||
         r.className.toLowerCase().includes(q) ||
+        (r.subjectTitle && r.subjectTitle.toLowerCase().includes(q)) ||
         String(r.score).includes(q)
     );
-  }, [results, searchQuery]);
+  }, [results, searchQuery, resultsSubjectFilter, allSubjects, subject]);
 
   // Helper tampilan nama mapel rapi tanpa prefix berlebih
   const formatSubjectTitle = (title: string) => {
@@ -1314,7 +1328,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
     return selectedList.map(s => {
       const cleanName = formatSubjectTitle(s.title);
       const isCurrentActive = s.id === subject.id;
-      const subResults = isCurrentActive ? results : results.filter(r => r.subjectId === s.id);
+      const subResults = results.filter(r => r.subjectId === s.id);
 
       // Hitung rata-rata nilai riil siswa untuk mata pelajaran ini
       const avgScore = subResults.length > 0
@@ -1629,11 +1643,12 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
 
   // Real CSV Export Function
   const exportResultsToCSV = () => {
-    if (results.length === 0) return;
-    const headers = ['Nama Siswa', 'Kelas', 'Skor Akhir (%)', 'Poin Diperoleh', 'Poin Maksimal', 'Jumlah Pelanggaran', 'Waktu Selesai'];
-    const rows = results.map(r => [
+    if (filteredResults.length === 0) return;
+    const headers = ['Nama Siswa', 'Kelas', 'Mata Pelajaran', 'Skor Akhir (%)', 'Poin Diperoleh', 'Poin Maksimal', 'Jumlah Pelanggaran', 'Waktu Selesai'];
+    const rows = filteredResults.map(r => [
       `"${r.studentName}"`,
       `"${r.className}"`,
+      `"${r.subjectTitle || ''}"`,
       r.score,
       r.totalEarned,
       r.totalMax,
@@ -3210,6 +3225,26 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
             </div>
 
             <div className="flex items-center gap-2 flex-wrap">
+              {/* Filter Paket Ujian / Mapel */}
+              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs shadow-2xs">
+                <Filter className="w-3.5 h-3.5 text-violet-600 dark:text-violet-400 shrink-0" />
+                <select
+                  value={resultsSubjectFilter}
+                  onChange={e => setResultsSubjectFilter(e.target.value)}
+                  className="bg-transparent text-xs font-semibold text-slate-700 dark:text-slate-200 focus:outline-none cursor-pointer pr-1"
+                >
+                  <option value="ALL">Semua Paket Ujian ({results.length} Siswa)</option>
+                  {(allSubjects || []).map(s => {
+                    const count = results.filter(r => r.subjectId === s.id).length;
+                    return (
+                      <option key={s.id} value={s.id}>
+                        {s.title} ({count} Siswa)
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
+
               {/* Tombol Cetak Sertifikat Aktif */}
               <button
                 onClick={() => {
@@ -3305,10 +3340,22 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                           />
                         </td>
                         <td className="py-3.5 px-4 font-semibold flex items-center gap-2.5">
-                          <div className="w-7 h-7 rounded-full bg-gradient-to-tr from-violet-500 to-indigo-500 text-white font-bold text-[11px] flex items-center justify-center">
+                          <div className="w-7 h-7 rounded-full bg-gradient-to-tr from-violet-500 to-indigo-500 text-white font-bold text-[11px] flex items-center justify-center shrink-0">
                             {r.studentName.charAt(0)}
                           </div>
-                          <span className="text-slate-900 dark:text-white font-bold">{r.studentName}</span>
+                          <div className="min-w-0">
+                            <span className="text-slate-900 dark:text-white font-bold block truncate">{r.studentName}</span>
+                            <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                              <span className="text-[10px] px-1.5 py-0.2 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-semibold">
+                                {r.className || 'Umum'}
+                              </span>
+                              {r.subjectTitle && (
+                                <span className="text-[10px] text-violet-600 dark:text-violet-400 font-medium truncate max-w-[150px]">
+                                  • {r.subjectTitle}
+                                </span>
+                              )}
+                            </div>
+                          </div>
                         </td>
                         <td className="py-3.5 px-4">
                           <span className={`px-2.5 py-1 rounded-lg text-xs font-bold border ${scoreColor}`}>

@@ -753,7 +753,102 @@ export async function deleteSubject(subId: string): Promise<boolean> {
 /**
  * Mengambil daftar hasil ujian siswa dari Supabase
  */
-export async function fetchExamResults(subjectId: string): Promise<ExamResult[]> {
+/**
+ * Mengambil seluruh hasil ujian siswa dari semua mata pelajaran (dengan fail-safe localStorage lintas mapel)
+ */
+export async function fetchAllExamResults(): Promise<ExamResult[]> {
+  try {
+    let subjectMap = new Map<string, string>();
+    try {
+      const { data: subs } = await supabase.from('subjects').select('id, title');
+      if (subs) {
+        subs.forEach(s => subjectMap.set(s.id, s.title));
+      }
+    } catch {}
+
+    const { data, error } = await supabase
+      .from('exam_results')
+      .select('*')
+      .order('submitted_at', { ascending: false });
+
+    if (!error && data && data.length > 0) {
+      const parsed: ExamResult[] = data.map(r => ({
+        id: r.id,
+        subjectId: r.subject_id,
+        subjectTitle: subjectMap.get(r.subject_id) || '',
+        studentId: r.id,
+        studentName: r.student_name,
+        className: r.class_name,
+        score: Number(r.score),
+        totalEarned: Number(r.total_earned || 0),
+        totalMax: Number(r.total_max || 0),
+        answers: r.answers || [],
+        submittedAt: new Date(r.submitted_at).toLocaleString('id-ID'),
+        violationCount: r.violation_count || 0
+      }));
+
+      // Cache per mapel ke localStorage
+      if (typeof window !== 'undefined') {
+        const bySubject: Record<string, ExamResult[]> = {};
+        parsed.forEach(res => {
+          if (res.subjectId) {
+            if (!bySubject[res.subjectId]) bySubject[res.subjectId] = [];
+            bySubject[res.subjectId].push(res);
+          }
+        });
+        Object.entries(bySubject).forEach(([sId, rList]) => {
+          try {
+            localStorage.setItem('cbt_results_' + sId, JSON.stringify(rList));
+          } catch {}
+        });
+      }
+
+      return parsed;
+    }
+  } catch (err) {
+    console.error('Exception fetchAllExamResults:', err);
+  }
+
+  // Fallback: Gabungkan semua hasil ujian dari localStorage yang diawali 'cbt_results_'
+  if (typeof window !== 'undefined') {
+    try {
+      const all: ExamResult[] = [];
+      const seenKeys = new Set<string>();
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith('cbt_results_')) {
+          const stored = localStorage.getItem(key);
+          if (stored) {
+            const list = JSON.parse(stored);
+            if (Array.isArray(list)) {
+              list.forEach((item: ExamResult) => {
+                if (item && item.id) {
+                  const dedupKey = `${item.subjectId}_${(item.studentName || '').toLowerCase().trim()}`;
+                  if (!seenKeys.has(dedupKey)) {
+                    seenKeys.add(dedupKey);
+                    all.push(item);
+                  }
+                }
+              });
+            }
+          }
+        }
+      }
+      if (all.length > 0) return all;
+    } catch {}
+  }
+
+  return [];
+}
+
+/**
+ * Mengambil daftar hasil ujian siswa berdasarkan ID mapel (dengan fallback fetchAll jika subjectId kosong)
+ */
+export async function fetchExamResults(subjectId?: string): Promise<ExamResult[]> {
+  if (!subjectId) {
+    return fetchAllExamResults();
+  }
+
   try {
     const { data, error } = await supabase
       .from('exam_results')
@@ -761,26 +856,53 @@ export async function fetchExamResults(subjectId: string): Promise<ExamResult[]>
       .eq('subject_id', subjectId)
       .order('submitted_at', { ascending: false });
 
-    if (error || !data) {
-      return [];
+    if (!error && data && data.length > 0) {
+      const parsed: ExamResult[] = data.map(r => ({
+        id: r.id,
+        subjectId: r.subject_id,
+        subjectTitle: '',
+        studentId: r.id,
+        studentName: r.student_name,
+        className: r.class_name,
+        score: Number(r.score),
+        totalEarned: Number(r.total_earned || 0),
+        totalMax: Number(r.total_max || 0),
+        answers: r.answers || [],
+        submittedAt: new Date(r.submitted_at).toLocaleString('id-ID'),
+        violationCount: r.violation_count || 0
+      }));
+
+      if (typeof window !== 'undefined') {
+        try {
+          localStorage.setItem('cbt_results_' + subjectId, JSON.stringify(parsed));
+        } catch {}
+      }
+      return parsed;
     }
 
-    return data.map(r => ({
-      id: r.id,
-      subjectId: r.subject_id,
-      subjectTitle: '',
-      studentId: r.id,
-      studentName: r.student_name,
-      className: r.class_name,
-      score: Number(r.score),
-      totalEarned: Number(r.total_earned || 0),
-      totalMax: Number(r.total_max || 0),
-      answers: r.answers || [],
-      submittedAt: new Date(r.submitted_at).toLocaleString('id-ID'),
-      violationCount: r.violation_count || 0
-    }));
+    // Fail-safe jika Supabase kosong/error: baca dari localStorage
+    if (typeof window !== 'undefined') {
+      try {
+        const stored = localStorage.getItem('cbt_results_' + subjectId);
+        if (stored) {
+          const list = JSON.parse(stored);
+          if (Array.isArray(list)) return list;
+        }
+      } catch {}
+    }
+
+    return [];
   } catch (err) {
     console.error('Exception fetchExamResults:', err);
+    if (typeof window !== 'undefined') {
+      try {
+        const stored = localStorage.getItem('cbt_results_' + subjectId);
+        if (stored) {
+          const list = JSON.parse(stored);
+          if (Array.isArray(list)) return list;
+        }
+      } catch {}
+    }
     return [];
   }
 }

@@ -209,37 +209,41 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
     return () => clearInterval(interval);
   }, [isExamCompleted, isLocked]);
 
-  // 2. LIVE MONITORING HEARTBEAT & BROADCAST TO PROCTOR (EVERY 2 SECONDS)
+  const sendDirectHeartbeat = useCallback((focusState?: boolean) => {
+    if (isCompletedRef.current) return;
+    const answered = answersRef.current.filter(a => a.answer !== null && a.answer !== '').length;
+    const currentFocus = typeof focusState === 'boolean' ? focusState : isFocusRef.current;
+    reportStudentSession({
+      id: `session_${studentName}_${subject.id}`,
+      subjectId: subject.id,
+      studentId: studentName,
+      studentName,
+      className: studentClass || subject.className,
+      startTime: startTimeRef.current,
+      lastHeartbeat: Date.now(),
+      progressCount: answered,
+      totalQuestions: questions.length,
+      violationCount: violationCountRef.current,
+      answers: answersRef.current,
+      status: isLockedRef.current ? 'blocked' : 'ongoing',
+      isFocus: currentFocus,
+      remainingSeconds: secondsRemainingRef.current
+    });
+  }, [studentName, subject.id, studentClass, subject.className, questions.length]);
+
+  // 2. LIVE MONITORING HEARTBEAT & BROADCAST TO PROCTOR (EVERY 2.5 SECONDS)
   useEffect(() => {
     if (isExamCompleted) return;
 
-    const sendHeartbeat = () => {
-      const answered = answersRef.current.filter(a => a.answer !== null && a.answer !== '').length;
-      reportStudentSession({
-        id: `session_${studentName}_${subject.id}`,
-        subjectId: subject.id,
-        studentId: studentName,
-        studentName,
-        className: studentClass || subject.className,
-        startTime: startTimeRef.current,
-        lastHeartbeat: Date.now(),
-        progressCount: answered,
-        totalQuestions: questions.length,
-        violationCount: violationCountRef.current,
-        answers: answersRef.current,
-        status: isLockedRef.current ? 'blocked' : 'ongoing',
-        isFocus: isFocusRef.current,
-        remainingSeconds: secondsRemainingRef.current
-      });
-    };
-
-    sendHeartbeat();
-    const interval = setInterval(sendHeartbeat, 2500);
+    sendDirectHeartbeat();
+    const interval = setInterval(() => {
+      sendDirectHeartbeat();
+    }, 2500);
 
     return () => {
       clearInterval(interval);
     };
-  }, [isExamCompleted, subject.id, subject.className, studentName, studentClass, questions.length]);
+  }, [isExamCompleted, sendDirectHeartbeat]);
 
   // Auto-save State Ujian Siswa ke LocalStorage (Fail-safe agar refresh tidak mereset jawaban/pelanggaran)
   useEffect(() => {
@@ -413,16 +417,22 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
     // B. Visibility Change (Ganti tab / minimize browser)
     const handleVisibilityChange = () => {
       if (document.hidden) {
+        isFocusRef.current = false;
         setIsFocus(false);
+        sendDirectHeartbeat(false);
         handleViolation('Berpindah tab atau menyembunyikan browser.');
       } else {
+        isFocusRef.current = true;
         setIsFocus(true);
+        sendDirectHeartbeat(true);
       }
     };
 
     // C. Blur & Focus Window (Google Assistant overlay / Split Screen / Notifikasi)
     const handleBlur = () => {
+      isFocusRef.current = false;
       setIsFocus(false);
+      sendDirectHeartbeat(false);
       // Jika dokumen sudah hidden, event visibilitychange sudah mencatatnya
       if (document.hidden) return;
       if (!isCompletedRef.current && !isLockedRef.current) {
@@ -431,7 +441,9 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
     };
 
     const handleFocus = () => {
+      isFocusRef.current = true;
       setIsFocus(true);
+      sendDirectHeartbeat(true);
     };
 
     // D. Blokir Klik Kanan (Context Menu)
@@ -482,6 +494,48 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
       }
     };
 
+    // G. Perangkap Navigasi Tombol Back HP / Browser (History Trap Loop)
+    // Siswa menekan tombol Back 1x, 2x, 3x, dst TIDAK BISA KELUAR dan tetap memunculkan modal peringatan
+    try {
+      window.history.pushState({ cbtLock: true }, '', window.location.href);
+      window.history.pushState({ cbtLock: true }, '', window.location.href);
+    } catch {}
+
+    const handlePopState = (e: PopStateEvent) => {
+      // 1. Selalu dorong kembali state baru seketika agar riwayat browser tidak pernah mundur
+      try {
+        window.history.pushState({ cbtLock: true }, '', window.location.href);
+      } catch {}
+
+      // 2. Cegah keluar jika ujian belum selesai
+      if (!isCompletedRef.current) {
+        isFocusRef.current = false;
+        sendDirectHeartbeat(false);
+
+        handleViolation('Menekan tombol navigasi Kembali (Back) pada perangkat HP.');
+
+        // Minta kembali mode fullscreen jika sempat lepas
+        requestFullscreenMode();
+      }
+    };
+
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (!isCompletedRef.current) {
+        isFocusRef.current = false;
+        sendDirectHeartbeat(false);
+        e.preventDefault();
+        e.returnValue = 'Ujian sedang berlangsung! Anda tidak diperbolehkan meninggalkan halaman ujian.';
+        return e.returnValue;
+      }
+    };
+
+    const handlePageHide = () => {
+      if (!isCompletedRef.current) {
+        isFocusRef.current = false;
+        sendDirectHeartbeat(false);
+      }
+    };
+
     document.addEventListener('fullscreenchange', handleFullscreenChange);
     document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
     document.addEventListener('visibilitychange', handleVisibilityChange);
@@ -492,6 +546,9 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
     document.addEventListener('cut', handleCut);
     document.addEventListener('paste', handlePaste);
     document.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('popstate', handlePopState);
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    window.addEventListener('pagehide', handlePageHide);
 
     return () => {
       document.removeEventListener('fullscreenchange', handleFullscreenChange);
@@ -504,8 +561,11 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
       document.removeEventListener('cut', handleCut);
       document.removeEventListener('paste', handlePaste);
       document.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('popstate', handlePopState);
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      window.removeEventListener('pagehide', handlePageHide);
     };
-  }, [isExamCompleted, handleViolation]);
+  }, [isExamCompleted, handleViolation, sendDirectHeartbeat, requestFullscreenMode]);
 
   // 6. LISTEN FOR PROCTOR BROADCAST MESSAGES
   useEffect(() => {

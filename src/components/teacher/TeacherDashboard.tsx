@@ -3217,9 +3217,10 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
           return true;
         });
 
+        const now = Date.now();
         const activeCount = filteredSessions.length;
-        const focusCount = filteredSessions.filter(s => s.status === 'ongoing' && s.isFocus).length;
-        const blurCount = filteredSessions.filter(s => s.status === 'ongoing' && !s.isFocus).length;
+        const focusCount = filteredSessions.filter(s => s.status === 'ongoing' && s.isFocus && (now - s.lastHeartbeat) <= 6000).length;
+        const blurCount = filteredSessions.filter(s => s.status === 'ongoing' && (!s.isFocus || (now - s.lastHeartbeat) > 6000)).length;
         const blockedCount = filteredSessions.filter(s => s.status === 'blocked').length;
 
         return (
@@ -3352,7 +3353,8 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                     ) : (
                       filteredSessions.map((s) => {
                         const isDisqualified = s.status === 'blocked';
-                        const isOut = !s.isFocus;
+                        const isStale = (Date.now() - s.lastHeartbeat) > 6000;
+                        const isOut = !s.isFocus || isStale;
 
                         const sSec = s.remainingSeconds || 0;
                         const mins = Math.floor(sSec / 60).toString().padStart(2, '0');
@@ -3412,7 +3414,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                               ) : isOut ? (
                                 <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-400 text-slate-950 font-black text-[10px] animate-pulse shadow-sm">
                                   <AlertTriangle className="w-3.5 h-3.5" />
-                                  <span>DI LUAR FOKUS</span>
+                                  <span>{isStale ? 'DI LUAR FOKUS (BACKGROUND)' : 'DI LUAR FOKUS'}</span>
                                 </span>
                               ) : (
                                 <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 font-bold text-[10px]">

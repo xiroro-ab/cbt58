@@ -162,8 +162,18 @@ export function getStoredSessions(): ExamSession[] {
     if (!raw) return [];
     const list: ExamSession[] = JSON.parse(raw);
     const now = Date.now();
+
+    // Jika siswa tidak mengirim detak jantung (heartbeat) lebih dari 6 detik (misal aplikasi diminimalkan / di layar utama HP),
+    // otomatis tandai isFocus = false agar pengawas langsung tahu siswa sedang di luar aplikasi
+    const marked = list.map(s => {
+      if (s.status === 'ongoing' && (now - s.lastHeartbeat) > 6000 && s.isFocus) {
+        return { ...s, isFocus: false };
+      }
+      return s;
+    });
+
     // Bersihkan sesi usang (tidak ada heartbeat > 120 detik, KECUALI yang statusnya blocked/terkunci)
-    const active = list.filter(s => s.status === 'blocked' || (now - s.lastHeartbeat) < 120000);
+    const active = marked.filter(s => s.status === 'blocked' || (now - s.lastHeartbeat) < 120000);
     if (active.length !== list.length) {
       localStorage.setItem(SESSIONS_STORAGE_KEY, JSON.stringify(active));
     }

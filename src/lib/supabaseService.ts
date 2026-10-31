@@ -331,8 +331,15 @@ export async function saveOrUpdateExamResult(result: ExamResult): Promise<boolea
         .select('id')
         .eq('subject_id', result.subjectId)
         .ilike('student_name', result.studentName.trim())
-        .limit(1);
-      if (byName && byName.length > 0) existingId = byName[0].id;
+        .order('submitted_at', { ascending: false });
+      if (byName && byName.length > 0) {
+        existingId = byName[0].id;
+        // Jika sebelumnya sempat ada baris ganda, bersihkan baris kedua dst secara otomatis
+        if (byName.length > 1) {
+          const duplicateIds = byName.slice(1).map(b => b.id);
+          await supabase.from('exam_results').delete().in('id', duplicateIds);
+        }
+      }
     }
 
     if (existingId) {
@@ -387,7 +394,64 @@ export async function checkStudentExamSubmission(
 
   const cleanName = studentName.toLowerCase().trim();
 
-  // 1. Cek fail-safe localStorage di perangkat siswa seketika
+  // 1. PRIORITAS UTAMA: Periksa database Supabase Cloud (Single Source of Truth)
+  try {
+    const { data, error } = await supabase
+      .from('exam_results')
+      .select('id, score, submitted_at, student_name')
+      .eq('subject_id', subjectId)
+      .ilike('student_name', studentName.trim())
+      .order('submitted_at', { ascending: false })
+      .limit(1);
+
+    if (!error) {
+      if (data && data.length > 0) {
+        // Terbukti di database cloud siswa memang sudah mengumpulkan ujian
+        const item = data[0];
+        const submittedAtFormatted = item.submitted_at
+          ? new Date(item.submitted_at).toLocaleString('id-ID')
+          : 'Sesi Sebelumnya';
+
+        // Perbarui flag di memori perangkat
+        if (typeof window !== 'undefined') {
+          try {
+            localStorage.setItem(`cbt_submitted_${subjectId}_${cleanName}`, JSON.stringify({
+              score: Number(item.score),
+              submittedAt: submittedAtFormatted
+            }));
+          } catch {}
+        }
+
+        return {
+          isSubmitted: true,
+          score: Number(item.score),
+          submittedAt: submittedAtFormatted
+        };
+      } else {
+        // Di database Supabase TIDAK ADA hasil ujian untuk siswa ini (artinya belum mengerjakan ATAU SUDAH DI-RESET OLEH GURU)
+        // Bersihkan seluruh cache usang di perangkat ini seketika agar siswa bisa langsung ujian ulang!
+        if (typeof window !== 'undefined') {
+          try {
+            localStorage.removeItem(`cbt_submitted_${subjectId}_${cleanName}`);
+            localStorage.removeItem(`cbt_blocked_${subjectId}_${cleanName}`);
+            localStorage.removeItem(`cbt_exam_state_${subjectId}_${cleanName}`);
+            localStorage.removeItem(`cbt_answers_${studentName}_${subjectId}`);
+            const stored = localStorage.getItem(`cbt_results_${subjectId}`);
+            if (stored) {
+              const list: ExamResult[] = JSON.parse(stored);
+              const cleaned = list.filter(r => r.studentName.toLowerCase().trim() !== cleanName);
+              localStorage.setItem(`cbt_results_${subjectId}`, JSON.stringify(cleaned));
+            }
+          } catch {}
+        }
+        return { isSubmitted: false };
+      }
+    }
+  } catch (err) {
+    console.warn('Gagal cek status submit siswa ke Supabase, fallback ke local storage:', err);
+  }
+
+  // 2. Fallback HANYA jika Supabase offline / tidak dapat dihubungi
   if (typeof window !== 'undefined') {
     try {
       const flag = localStorage.getItem(`cbt_submitted_${subjectId}_${cleanName}`);
@@ -399,55 +463,7 @@ export async function checkStudentExamSubmission(
           submittedAt: parsed.submittedAt
         };
       }
-      const stored = localStorage.getItem(`cbt_results_${subjectId}`);
-      if (stored) {
-        const list: ExamResult[] = JSON.parse(stored);
-        const match = list.find(r => r.studentName.toLowerCase().trim() === cleanName);
-        if (match) {
-          return {
-            isSubmitted: true,
-            score: match.score,
-            submittedAt: match.submittedAt
-          };
-        }
-      }
     } catch {}
-  }
-
-  // 2. Query langsung ke Supabase Cloud secara case-insensitive
-  try {
-    const { data, error } = await supabase
-      .from('exam_results')
-      .select('id, score, submitted_at, student_name')
-      .eq('subject_id', subjectId)
-      .ilike('student_name', studentName.trim())
-      .order('submitted_at', { ascending: false })
-      .limit(1);
-
-    if (!error && data && data.length > 0) {
-      const item = data[0];
-      const submittedAtFormatted = item.submitted_at
-        ? new Date(item.submitted_at).toLocaleString('id-ID')
-        : 'Sesi Sebelumnya';
-
-      // Simpan flag di perangkat agar pemeriksaan berikutnya instan
-      if (typeof window !== 'undefined') {
-        try {
-          localStorage.setItem(`cbt_submitted_${subjectId}_${cleanName}`, JSON.stringify({
-            score: Number(item.score),
-            submittedAt: submittedAtFormatted
-          }));
-        } catch {}
-      }
-
-      return {
-        isSubmitted: true,
-        score: Number(item.score),
-        submittedAt: submittedAtFormatted
-      };
-    }
-  } catch (err) {
-    console.warn('Gagal cek status submit siswa ke Supabase:', err);
   }
 
   return { isSubmitted: false };

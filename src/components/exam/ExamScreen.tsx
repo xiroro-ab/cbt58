@@ -308,7 +308,26 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
           } catch {}
         }
         removeStudentSession(studentName, subject.id);
-        handleFinalSubmit('Diselesaikan Paksa oleh Pengawas');
+
+        // Tampilkan tampilan selesai ujian pada layar siswa tanpa memanggil onFinishExam lagi (karena guru sudah menyimpannya ke database)
+        const evaluation = evaluateFullExam(questions, answersRef.current, subject.scoringRules);
+        setCompletedResult({
+          studentName,
+          className: studentClass || subject.className,
+          score: evaluation.finalScore,
+          totalEarned: evaluation.totalEarned,
+          totalMax: evaluation.totalMax,
+          answers: answersRef.current,
+          submittedAt: new Date().toLocaleString('id-ID'),
+          violationCount: violationCountRef.current,
+          details: evaluation.details
+        });
+
+        try {
+          if (document.fullscreenElement && document.exitFullscreen) {
+            document.exitFullscreen().catch(() => {});
+          }
+        } catch {}
       } else if (cmd.action === 'RESET_EXAM') {
         // Pengawas mereset ujian siswa (bersihkan cache dan kembali ke login)
         removeStudentSession(studentName, subject.id);

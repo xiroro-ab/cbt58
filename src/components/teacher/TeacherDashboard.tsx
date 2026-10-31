@@ -393,11 +393,22 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
     reader.readAsDataURL(file);
   };
 
-  // Live Filtering dari Search Bar
+  // Live Filtering dari Search Bar dengan Deduplikasi Ketat per Nama Siswa
   const filteredResults = useMemo(() => {
-    if (!searchQuery.trim()) return results;
+    // 1. Deduplikasi mutlak: 1 nama siswa hanya boleh punya 1 baris hasil ujian
+    const dedupedMap = new Map<string, ExamResult>();
+    for (const r of results) {
+      if (!r || !r.studentName) continue;
+      const key = `${r.subjectId}_${r.studentName.toLowerCase().trim()}`;
+      if (!dedupedMap.has(key)) {
+        dedupedMap.set(key, r);
+      }
+    }
+    const cleanResults = Array.from(dedupedMap.values());
+
+    if (!searchQuery.trim()) return cleanResults;
     const q = searchQuery.toLowerCase();
-    return results.filter(
+    return cleanResults.filter(
       r =>
         r.studentName.toLowerCase().includes(q) ||
         r.className.toLowerCase().includes(q) ||
@@ -2053,11 +2064,11 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                                   variant: 'danger',
                                   confirmLabel: 'Ya, Reset Ujian',
                                   cancelLabel: 'Batal',
-                                  onConfirm: () => {
+                                  onConfirm: async () => {
                                     if (onDeleteResult) {
-                                      onDeleteResult(r.id, r.subjectId, r.studentName);
+                                      await onDeleteResult(r.id, r.subjectId, r.studentName);
                                     }
-                                    clearStudentAutolockInSupabase(r.subjectId, r.studentName);
+                                    await clearStudentAutolockInSupabase(r.subjectId, r.studentName);
                                     sendProctorCommand({
                                       action: 'RESET_EXAM',
                                       studentName: r.studentName,
@@ -3578,16 +3589,16 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                                       variant: 'warning',
                                       confirmLabel: 'Ya, Reset Sesi',
                                       cancelLabel: 'Batal',
-                                      onConfirm: () => {
+                                      onConfirm: async () => {
                                         sendProctorCommand({
                                           action: 'RESET_EXAM',
                                           studentName: s.studentName,
                                           subjectId: s.subjectId
                                         });
                                         removeStudentSession(s.studentName, s.subjectId);
-                                        clearStudentAutolockInSupabase(s.subjectId, s.studentName);
+                                        await clearStudentAutolockInSupabase(s.subjectId, s.studentName);
                                         if (onDeleteResult) {
-                                          onDeleteResult(s.id, s.subjectId, s.studentName);
+                                          await onDeleteResult(s.id, s.subjectId, s.studentName);
                                         }
                                         setMonitoringActionToast(`Sesi ujian siswa ${s.studentName} berhasil dibersihkan.`);
                                       }
@@ -4697,11 +4708,16 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                         variant: 'danger',
                         confirmLabel: 'Ya, Reset & Izinkan Ujian Ulang',
                         cancelLabel: 'Batal',
-                        onConfirm: () => {
+                        onConfirm: async () => {
                           if (onDeleteResult) {
-                            onDeleteResult(selectedResult.id, selectedResult.subjectId, selectedResult.studentName);
+                            await onDeleteResult(selectedResult.id, selectedResult.subjectId, selectedResult.studentName);
                           }
-                          clearStudentAutolockInSupabase(selectedResult.subjectId, selectedResult.studentName);
+                          await clearStudentAutolockInSupabase(selectedResult.subjectId, selectedResult.studentName);
+                          sendProctorCommand({
+                            action: 'RESET_EXAM',
+                            studentName: selectedResult.studentName,
+                            subjectId: selectedResult.subjectId
+                          });
                           removeStudentSession(selectedResult.studentName, selectedResult.subjectId);
                           setSelectedResult(null);
                         }

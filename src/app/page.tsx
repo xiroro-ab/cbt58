@@ -359,23 +359,27 @@ export default function Home() {
     // Realtime hasil ujian (Mendukung INSERT, UPDATE, dan DELETE seketika)
     const unsubResults = subscribeToExamResults(subject.id, changePayload => {
       if (changePayload.action === 'DELETE') {
+        const cleanTarget = changePayload.studentName ? changePayload.studentName.toLowerCase().trim() : '';
         setResults(prev => prev.filter(r =>
           r.id !== changePayload.resultId &&
-          !(changePayload.studentName && r.studentName.toLowerCase().trim() === changePayload.studentName.toLowerCase().trim() && r.subjectId === changePayload.subjectId)
+          !(cleanTarget && r.studentName.toLowerCase().trim() === cleanTarget && r.subjectId === changePayload.subjectId)
         ));
+        if (cleanTarget && typeof window !== 'undefined') {
+          try {
+            localStorage.removeItem(`cbt_submitted_${changePayload.subjectId}_${cleanTarget}`);
+            localStorage.removeItem(`cbt_blocked_${changePayload.subjectId}_${cleanTarget}`);
+            localStorage.removeItem(`cbt_exam_state_${changePayload.subjectId}_${cleanTarget}`);
+            if (changePayload.studentName) {
+              localStorage.removeItem(`cbt_answers_${changePayload.studentName}_${changePayload.subjectId}`);
+            }
+          } catch {}
+        }
       } else if (changePayload.result) {
         const res = changePayload.result;
+        const cleanName = res.studentName.toLowerCase().trim();
         setResults(prev => {
-          const matchIdx = prev.findIndex(r =>
-            r.id === res.id ||
-            (r.studentName.toLowerCase().trim() === res.studentName.toLowerCase().trim() && r.subjectId === res.subjectId)
-          );
-          if (matchIdx >= 0) {
-            const next = [...prev];
-            next[matchIdx] = res;
-            return next;
-          }
-          return [res, ...prev];
+          const filtered = prev.filter(r => r.id !== res.id && !(r.studentName.toLowerCase().trim() === cleanName && r.subjectId === res.subjectId));
+          return [res, ...filtered];
         });
       }
     });
@@ -515,17 +519,12 @@ export default function Home() {
   };
 
   const handleUpdateResult = async (updatedResult: ExamResult) => {
+    const cleanName = updatedResult.studentName.toLowerCase().trim();
     setResults(prev => {
-      const matchIndex = prev.findIndex(
-        r => r.id === updatedResult.id ||
-             (r.studentName.toLowerCase().trim() === updatedResult.studentName.toLowerCase().trim() && r.subjectId === updatedResult.subjectId)
+      const filtered = prev.filter(
+        r => r.id !== updatedResult.id && !(r.studentName.toLowerCase().trim() === cleanName && r.subjectId === updatedResult.subjectId)
       );
-      if (matchIndex >= 0) {
-        const next = [...prev];
-        next[matchIndex] = updatedResult;
-        return next;
-      }
-      return [updatedResult, ...prev];
+      return [updatedResult, ...filtered];
     });
     try {
       await saveOrUpdateExamResult(updatedResult);
@@ -535,11 +534,22 @@ export default function Home() {
   };
 
   const handleDeleteResult = async (resultId: string, subjectId?: string, studentName?: string) => {
+    const cleanName = studentName ? studentName.toLowerCase().trim() : '';
     setResults(prev =>
       prev.filter(
-        r => r.id !== resultId && !(studentName && r.studentName.toLowerCase().trim() === studentName.toLowerCase().trim() && r.subjectId === subjectId)
+        r => r.id !== resultId && !(cleanName && r.studentName.toLowerCase().trim() === cleanName && (!subjectId || r.subjectId === subjectId))
       )
     );
+    if (cleanName && typeof window !== 'undefined') {
+      try {
+        localStorage.removeItem(`cbt_submitted_${subjectId || subject?.id}_${cleanName}`);
+        localStorage.removeItem(`cbt_blocked_${subjectId || subject?.id}_${cleanName}`);
+        localStorage.removeItem(`cbt_exam_state_${subjectId || subject?.id}_${cleanName}`);
+        if (studentName) {
+          localStorage.removeItem(`cbt_answers_${studentName}_${subjectId || subject?.id}`);
+        }
+      } catch {}
+    }
     try {
       await deleteExamResult(resultId, subjectId || subject?.id, studentName);
     } catch (err) {
@@ -866,7 +876,12 @@ export default function Home() {
       details: resultData.details
     };
 
-    setResults(prev => [newResult, ...prev]);
+    setResults(prev => {
+      const filtered = prev.filter(
+        r => r.id !== newResult.id && !(r.studentName.toLowerCase().trim() === cleanName && r.subjectId === subject.id)
+      );
+      return [newResult, ...filtered];
+    });
     try {
       await saveExamResult(newResult);
     } catch (err) {

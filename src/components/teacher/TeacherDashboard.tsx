@@ -140,6 +140,8 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   const [essaySavedNotice, setEssaySavedNotice] = useState(false);
   const [essayMaxNotice, setEssayMaxNotice] = useState<string | null>(null);
   const [dossierSuccessToast, setDossierSuccessToast] = useState<string | null>(null);
+  const [dossierSignerMode, setDossierSignerMode] = useState<'current_teacher' | 'default_teacher' | 'principal'>('current_teacher');
+  const [previewSignerTab, setPreviewSignerTab] = useState<'principal' | 'teacher'>('principal');
 
   // Pengaturan Dokumen, Pejabat & TTE Digital
   const effectiveSchoolSettings: SchoolSettings = useMemo(() => {
@@ -161,6 +163,30 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   useEffect(() => {
     setLocalSettingsForm(effectiveSchoolSettings);
   }, [effectiveSchoolSettings]);
+
+  // Resolusi Penandatangan Dossier Aktif
+  const activeDossierSigner = useMemo(() => {
+    if (dossierSignerMode === 'principal') {
+      return {
+        name: effectiveSchoolSettings.principalName || 'Hj. Rohana, S.Pd., M.Si.',
+        nip: effectiveSchoolSettings.principalNip || '-',
+        title: 'Kepala Sekolah SMPN 58'
+      };
+    }
+    if (dossierSignerMode === 'default_teacher') {
+      return {
+        name: effectiveSchoolSettings.teacherName || 'Guru Pengampu / Proktor',
+        nip: effectiveSchoolSettings.teacherNip || '-',
+        title: 'Guru Pengampu / Proktor'
+      };
+    }
+    // current_teacher (default)
+    return {
+      name: currentTeacher?.name || effectiveSchoolSettings.teacherName || 'Guru Pengampu',
+      nip: currentTeacher?.nip || effectiveSchoolSettings.teacherNip || '-',
+      title: 'Guru Pengampu / Proktor'
+    };
+  }, [dossierSignerMode, effectiveSchoolSettings, currentTeacher]);
 
   // ==========================================
   // CUSTOM THEMED MODAL DIALOG STATE (ANTI-SLOP BROWSER POPUPS)
@@ -5558,63 +5584,111 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1 border-t border-slate-100 dark:border-slate-800">
-                  {/* Nama Kepala Sekolah */}
-                  <div>
-                    <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">
-                      Nama Lengkap Kepala Sekolah & Gelar:
-                    </label>
-                    <input
-                      type="text"
-                      value={localSettingsForm.principalName}
-                      onChange={e => setLocalSettingsForm(prev => ({ ...prev, principalName: e.target.value }))}
-                      placeholder="Hj. Rohana, S.Pd., M.Si."
-                      className="w-full p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500"
-                    />
+                {/* Bagian A: Kepala Sekolah (Untuk Sertifikat Siswa) */}
+                <div className="pt-2 border-t border-slate-100 dark:border-slate-800 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-violet-600 inline-block"></span>
+                      <h5 className="font-bold text-xs text-slate-800 dark:text-slate-200">
+                        1. Data Kepala Sekolah
+                      </h5>
+                    </div>
+                    <span className="text-[10px] font-semibold text-violet-600 dark:text-violet-400 bg-violet-50 dark:bg-violet-950/60 px-2 py-0.5 rounded-full border border-violet-200 dark:border-violet-800">
+                      🏛️ Digunakan pada Cetak Sertifikat Siswa
+                    </span>
                   </div>
 
-                  {/* NIP Kepala Sekolah */}
-                  <div>
-                    <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">
-                      NIP Kepala Sekolah:
-                    </label>
-                    <input
-                      type="text"
-                      value={localSettingsForm.principalNip}
-                      onChange={e => setLocalSettingsForm(prev => ({ ...prev, principalNip: e.target.value }))}
-                      placeholder="19680512 199412 2 001"
-                      className="w-full p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-mono font-semibold text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500"
-                    />
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {/* Nama Kepala Sekolah */}
+                    <div>
+                      <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                        Nama Lengkap Kepala Sekolah & Gelar:
+                      </label>
+                      <input
+                        type="text"
+                        value={localSettingsForm.principalName}
+                        onChange={e => setLocalSettingsForm(prev => ({ ...prev, principalName: e.target.value }))}
+                        placeholder="Hj. Rohana, S.Pd., M.Si."
+                        className="w-full p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500"
+                      />
+                    </div>
+
+                    {/* NIP Kepala Sekolah */}
+                    <div>
+                      <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                        NIP Kepala Sekolah:
+                      </label>
+                      <input
+                        type="text"
+                        value={localSettingsForm.principalNip}
+                        onChange={e => setLocalSettingsForm(prev => ({ ...prev, principalNip: e.target.value }))}
+                        placeholder="19680512 199412 2 001"
+                        className="w-full p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-mono font-semibold text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500"
+                      />
+                    </div>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1 border-t border-slate-100 dark:border-slate-800">
-                  {/* Nama Guru Pengampu */}
-                  <div>
-                    <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">
-                      Nama Guru Pengampu / Proktor:
-                    </label>
-                    <input
-                      type="text"
-                      value={localSettingsForm.teacherName}
-                      onChange={e => setLocalSettingsForm(prev => ({ ...prev, teacherName: e.target.value }))}
-                      placeholder="Hendra Wijaya, S.Pd"
-                      className="w-full p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500"
-                    />
+                {/* Bagian B: Guru Pengampu / Proktor (Untuk Dossier Rekap Nilai Siswa) */}
+                <div className="pt-3 border-t border-slate-100 dark:border-slate-800 space-y-3">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-emerald-600 inline-block"></span>
+                      <h5 className="font-bold text-xs text-slate-800 dark:text-slate-200">
+                        2. Data Guru Pengampu / Proktor
+                      </h5>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {currentTeacher && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setLocalSettingsForm(prev => ({
+                              ...prev,
+                              teacherName: currentTeacher.name,
+                              teacherNip: currentTeacher.nip || prev.teacherNip
+                            }));
+                          }}
+                          className="text-[10px] font-bold text-violet-600 dark:text-violet-400 bg-slate-100 dark:bg-slate-800 hover:bg-violet-50 dark:hover:bg-violet-950/60 px-2 py-0.5 rounded-lg border border-slate-200 dark:border-slate-700 transition cursor-pointer"
+                          title="Klik untuk mengisi otomatis nama guru dari akun yang sedang login"
+                        >
+                          Gunakan Akun Login ({currentTeacher.name.split(',')[0]})
+                        </button>
+                      )}
+                      <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800">
+                        👨‍🏫 Digunakan pada Cetak Dossier Siswa
+                      </span>
+                    </div>
                   </div>
 
-                  {/* NIP Guru */}
-                  <div>
-                    <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">
-                      NIP Guru Pengampu / Proktor:
-                    </label>
-                    <input
-                      type="text"
-                      value={localSettingsForm.teacherNip}
-                      onChange={e => setLocalSettingsForm(prev => ({ ...prev, teacherNip: e.target.value }))}
-                      placeholder="19870420 201201 1 004"
-                      className="w-full p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-mono font-semibold text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500"
-                    />
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {/* Nama Guru Pengampu */}
+                    <div>
+                      <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                        Nama Guru Pengampu / Proktor:
+                      </label>
+                      <input
+                        type="text"
+                        value={localSettingsForm.teacherName}
+                        onChange={e => setLocalSettingsForm(prev => ({ ...prev, teacherName: e.target.value }))}
+                        placeholder="Hendra Wijaya, S.Pd"
+                        className="w-full p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500"
+                      />
+                    </div>
+
+                    {/* NIP Guru */}
+                    <div>
+                      <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                        NIP Guru Pengampu / Proktor:
+                      </label>
+                      <input
+                        type="text"
+                        value={localSettingsForm.teacherNip}
+                        onChange={e => setLocalSettingsForm(prev => ({ ...prev, teacherNip: e.target.value }))}
+                        placeholder="19870420 201201 1 004"
+                        className="w-full p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-mono font-semibold text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500"
+                      />
+                    </div>
                   </div>
                 </div>
 
@@ -5674,22 +5748,64 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
               {/* Live Preview TTE Digital Seal */}
               <div className="p-5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800 space-y-3 flex flex-col justify-between">
                 <div>
-                  <span className="text-[11px] font-bold uppercase text-slate-400 block tracking-wider mb-2">
-                    Pratinjau Tampilan TTE Cetak:
-                  </span>
+                  <div className="flex flex-col gap-1.5 mb-2.5">
+                    <span className="text-[11px] font-bold uppercase text-slate-400 block tracking-wider">
+                      Pratinjau Tampilan TTE Cetak:
+                    </span>
+                    <div className="flex items-center p-0.5 rounded-xl bg-slate-200/80 dark:bg-slate-700/80 text-[10px] font-bold gap-1">
+                      <button
+                        type="button"
+                        onClick={() => setPreviewSignerTab('principal')}
+                        className={`flex-1 py-1 px-2 rounded-lg transition cursor-pointer text-center ${
+                          previewSignerTab === 'principal'
+                            ? 'bg-white dark:bg-slate-900 text-violet-700 dark:text-violet-300 shadow-xs'
+                            : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                        }`}
+                      >
+                        🏛️ Kepsek (Sertifikat)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPreviewSignerTab('teacher')}
+                        className={`flex-1 py-1 px-2 rounded-lg transition cursor-pointer text-center ${
+                          previewSignerTab === 'teacher'
+                            ? 'bg-white dark:bg-slate-900 text-emerald-700 dark:text-emerald-300 shadow-xs'
+                            : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                        }`}
+                      >
+                        👨‍🏫 Guru (Dossier)
+                      </button>
+                    </div>
+                  </div>
+
                   <div className="p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xs">
-                    <TTESignatureSeal
-                      settings={localSettingsForm}
-                      documentId="PREVIEW-2026"
-                      signerName={localSettingsForm.principalName || 'Nama Kepala Sekolah'}
-                      signerTitle="Kepala Sekolah"
-                      signerNip={localSettingsForm.principalNip}
-                    />
+                    {previewSignerTab === 'principal' ? (
+                      <TTESignatureSeal
+                        settings={localSettingsForm}
+                        documentId="PREVIEW-KEPSEK"
+                        signerName={localSettingsForm.principalName || 'Nama Kepala Sekolah'}
+                        signerTitle="Kepala Sekolah SMPN 58"
+                        signerNip={localSettingsForm.principalNip}
+                      />
+                    ) : (
+                      <TTESignatureSeal
+                        settings={localSettingsForm}
+                        documentId="PREVIEW-GURU"
+                        signerName={localSettingsForm.teacherName || currentTeacher?.name || 'Nama Guru Pengampu'}
+                        signerTitle="Guru Pengampu / Proktor"
+                        signerNip={localSettingsForm.teacherNip || currentTeacher?.nip}
+                      />
+                    )}
                   </div>
                 </div>
 
-                <div className="text-[10px] text-slate-500 dark:text-slate-400 leading-relaxed bg-white/60 dark:bg-slate-900/60 p-2.5 rounded-xl border border-slate-200/60 dark:border-slate-800/60">
-                  💡 Format tanda tangan di atas akan otomatis disematkan pada sudut dokumen resmi cetak untuk memastikan keaslian hasil ujian.
+                <div className="text-[10px] text-slate-500 dark:text-slate-400 leading-relaxed bg-white/60 dark:bg-slate-900/60 p-2.5 rounded-xl border border-slate-200/60 dark:border-slate-800/60 space-y-1">
+                  <p>
+                    📌 <strong>TTE Kepala Sekolah:</strong> Dicantumkan pada Sertifikat Kelulusan & Nilai Resmi Siswa.
+                  </p>
+                  <p>
+                    📌 <strong>TTE Guru/Proktor:</strong> Dicantumkan pada Dossier Lembar Hasil Ujian per butir soal siswa.
+                  </p>
                 </div>
               </div>
             </div>
@@ -6925,16 +7041,96 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                 })}
               </div>
 
-              {/* TANDA TANGAN FORMAL LEMBAR HASIL UJIAN (PRINT ONLY) WITH TTE DIGITAL */}
-              <div className="hidden print:grid grid-cols-2 gap-8 pt-8 text-center text-xs font-sans print:break-inside-avoid">
+              {/* PENGATURAN PENANDATANGAN TTE DOSSIER (KHUSUS TAMPILAN LAYAR SEBELUM CETAK) */}
+              <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 space-y-3 print:hidden">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                      Pengaturan Penandatangan Dokumen & TTE Dossier:
+                    </span>
+                  </div>
+                  <span className="text-[10px] text-slate-500">
+                    Pilih pejabat yang menandatangani sebelum cetak dossier
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+                  {/* Opsi 1: Akun Guru Login */}
+                  <button
+                    type="button"
+                    onClick={() => setDossierSignerMode('current_teacher')}
+                    className={`p-2.5 rounded-xl border text-left transition cursor-pointer flex flex-col justify-between ${
+                      dossierSignerMode === 'current_teacher'
+                        ? 'bg-violet-50 dark:bg-violet-950/50 border-violet-400 dark:border-violet-600 shadow-xs'
+                        : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700/80 text-slate-600 dark:text-slate-400 hover:border-slate-300'
+                    }`}
+                  >
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-violet-600 dark:text-violet-400 mb-0.5">
+                      1. Akun Guru Login (Aktif)
+                    </span>
+                    <strong className="text-xs font-bold text-slate-900 dark:text-white truncate">
+                      {currentTeacher?.name || 'Guru Pengampu'}
+                    </strong>
+                    <span className="text-[10px] text-slate-500 font-mono truncate">
+                      NIP: {currentTeacher?.nip || '-'}
+                    </span>
+                  </button>
+
+                  {/* Opsi 2: Default Guru/Proktor Sekolah */}
+                  <button
+                    type="button"
+                    onClick={() => setDossierSignerMode('default_teacher')}
+                    className={`p-2.5 rounded-xl border text-left transition cursor-pointer flex flex-col justify-between ${
+                      dossierSignerMode === 'default_teacher'
+                        ? 'bg-emerald-50 dark:bg-emerald-950/50 border-emerald-400 dark:border-emerald-600 shadow-xs'
+                        : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700/80 text-slate-600 dark:text-slate-400 hover:border-slate-300'
+                    }`}
+                  >
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 mb-0.5">
+                      2. Guru / Proktor Default
+                    </span>
+                    <strong className="text-xs font-bold text-slate-900 dark:text-white truncate">
+                      {effectiveSchoolSettings.teacherName || 'Guru Pengampu'}
+                    </strong>
+                    <span className="text-[10px] text-slate-500 font-mono truncate">
+                      NIP: {effectiveSchoolSettings.teacherNip || '-'}
+                    </span>
+                  </button>
+
+                  {/* Opsi 3: Kepala Sekolah */}
+                  <button
+                    type="button"
+                    onClick={() => setDossierSignerMode('principal')}
+                    className={`p-2.5 rounded-xl border text-left transition cursor-pointer flex flex-col justify-between ${
+                      dossierSignerMode === 'principal'
+                        ? 'bg-indigo-50 dark:bg-indigo-950/50 border-indigo-400 dark:border-indigo-600 shadow-xs'
+                        : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700/80 text-slate-600 dark:text-slate-400 hover:border-slate-300'
+                    }`}
+                  >
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400 mb-0.5">
+                      3. Kepala Sekolah
+                    </span>
+                    <strong className="text-xs font-bold text-slate-900 dark:text-white truncate">
+                      {effectiveSchoolSettings.principalName || 'Kepala Sekolah'}
+                    </strong>
+                    <span className="text-[10px] text-slate-500 font-mono truncate">
+                      NIP: {effectiveSchoolSettings.principalNip || '-'}
+                    </span>
+                  </button>
+                </div>
+              </div>
+
+              {/* TANDA TANGAN FORMAL LEMBAR HASIL UJIAN WITH TTE DIGITAL */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-8 pt-6 text-center text-xs font-sans border-t border-slate-100 dark:border-slate-800 print:border-slate-300 print:break-inside-avoid">
                 <div className="space-y-12">
-                  <p className="font-semibold text-slate-800">Siswa Peserta Ujian,</p>
+                  <p className="font-semibold text-slate-800 dark:text-slate-300 print:text-black">Siswa Peserta Ujian,</p>
                   <div className="h-14 flex items-center justify-center">
                     <span className="font-serif italic text-slate-400 text-sm">(Tanda Tangan Siswa)</span>
                   </div>
                   <div>
-                    <strong className="underline block font-bold text-slate-900 uppercase">{selectedResult.studentName}</strong>
-                    <span className="text-[11px] text-slate-600 block font-mono">NISN: {dossierNisn}</span>
+                    <strong className="underline block font-bold text-slate-900 dark:text-white print:text-black uppercase">{selectedResult.studentName}</strong>
+                    <span className="text-[11px] text-slate-600 dark:text-slate-400 print:text-slate-700 block font-mono">NISN: {dossierNisn}</span>
                   </div>
                 </div>
 
@@ -6942,9 +7138,9 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                   <TTESignatureSeal
                     settings={effectiveSchoolSettings}
                     documentId={selectedResult.id}
-                    signerName={effectiveSchoolSettings.teacherName || currentTeacher?.name || 'Guru Pengampu'}
-                    signerTitle="Guru Pengampu / Proktor"
-                    signerNip={effectiveSchoolSettings.teacherNip || currentTeacher?.nip}
+                    signerName={activeDossierSigner.name}
+                    signerTitle={activeDossierSigner.title}
+                    signerNip={activeDossierSigner.nip}
                     signDate={selectedResult.submittedAt ? selectedResult.submittedAt.split(' ')[0] : undefined}
                   />
                 </div>

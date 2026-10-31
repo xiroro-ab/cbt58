@@ -293,9 +293,22 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
         requestFullscreenMode();
       } else if (cmd.action === 'FORCE_FINISH') {
         // Pengawas menyelesaikan ujian secara paksa
-        if (!isCompletedRef.current) {
-          handleFinalSubmit('Diselesaikan Paksa oleh Pengawas');
+        isCompletedRef.current = true;
+        setIsExamCompleted(true);
+        setIsLocked(false);
+        const cleanName = studentName.toLowerCase().trim();
+        if (typeof window !== 'undefined') {
+          try {
+            localStorage.setItem(`cbt_submitted_${subject.id}_${cleanName}`, JSON.stringify({
+              submittedAt: new Date().toLocaleString('id-ID'),
+              reason: 'Diselesaikan Paksa oleh Pengawas'
+            }));
+            localStorage.removeItem(stateKey);
+            localStorage.removeItem(blockedKey);
+          } catch {}
         }
+        removeStudentSession(studentName, subject.id);
+        handleFinalSubmit('Diselesaikan Paksa oleh Pengawas');
       } else if (cmd.action === 'RESET_EXAM') {
         // Pengawas mereset ujian siswa (bersihkan cache dan kembali ke login)
         removeStudentSession(studentName, subject.id);
@@ -303,6 +316,7 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
           try {
             localStorage.removeItem(stateKey);
             localStorage.removeItem(blockedKey);
+            localStorage.removeItem(`cbt_submitted_${subject.id}_${studentName.toLowerCase().trim()}`);
             const stored = localStorage.getItem(`cbt_results_${subject.id}`);
             if (stored) {
               const list = JSON.parse(stored);
@@ -733,6 +747,7 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
   };
 
   const handleFinalSubmit = async (reason: string = 'Selesai Mengerjakan') => {
+    isCompletedRef.current = true;
     setShowConfirmSubmit(false);
     setShowWarningModal(false);
 
@@ -756,10 +771,16 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
     setIsExamCompleted(true);
     setIsLocked(false);
 
-    // Hapus sesi live monitoring & bersihkan kunci/state lokal
+    // Hapus sesi live monitoring & tandai sudah submit di storage lokal
     removeStudentSession(studentName, subject.id);
     if (typeof window !== 'undefined') {
       try {
+        const cleanName = studentName.toLowerCase().trim();
+        localStorage.setItem(`cbt_submitted_${subject.id}_${cleanName}`, JSON.stringify({
+          score: evaluation.finalScore,
+          submittedAt: new Date().toLocaleString('id-ID'),
+          reason
+        }));
         localStorage.removeItem(stateKey);
         localStorage.removeItem(blockedKey);
       } catch {}

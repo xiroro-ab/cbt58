@@ -77,11 +77,12 @@ function initSupabaseChannel() {
       sharedSupaChannel
         .on('broadcast', { event: 'session_heartbeat' }, (payload: any) => {
           const session: ExamSession = payload.payload;
-          if (session) {
+          if (session && session.studentName) {
+            const cleanName = session.studentName.toLowerCase().trim();
             const current = getStoredSessions();
             const updated = [
               session,
-              ...current.filter(s => !(s.studentName.toLowerCase().trim() === session.studentName.toLowerCase().trim() && s.subjectId === session.subjectId))
+              ...current.filter(s => s.studentName.toLowerCase().trim() !== cleanName)
             ];
             localStorage.setItem(SESSIONS_STORAGE_KEY, JSON.stringify(updated));
             liveSessionListeners.forEach(fn => {
@@ -92,9 +93,10 @@ function initSupabaseChannel() {
         .on('broadcast', { event: 'session_removed' }, (payload: any) => {
           const { studentName, subjectId } = payload.payload || {};
           if (studentName) {
+            const cleanName = studentName.toLowerCase().trim();
             const current = getStoredSessions();
             const filtered = current.filter(
-              s => !(s.studentName.toLowerCase().trim() === studentName.toLowerCase().trim() && s.subjectId === subjectId)
+              s => s.studentName.toLowerCase().trim() !== cleanName
             );
             localStorage.setItem(SESSIONS_STORAGE_KEY, JSON.stringify(filtered));
             liveSessionListeners.forEach(fn => {
@@ -163,9 +165,21 @@ export function getStoredSessions(): ExamSession[] {
     const list: ExamSession[] = JSON.parse(raw);
     const now = Date.now();
 
+    // Deduplikasi ketat per nama siswa: simpan yang paling mutakhir detak jantungnya
+    const dedupedMap = new Map<string, ExamSession>();
+    for (const s of list) {
+      if (!s || !s.studentName) continue;
+      const key = s.studentName.toLowerCase().trim();
+      const existing = dedupedMap.get(key);
+      if (!existing || s.lastHeartbeat > existing.lastHeartbeat) {
+        dedupedMap.set(key, s);
+      }
+    }
+    const dedupedList = Array.from(dedupedMap.values());
+
     // Jika siswa tidak mengirim detak jantung (heartbeat) lebih dari 3.5 detik (misal aplikasi diminimalkan / di layar utama HP),
     // otomatis tandai isFocus = false agar pengawas langsung tahu siswa sedang di luar aplikasi
-    const marked = list.map(s => {
+    const marked = dedupedList.map(s => {
       if (s.status === 'ongoing' && (now - s.lastHeartbeat) > 3500 && s.isFocus) {
         return { ...s, isFocus: false };
       }
@@ -187,15 +201,17 @@ export function getStoredSessions(): ExamSession[] {
  * Siswa melaporkan progres, status fokus, dan sisa waktu secara berkala (Heartbeat)
  */
 export function reportStudentSession(session: ExamSession) {
-  if (typeof window === 'undefined') return;
+  if (typeof window === 'undefined' || !session || !session.studentName) return;
 
-  // 1. Simpan ke localStorage lokal
+  const cleanName = session.studentName.toLowerCase().trim();
+
+  // 1. Simpan ke localStorage lokal dengan deduplikasi ketat per nama siswa
   let updated: ExamSession[] = [];
   try {
     const current = getStoredSessions();
     updated = [
       session,
-      ...current.filter(s => !(s.studentName.toLowerCase().trim() === session.studentName.toLowerCase().trim() && s.subjectId === session.subjectId))
+      ...current.filter(s => s.studentName.toLowerCase().trim() !== cleanName)
     ];
     localStorage.setItem(SESSIONS_STORAGE_KEY, JSON.stringify(updated));
   } catch (e) {
@@ -229,14 +245,15 @@ export function reportStudentSession(session: ExamSession) {
 }
 
 /**
- * Menghapus sesi aktif ketika siswa telah menyelesaikan ujian secara mandiri
+ * Menghapus sesi aktif ketika siswa telah menyelesaikan ujian secara mandiri atau dipaksa selesai
  */
-export function removeStudentSession(studentName: string, subjectId: string) {
-  if (typeof window === 'undefined') return;
+export function removeStudentSession(studentName: string, subjectId?: string) {
+  if (typeof window === 'undefined' || !studentName) return;
   try {
+    const cleanName = studentName.toLowerCase().trim();
     const current = getStoredSessions();
     const filtered = current.filter(
-      s => !(s.studentName.toLowerCase().trim() === studentName.toLowerCase().trim() && s.subjectId === subjectId)
+      s => s.studentName.toLowerCase().trim() !== cleanName
     );
     localStorage.setItem(SESSIONS_STORAGE_KEY, JSON.stringify(filtered));
 
@@ -326,6 +343,7 @@ export function sendProctorCommand(cmd: { action: ProctorActionType; studentName
         localStorage.removeItem(`cbt_blocked_${cmd.subjectId}_${cleanName}`);
         localStorage.removeItem(`cbt_exam_state_${cmd.subjectId}_${cleanName}`);
         localStorage.removeItem(`cbt_answers_${cmd.studentName}_${cmd.subjectId}`);
+        localStorage.removeItem(`cbt_submitted_${cmd.subjectId}_${cleanName}`);
       } catch {}
     }
     removeStudentSession(cmd.studentName, cmd.subjectId);

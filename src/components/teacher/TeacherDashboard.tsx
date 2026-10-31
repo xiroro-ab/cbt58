@@ -3211,11 +3211,19 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
       {/* 5B. TAMPILAN LIVE MONITORING UJIAN REALTIME                    */}
       {/* ============================================================== */}
       {currentNav === 'monitoring' && (() => {
-        const filteredSessions = liveSessions.filter(s => {
-          if (monitoringFilterSubId !== 'ALL' && s.subjectId !== monitoringFilterSubId) return false;
-          if (monitoringFilterClass !== 'ALL' && s.className !== monitoringFilterClass) return false;
-          return true;
-        });
+        // Deduplikasi ketat per nama siswa: setiap siswa hanya boleh ada 1 sesi dengan heartbeat paling baru
+        const sessionMap = new Map<string, ExamSession>();
+        for (const s of liveSessions) {
+          if (!s || !s.studentName) continue;
+          if (monitoringFilterSubId !== 'ALL' && s.subjectId !== monitoringFilterSubId) continue;
+          if (monitoringFilterClass !== 'ALL' && s.className !== monitoringFilterClass) continue;
+          const key = s.studentName.toLowerCase().trim();
+          const existing = sessionMap.get(key);
+          if (!existing || s.lastHeartbeat > existing.lastHeartbeat) {
+            sessionMap.set(key, s);
+          }
+        }
+        const filteredSessions = Array.from(sessionMap.values());
 
         const now = Date.now();
         const activeCount = filteredSessions.length;
@@ -3505,14 +3513,31 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                                       variant: 'danger',
                                       confirmLabel: 'Ya, Selesaikan Paksa',
                                       cancelLabel: 'Batal',
-                                      onConfirm: () => {
+                                      onConfirm: async () => {
+                                        const cleanName = s.studentName.toLowerCase().trim();
+
+                                        // 1. Simpan flag submit lokal di browser pengawas & bersihkan cache
+                                        if (typeof window !== 'undefined') {
+                                          try {
+                                            localStorage.setItem(`cbt_submitted_${s.subjectId}_${cleanName}`, JSON.stringify({
+                                              submittedAt: new Date().toLocaleString('id-ID'),
+                                              reason: 'Diselesaikan Paksa oleh Pengawas'
+                                            }));
+                                            localStorage.removeItem(`cbt_blocked_${s.subjectId}_${cleanName}`);
+                                            localStorage.removeItem(`cbt_exam_state_${s.subjectId}_${cleanName}`);
+                                          } catch {}
+                                        }
+                                        removeStudentSession(s.studentName, s.subjectId);
+                                        setLiveSessions(prev => prev.filter(sess => sess.studentName.toLowerCase().trim() !== cleanName));
+
+                                        // 2. Siarkan instruksi FORCE_FINISH ke siswa
                                         sendProctorCommand({
                                           action: 'FORCE_FINISH',
                                           studentName: s.studentName,
                                           subjectId: s.subjectId
                                         });
 
-                                        // Buat hasil evaluasi dan simpan ke database
+                                        // 3. Buat hasil evaluasi dan simpan ke database secara async
                                         const matchedSub = (allSubjects || []).find(sub => sub.id === s.subjectId) || subject;
                                         const evalRes = evaluateFullExam(questions, s.answers || [], matchedSub.scoringRules);
                                         const forcedResult: ExamResult = {
@@ -3531,9 +3556,8 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                                           details: evalRes.details
                                         };
                                         if (onUpdateResult) {
-                                          onUpdateResult(forcedResult);
+                                          await onUpdateResult(forcedResult);
                                         }
-                                        removeStudentSession(s.studentName, s.subjectId);
                                         setMonitoringActionToast(`Ujian siswa ${s.studentName} telah diselesaikan paksa dan nilainya tersimpan.`);
                                       }
                                     });

@@ -30,6 +30,7 @@ import {
   deleteSubject,
   subscribeToExamResults,
   checkStudentLockStatus,
+  checkStudentExamSubmission,
   clearStudentAutolockInSupabase,
   fetchNotifications,
   fetchMessages,
@@ -763,60 +764,13 @@ export default function Home() {
       return;
     }
 
-    // 3. Validasi Anti Re-Login (Cegah Siswa Mengerjakan Ulang Tanpa Izin Pengawas)
-    const normalizedName = studentName.toLowerCase().trim();
-
-    // Selalu sinkronkan riwayat ujian siswa dari database cloud
-    let currentResults = results;
-    let cloudSynced = false;
-    try {
-      const cloudResults = await fetchExamResults(matchedSub.id);
-      cloudSynced = true;
-      currentResults = cloudResults;
-      setResults(prev => {
-        const cloudIds = new Set(cloudResults.map(r => r.id));
-        const others = prev.filter(r => r.subjectId !== matchedSub.id && !cloudIds.has(r.id));
-        return [...cloudResults, ...others];
-      });
-    } catch (err) {
-      console.warn('Gagal sinkronisasi anti-relogin dari database:', err);
-    }
-
-    const alreadySubmittedInCloud = currentResults.find(
-      r => r.subjectId === matchedSub.id && r.studentName.toLowerCase().trim() === normalizedName
-    );
-
-    let alreadySubmittedInStorage: ExamResult | null = null;
-    if (typeof window !== 'undefined') {
-      try {
-        const stored = localStorage.getItem(`cbt_results_${matchedSub.id}`);
-        if (stored) {
-          const list: ExamResult[] = JSON.parse(stored);
-          const found = list.find(r => r.studentName.toLowerCase().trim() === normalizedName);
-          if (found) {
-            // Jika database cloud sudah sinkron dan siswa tidak ada di database hasil ujian
-            // (karena sudah di-reset oleh guru/pengawas), bersihkan cache usang dari browser siswa
-            if (cloudSynced && !alreadySubmittedInCloud) {
-              const cleaned = list.filter(r => r.studentName.toLowerCase().trim() !== normalizedName);
-              localStorage.setItem(`cbt_results_${matchedSub.id}`, JSON.stringify(cleaned));
-              localStorage.removeItem(`cbt_answers_${studentName}_${matchedSub.id}`);
-              localStorage.removeItem(`cbt_exam_state_${matchedSub.id}_${normalizedName}`);
-              localStorage.removeItem(`cbt_blocked_${matchedSub.id}_${normalizedName}`);
-              alreadySubmittedInStorage = null;
-            } else {
-              alreadySubmittedInStorage = found;
-            }
-          }
-        }
-      } catch {}
-    }
-
-    const previousSubmission = alreadySubmittedInCloud || alreadySubmittedInStorage;
-    if (previousSubmission) {
+    // 3. Validasi Anti Re-Login Mandiri & Realtime (Cegah Siswa Mengerjakan Ulang Tanpa Izin Pengawas)
+    const submissionStatus = await checkStudentExamSubmission(matchedSub.id, studentName);
+    if (submissionStatus.isSubmitted) {
       setLoginError(
         language === 'id'
-          ? `AKSES DITOLAK (ANTI-RELOGIN): Siswa "${studentName}" sudah pernah menyelesaikan dan mengumpulkan ujian "${matchedSub.title}" pada ${previousSubmission.submittedAt || 'sesi sebelumnya'} (Skor: ${previousSubmission.score}%). Anda tidak diperbolehkan mengerjakan ulang kecuali lembar ujian Anda di-reset oleh Guru Pengawas.`
-          : `ACCESS DENIED: Student "${studentName}" has already completed and submitted "${matchedSub.title}" on ${previousSubmission.submittedAt || 'previous session'}. Retakes are not allowed unless reset by your proctor.`
+          ? `AKSES DITOLAK (ANTI-RELOGIN): Siswa "${studentName}" sudah pernah menyelesaikan dan mengumpulkan ujian "${matchedSub.title}" pada ${submissionStatus.submittedAt || 'sesi sebelumnya'} (Skor: ${submissionStatus.score}%). Anda tidak diperbolehkan mengerjakan ulang kecuali lembar ujian Anda di-reset oleh Guru Pengawas.`
+          : `ACCESS DENIED (ANTI-RELOGIN): Student "${studentName}" has already completed and submitted "${matchedSub.title}" on ${submissionStatus.submittedAt || 'previous session'} (Score: ${submissionStatus.score}%). Retakes are forbidden unless reset by your proctor.`
       );
       return;
     }
@@ -867,12 +821,35 @@ export default function Home() {
     setShowBriefModal(true);
   };
 
-  const handleConfirmStartExam = () => {
+  const handleConfirmStartExam = async () => {
+    if (briefingData) {
+      const submissionStatus = await checkStudentExamSubmission(briefingData.subject.id, studentName);
+      if (submissionStatus.isSubmitted) {
+        setShowBriefModal(false);
+        setBriefingData(null);
+        setLoginError(
+          language === 'id'
+            ? `AKSES DITOLAK (ANTI-RELOGIN): Siswa "${studentName}" sudah pernah menyelesaikan dan mengumpulkan ujian "${briefingData.subject.title}" pada ${submissionStatus.submittedAt || 'sesi sebelumnya'} (Skor: ${submissionStatus.score}%). Anda tidak diperbolehkan mengerjakan ulang.`
+            : `ACCESS DENIED (ANTI-RELOGIN): Student "${studentName}" has already completed "${briefingData.subject.title}". Retakes are not allowed.`
+        );
+        return;
+      }
+    }
     setShowBriefModal(false);
     setViewMode('student_exam');
   };
 
   const handleFinishExam = async (resultData: any) => {
+    const cleanName = resultData.studentName.toLowerCase().trim();
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem(`cbt_submitted_${subject.id}_${cleanName}`, JSON.stringify({
+          score: resultData.score,
+          submittedAt: resultData.submittedAt
+        }));
+      } catch {}
+    }
+
     const newResult: ExamResult = {
       id: `res-${Date.now()}`,
       subjectId: subject.id,

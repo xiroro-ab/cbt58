@@ -286,60 +286,32 @@ export async function removeQuestion(qId: string, subjectId?: string): Promise<b
 }
 
 /**
- * Menyimpan hasil ujian siswa ke Supabase dan localStorage
+ * Menyimpan hasil ujian siswa ke Supabase dan localStorage (delegasi ke saveOrUpdateExamResult untuk mencegah duplikasi)
  */
 export async function saveExamResult(result: ExamResult): Promise<boolean> {
-  if (typeof window !== 'undefined' && result.subjectId) {
-    try {
-      const stored = localStorage.getItem(`cbt_results_${result.subjectId}`);
-      const list: ExamResult[] = stored ? JSON.parse(stored) : [];
-      const updated = [
-        result,
-        ...list.filter(
-          r => !(r.id === result.id || (r.studentName.toLowerCase().trim() === result.studentName.toLowerCase().trim() && r.subjectId === result.subjectId))
-        )
-      ];
-      localStorage.setItem(`cbt_results_${result.subjectId}`, JSON.stringify(updated));
-    } catch {}
-  }
-
-  try {
-    const { error } = await supabase.from('exam_results').insert({
-      subject_id: result.subjectId,
-      student_name: result.studentName,
-      class_name: result.className,
-      score: result.score,
-      total_earned: result.totalEarned,
-      total_max: result.totalMax,
-      answers: result.answers,
-      violation_count: result.violationCount
-    });
-
-    if (error) {
-      console.error('Error saveExamResult to Supabase:', error);
-      return false;
-    }
-    notifyResultChanged({ action: 'INSERT', subjectId: result.subjectId, result });
-    return true;
-  } catch (err) {
-    console.error('Exception saveExamResult:', err);
-    return false;
-  }
+  return saveOrUpdateExamResult(result);
 }
 
 /**
  * Menyimpan hasil baru jika belum ada, atau mengupdate jika sudah ada di database
  */
 export async function saveOrUpdateExamResult(result: ExamResult): Promise<boolean> {
+  const cleanName = result.studentName.toLowerCase().trim();
+
   // Simpan ke localStorage terlebih dahulu sebagai fail-safe instan
   if (typeof window !== 'undefined' && result.subjectId) {
     try {
+      localStorage.setItem(`cbt_submitted_${result.subjectId}_${cleanName}`, JSON.stringify({
+        score: result.score,
+        submittedAt: result.submittedAt || new Date().toLocaleString('id-ID')
+      }));
+
       const stored = localStorage.getItem(`cbt_results_${result.subjectId}`);
       const list: ExamResult[] = stored ? JSON.parse(stored) : [];
       const updated = [
         result,
         ...list.filter(
-          r => !(r.id === result.id || (r.studentName.toLowerCase().trim() === result.studentName.toLowerCase().trim() && r.subjectId === result.subjectId))
+          r => !(r.id === result.id || (r.studentName.toLowerCase().trim() === cleanName && r.subjectId === result.subjectId))
         )
       ];
       localStorage.setItem(`cbt_results_${result.subjectId}`, JSON.stringify(updated));
@@ -358,7 +330,7 @@ export async function saveOrUpdateExamResult(result: ExamResult): Promise<boolea
         .from('exam_results')
         .select('id')
         .eq('subject_id', result.subjectId)
-        .eq('student_name', result.studentName)
+        .ilike('student_name', result.studentName.trim())
         .limit(1);
       if (byName && byName.length > 0) existingId = byName[0].id;
     }
@@ -402,6 +374,86 @@ export async function saveOrUpdateExamResult(result: ExamResult): Promise<boolea
 }
 
 /**
+ * Mengecek apakah siswa sudah pernah mengumpulkan ujian tertentu (Anti Re-Login Mandiri & Realtime)
+ * Memeriksa fail-safe localStorage perangkat dan query langsung ke Supabase Cloud
+ */
+export async function checkStudentExamSubmission(
+  subjectId: string,
+  studentName: string
+): Promise<{ isSubmitted: boolean; score?: number; submittedAt?: string }> {
+  if (!subjectId || !studentName) {
+    return { isSubmitted: false };
+  }
+
+  const cleanName = studentName.toLowerCase().trim();
+
+  // 1. Cek fail-safe localStorage di perangkat siswa seketika
+  if (typeof window !== 'undefined') {
+    try {
+      const flag = localStorage.getItem(`cbt_submitted_${subjectId}_${cleanName}`);
+      if (flag) {
+        const parsed = JSON.parse(flag);
+        return {
+          isSubmitted: true,
+          score: parsed.score,
+          submittedAt: parsed.submittedAt
+        };
+      }
+      const stored = localStorage.getItem(`cbt_results_${subjectId}`);
+      if (stored) {
+        const list: ExamResult[] = JSON.parse(stored);
+        const match = list.find(r => r.studentName.toLowerCase().trim() === cleanName);
+        if (match) {
+          return {
+            isSubmitted: true,
+            score: match.score,
+            submittedAt: match.submittedAt
+          };
+        }
+      }
+    } catch {}
+  }
+
+  // 2. Query langsung ke Supabase Cloud secara case-insensitive
+  try {
+    const { data, error } = await supabase
+      .from('exam_results')
+      .select('id, score, submitted_at, student_name')
+      .eq('subject_id', subjectId)
+      .ilike('student_name', studentName.trim())
+      .order('submitted_at', { ascending: false })
+      .limit(1);
+
+    if (!error && data && data.length > 0) {
+      const item = data[0];
+      const submittedAtFormatted = item.submitted_at
+        ? new Date(item.submitted_at).toLocaleString('id-ID')
+        : 'Sesi Sebelumnya';
+
+      // Simpan flag di perangkat agar pemeriksaan berikutnya instan
+      if (typeof window !== 'undefined') {
+        try {
+          localStorage.setItem(`cbt_submitted_${subjectId}_${cleanName}`, JSON.stringify({
+            score: Number(item.score),
+            submittedAt: submittedAtFormatted
+          }));
+        } catch {}
+      }
+
+      return {
+        isSubmitted: true,
+        score: Number(item.score),
+        submittedAt: submittedAtFormatted
+      };
+    }
+  } catch (err) {
+    console.warn('Gagal cek status submit siswa ke Supabase:', err);
+  }
+
+  return { isSubmitted: false };
+}
+
+/**
  * Memperbarui nilai dan koreksi uraian hasil ujian siswa di Supabase & localStorage
  */
 export async function updateExamResult(result: ExamResult): Promise<boolean> {
@@ -433,6 +485,7 @@ export async function deleteExamResult(resultId: string, subjectId?: string, stu
         localStorage.removeItem(`cbt_answers_${studentName}_${subjectId}`);
         localStorage.removeItem(`cbt_blocked_${subjectId}_${cleanName}`);
         localStorage.removeItem(`cbt_exam_state_${subjectId}_${cleanName}`);
+        localStorage.removeItem(`cbt_submitted_${subjectId}_${cleanName}`);
       }
     } catch {}
   }

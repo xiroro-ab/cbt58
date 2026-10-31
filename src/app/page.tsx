@@ -747,21 +747,21 @@ export default function Home() {
 
     // Selalu sinkronkan riwayat ujian siswa dari database cloud
     let currentResults = results;
+    let cloudSynced = false;
     try {
       const cloudResults = await fetchExamResults(matchedSub.id);
-      if (cloudResults && cloudResults.length > 0) {
-        currentResults = cloudResults;
-        setResults(prev => {
-          const cloudIds = new Set(cloudResults.map(r => r.id));
-          const others = prev.filter(r => r.subjectId !== matchedSub.id && !cloudIds.has(r.id));
-          return [...cloudResults, ...others];
-        });
-      }
+      cloudSynced = true;
+      currentResults = cloudResults;
+      setResults(prev => {
+        const cloudIds = new Set(cloudResults.map(r => r.id));
+        const others = prev.filter(r => r.subjectId !== matchedSub.id && !cloudIds.has(r.id));
+        return [...cloudResults, ...others];
+      });
     } catch (err) {
       console.warn('Gagal sinkronisasi anti-relogin dari database:', err);
     }
 
-    const alreadySubmittedInState = currentResults.find(
+    const alreadySubmittedInCloud = currentResults.find(
       r => r.subjectId === matchedSub.id && r.studentName.toLowerCase().trim() === normalizedName
     );
 
@@ -772,12 +772,23 @@ export default function Home() {
         if (stored) {
           const list: ExamResult[] = JSON.parse(stored);
           const found = list.find(r => r.studentName.toLowerCase().trim() === normalizedName);
-          if (found) alreadySubmittedInStorage = found;
+          if (found) {
+            // Jika database cloud sudah sinkron dan siswa tidak ada di database hasil ujian
+            // (karena sudah di-reset oleh guru/pengawas), bersihkan cache usang dari browser siswa
+            if (cloudSynced && !alreadySubmittedInCloud) {
+              const cleaned = list.filter(r => r.studentName.toLowerCase().trim() !== normalizedName);
+              localStorage.setItem(`cbt_results_${matchedSub.id}`, JSON.stringify(cleaned));
+              localStorage.removeItem(`cbt_answers_${studentName}_${matchedSub.id}`);
+              alreadySubmittedInStorage = null;
+            } else {
+              alreadySubmittedInStorage = found;
+            }
+          }
         }
       } catch {}
     }
 
-    const previousSubmission = alreadySubmittedInState || alreadySubmittedInStorage;
+    const previousSubmission = alreadySubmittedInCloud || alreadySubmittedInStorage;
     if (previousSubmission) {
       setLoginError(
         language === 'id'

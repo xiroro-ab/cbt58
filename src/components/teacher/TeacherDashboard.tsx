@@ -1731,6 +1731,33 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                             >
                               <Award className="w-3.5 h-3.5" />
                             </button>
+                            <button
+                              onClick={() => {
+                                showThemedConfirm({
+                                  title: 'Reset Lembar Ujian Siswa',
+                                  message: `Apakah Anda yakin ingin mereset ujian siswa "${r.studentName}"? Seluruh lembar jawaban dan nilai akan dihapus, sehingga siswa dapat login dan mengerjakan ulang ujian ini.`,
+                                  variant: 'danger',
+                                  confirmLabel: 'Ya, Reset Ujian',
+                                  cancelLabel: 'Batal',
+                                  onConfirm: () => {
+                                    if (onDeleteResult) {
+                                      onDeleteResult(r.id, r.subjectId, r.studentName);
+                                    }
+                                    sendProctorCommand({
+                                      action: 'RESET_EXAM',
+                                      studentName: r.studentName,
+                                      subjectId: r.subjectId
+                                    });
+                                    removeStudentSession(r.studentName, r.subjectId);
+                                    setMonitoringActionToast(`Lembar ujian siswa ${r.studentName} berhasil di-reset. Siswa kini dapat login kembali.`);
+                                  }
+                                });
+                              }}
+                              className="p-1 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/60 text-slate-400 hover:text-rose-600 transition"
+                              title="Reset Ujian (Izinkan Ujian Ulang)"
+                            >
+                              <RotateCcw className="w-3.5 h-3.5" />
+                            </button>
                           </div>
                         </td>
                       </tr>
@@ -3216,6 +3243,9 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                                           subjectId: s.subjectId
                                         });
                                         removeStudentSession(s.studentName, s.subjectId);
+                                        if (onDeleteResult) {
+                                          onDeleteResult(s.id, s.subjectId, s.studentName);
+                                        }
                                         setMonitoringActionToast(`Sesi ujian siswa ${s.studentName} berhasil dibersihkan.`);
                                       }
                                     });

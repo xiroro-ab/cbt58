@@ -357,7 +357,11 @@ export async function deleteExamResult(resultId: string, subjectId?: string, stu
         localStorage.setItem(
           `cbt_results_${subjectId}`,
           JSON.stringify(
-            list.filter(r => r.id !== resultId && !(studentName && r.studentName.toLowerCase().trim() === studentName.toLowerCase().trim()))
+            list.filter(r => {
+              if (resultId && r.id === resultId) return false;
+              if (studentName && r.studentName.toLowerCase().trim() === studentName.toLowerCase().trim()) return false;
+              return true;
+            })
           )
         );
       }
@@ -365,11 +369,15 @@ export async function deleteExamResult(resultId: string, subjectId?: string, stu
   }
 
   try {
-    let { error } = await supabase.from('exam_results').delete().eq('id', resultId);
-    if ((error || resultId.startsWith('res-')) && subjectId && studentName) {
-      await supabase.from('exam_results').delete()
+    if (resultId && !resultId.startsWith('res-')) {
+      await supabase.from('exam_results').delete().eq('id', resultId);
+    }
+    if (subjectId && studentName) {
+      await supabase
+        .from('exam_results')
+        .delete()
         .eq('subject_id', subjectId)
-        .eq('student_name', studentName);
+        .ilike('student_name', studentName.trim());
     }
     return true;
   } catch (err) {

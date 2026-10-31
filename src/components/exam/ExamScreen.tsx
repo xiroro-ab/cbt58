@@ -95,6 +95,11 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
   const isCompletedRef = useRef(isExamCompleted);
   isCompletedRef.current = isExamCompleted;
 
+  const showWarningModalRef = useRef(showWarningModal);
+  showWarningModalRef.current = showWarningModal;
+
+  const lastViolationTimeRef = useRef<number>(0);
+
   const answersRef = useRef(answers);
   answersRef.current = answers;
 
@@ -182,8 +187,6 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
 
   // 3. LISTEN TO PROCTOR COMMANDS (Buka Kunci, Paksa Selesai, Reset)
   useEffect(() => {
-    if (isExamCompleted) return;
-
     const unsubscribe = subscribeToStudentCommands(studentName, subject.id, (cmd) => {
       if (cmd.action === 'RESET_VIOLATION') {
         // Pengawas membuka kunci & me-reset pelanggaran
@@ -195,27 +198,46 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
         requestFullscreenMode();
       } else if (cmd.action === 'FORCE_FINISH') {
         // Pengawas menyelesaikan ujian secara paksa
-        handleFinalSubmit('Diselesaikan Paksa oleh Pengawas');
+        if (!isCompletedRef.current) {
+          handleFinalSubmit('Diselesaikan Paksa oleh Pengawas');
+        }
       } else if (cmd.action === 'RESET_EXAM') {
-        // Pengawas mereset ujian siswa (bersihkan dan keluar)
+        // Pengawas mereset ujian siswa (bersihkan cache dan kembali ke login)
         removeStudentSession(studentName, subject.id);
+        if (typeof window !== 'undefined') {
+          try {
+            const stored = localStorage.getItem(`cbt_results_${subject.id}`);
+            if (stored) {
+              const list = JSON.parse(stored);
+              const cleaned = list.filter((r: any) => r.studentName.toLowerCase().trim() !== studentName.toLowerCase().trim());
+              localStorage.setItem(`cbt_results_${subject.id}`, JSON.stringify(cleaned));
+            }
+            localStorage.removeItem(`cbt_answers_${studentName}_${subject.id}`);
+          } catch {}
+        }
         onExit();
       }
     });
 
     return () => unsubscribe();
-  }, [isExamCompleted, studentName, subject.id, onExit, requestFullscreenMode]);
+  }, [studentName, subject.id, onExit, requestFullscreenMode]);
 
   // 4. ANTI-CHEAT ENGINE & VIOLATION HANDLER
   const handleViolation = useCallback(async (reason: string) => {
     if (isCompletedRef.current || isLockedRef.current) return;
+
+    // Cooldown debounce 2.5 detik untuk mencegah multi-trigger dari 1 kali pindah tab (blur + visibility + fullscreen)
+    const now = Date.now();
+    if (now - lastViolationTimeRef.current < 2500) {
+      return;
+    }
+    lastViolationTimeRef.current = now;
 
     const nextCount = violationCountRef.current + 1;
     setViolationCount(nextCount);
     setLastViolationReason(reason);
 
     const limit = subject.violationLimit || 3;
-
     const actualClass = studentClass || subject.className;
 
     // Catat notifikasi otomatis ke Supabase
@@ -285,6 +307,8 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
     const handleFullscreenChange = () => {
       const isFs = Boolean(document.fullscreenElement || (document as any).webkitFullscreenElement);
       setIsFullscreen(isFs);
+      // Jika dokumen sedang hidden (sedang di tab lain), jangan dobel hitung pelanggaran fullscreen
+      if (document.hidden) return;
       if (!isFs && !isCompletedRef.current && !isLockedRef.current) {
         handleViolation('Keluar dari mode layar penuh (Fullscreen).');
       }
@@ -303,6 +327,8 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
     // C. Blur & Focus Window (Google Assistant overlay / Split Screen / Notifikasi)
     const handleBlur = () => {
       setIsFocus(false);
+      // Jika dokumen sudah hidden, event visibilitychange sudah mencatatnya
+      if (document.hidden) return;
       if (!isCompletedRef.current && !isLockedRef.current) {
         handleViolation('Layar ujian kehilangan fokus (Split Screen / Google Assistant / Notifikasi).');
       }

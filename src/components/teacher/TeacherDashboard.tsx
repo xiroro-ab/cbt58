@@ -3830,19 +3830,55 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
 
           {/* Banner Pilihan Baris */}
           {selectedResultIds.length > 0 && (
-            <div className="px-5 py-2.5 bg-violet-50 dark:bg-violet-950/40 border-b border-violet-100 dark:border-violet-900 flex items-center justify-between text-xs">
+            <div className="px-5 py-2.5 bg-violet-50 dark:bg-violet-950/40 border-b border-violet-100 dark:border-violet-900 flex items-center justify-between text-xs flex-wrap gap-2">
               <span className="font-semibold text-violet-900 dark:text-violet-200">
                 {selectedResultIds.length} siswa dipilih
               </span>
-              <button
-                onClick={() => {
-                  const target = results.find(r => selectedResultIds.includes(r.id));
-                  onOpenCertificates?.(target);
-                }}
-                className="px-3 py-1 rounded-lg bg-violet-600 text-white font-bold text-[11px]"
-              >
-                Cetak Sertifikat Siswa Terpilih
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    showThemedConfirm({
+                      title: `Hapus ${selectedResultIds.length} Data Nilai?`,
+                      message: `Apakah Anda yakin ingin menghapus ${selectedResultIds.length} lembar nilai ujian terpilih dari database dan memori lokal? Nilai yang dihapus tidak dapat dipulihkan.`,
+                      variant: 'danger',
+                      confirmLabel: 'Ya, Hapus Nilai Terpilih',
+                      cancelLabel: 'Batal',
+                      onConfirm: async () => {
+                        const count = selectedResultIds.length;
+                        for (const id of selectedResultIds) {
+                          const target = results.find(r => r.id === id);
+                          if (target && onDeleteResult) {
+                            await onDeleteResult(target.id, target.subjectId, target.studentName);
+                          }
+                        }
+                        setSelectedResultIds([]);
+                        showThemedAlert(
+                          'Data Nilai Berhasil Dihapus',
+                          `${count} data lembar nilai siswa terpilih telah berhasil dibersihkan dari database dan memori peramban.`,
+                          'info'
+                        );
+                      }
+                    });
+                  }}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-bold text-[11px] transition shadow-xs cursor-pointer"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Hapus Nilai Terpilih</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    const target = results.find(r => selectedResultIds.includes(r.id));
+                    onOpenCertificates?.(target);
+                  }}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-violet-600 hover:bg-violet-500 text-white font-bold text-[11px] transition shadow-xs cursor-pointer"
+                >
+                  <Award className="w-3.5 h-3.5" />
+                  <span>Cetak Sertifikat Siswa Terpilih</span>
+                </button>
+              </div>
             </div>
           )}
 

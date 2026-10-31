@@ -812,7 +812,11 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
       if (allowedSubjectNames.length > 0) {
         cleanResults = cleanResults.filter(r => {
           const subTitle = (r.subjectTitle || subTitleMap.get(r.subjectId) || '').toLowerCase().trim();
-          return allowedSubjectNames.some(as => subTitle.includes(as) || as.includes(subTitle));
+          return allowedSubjectNames.some(as => {
+            if (subTitle.includes(as) || as.includes(subTitle)) return true;
+            const keywords = as.split(/[\s&,/()-]+/).map(w => w.trim()).filter(w => w.length >= 3 && !GENERIC_SUBJECT_STOP_WORDS.has(w));
+            return keywords.length > 0 && keywords.some(kw => subTitle.includes(kw));
+          });
         });
       }
     }
@@ -860,6 +864,14 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
     return clean || title;
   };
 
+  // Kata-kata umum mata pelajaran yang dikecualikan dari pemotongan kata kunci agar tidak terjadi kebocoran mapel lintas guru
+  const GENERIC_SUBJECT_STOP_WORDS = new Set([
+    'bahasa', 'pendidikan', 'ilmu', 'pengetahuan', 'seni', 'budaya', 'terpadu',
+    'umum', 'dasar', 'kelas', 'semester', 'ganjil', 'genap', 'ujian', 'asesmen',
+    'sumatif', 'tengah', 'akhir', 'asas', 'asat', 'pts', 'pas', 'pat', 'us',
+    'smp', 'smpn', 'tingkat', 'paket', 'soal'
+  ]);
+
   // Helper pengecekan hak akses mata pelajaran per guru (mencakup pencocokan multi-kata kunci & mapel buatan guru)
   const isSubjectBelongToTeacher = (s: Subject, teacher: Teacher | null, createdIds: string[] = []): boolean => {
     if (!teacher || teacher.role === 'admin' || teacher.role === 'pengawas') return true;
@@ -867,22 +879,34 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
 
     const sLower = s.title.toLowerCase();
 
+    const checkMatch = (teacherSubStr: string) => {
+      const tLower = teacherSubStr.toLowerCase().trim();
+      if (!tLower) return false;
+      // 1. Cocok penuh (contoh: "Informatika" di dalam "ASAS GANJIL INFORMATIKA KELAS 9")
+      if (sLower.includes(tLower) || tLower.includes(sLower)) return true;
+
+      // 2. Cocok kata kunci unik setelah difilter dari kata-kata umum
+      const keywords = tLower
+        .split(/[\s&,/()-]+/)
+        .map(w => w.trim())
+        .filter(w => w.length >= 3 && !GENERIC_SUBJECT_STOP_WORDS.has(w));
+
+      if (keywords.length > 0 && keywords.some(kw => sLower.includes(kw))) {
+        return true;
+      }
+      return false;
+    };
+
     // 1. Cek dari penugasan guru (assignments)
     if (teacher.assignments && teacher.assignments.length > 0) {
       for (const asg of teacher.assignments) {
-        const asgLower = asg.subject.toLowerCase();
-        if (sLower.includes(asgLower) || asgLower.includes(sLower)) return true;
-        const keywords = asgLower.split(/[\s&,/]+/).filter(w => w.length >= 3);
-        if (keywords.some(kw => sLower.includes(kw))) return true;
+        if (checkMatch(asg.subject)) return true;
       }
     }
 
     // 2. Cek dari mata pelajaran utama guru (teacher.subject)
-    if (teacher.subject) {
-      const tSubLower = teacher.subject.toLowerCase();
-      if (sLower.includes(tSubLower) || tSubLower.includes(sLower)) return true;
-      const keywords = tSubLower.split(/[\s&,/]+/).filter(w => w.length >= 3);
-      if (keywords.some(kw => sLower.includes(kw))) return true;
+    if (teacher.subject && checkMatch(teacher.subject)) {
+      return true;
     }
 
     return false;

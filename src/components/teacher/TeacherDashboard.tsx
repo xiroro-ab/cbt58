@@ -7,6 +7,7 @@ import { useLanguage } from '@/context/LanguageContext';
 import { StudentManagement } from './StudentManagement';
 import { evaluateFullExam, calculateSingleQuestionScore } from '@/lib/scoringEngine';
 import { sendProctorCommand, subscribeToLiveSessions, removeStudentSession } from '@/lib/liveMonitoringService';
+import { clearStudentAutolockInSupabase } from '@/lib/supabaseService';
 import {
   TrendingUp,
   Award,
@@ -1743,6 +1744,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                                     if (onDeleteResult) {
                                       onDeleteResult(r.id, r.subjectId, r.studentName);
                                     }
+                                    clearStudentAutolockInSupabase(r.subjectId, r.studentName);
                                     sendProctorCommand({
                                       action: 'RESET_EXAM',
                                       studentName: r.studentName,
@@ -3165,6 +3167,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                                       studentName: s.studentName,
                                       subjectId: s.subjectId
                                     });
+                                    clearStudentAutolockInSupabase(s.subjectId, s.studentName);
                                     setMonitoringActionToast(`Pelanggaran siswa ${s.studentName} berhasil di-reset menjadi 0 dan ujian telah dibuka kuncinya.`);
                                   }}
                                   className={`p-2 rounded-xl transition cursor-pointer flex items-center gap-1 text-xs font-bold ${
@@ -3243,6 +3246,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                                           subjectId: s.subjectId
                                         });
                                         removeStudentSession(s.studentName, s.subjectId);
+                                        clearStudentAutolockInSupabase(s.subjectId, s.studentName);
                                         if (onDeleteResult) {
                                           onDeleteResult(s.id, s.subjectId, s.studentName);
                                         }
@@ -4358,6 +4362,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                           if (onDeleteResult) {
                             onDeleteResult(selectedResult.id, selectedResult.subjectId, selectedResult.studentName);
                           }
+                          clearStudentAutolockInSupabase(selectedResult.subjectId, selectedResult.studentName);
                           removeStudentSession(selectedResult.studentName, selectedResult.subjectId);
                           setSelectedResult(null);
                         }

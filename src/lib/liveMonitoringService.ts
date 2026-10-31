@@ -1,4 +1,4 @@
-import { ExamSession } from '@/types/cbt';
+import { ExamSession, ExamResult } from '@/types/cbt';
 import { supabase, isSupabaseConfigured } from './supabaseClient';
 
 const SESSIONS_STORAGE_KEY = 'cbt_live_sessions';
@@ -14,11 +14,23 @@ export interface ProctorCommand {
   timestamp: number;
 }
 
+export type ResultChangeAction = 'INSERT' | 'UPDATE' | 'DELETE';
+export interface ResultChangePayload {
+  action: ResultChangeAction;
+  subjectId: string;
+  result?: ExamResult;
+  resultId?: string;
+  studentName?: string;
+}
+
 // Set of listeners for live sessions updates (Teacher View)
 const liveSessionListeners = new Set<(sessions: ExamSession[]) => void>();
 
 // Set of listeners for proctor commands (Student View)
 const studentCommandListeners = new Set<(cmd: ProctorCommand) => void>();
+
+// Set of listeners for exam results changes (Teacher Dashboard & Database Nilai)
+const resultChangeListeners = new Set<(payload: ResultChangePayload) => void>();
 
 // Singleton BroadcastChannel untuk sinkronisasi antar-tab dalam browser yang sama
 let sharedBc: BroadcastChannel | null = null;
@@ -37,6 +49,10 @@ function getSharedBroadcastChannel(): BroadcastChannel | null {
         } else if (event.data?.type === 'PROCTOR_COMMAND' && event.data.command) {
           studentCommandListeners.forEach(fn => {
             try { fn(event.data.command); } catch {}
+          });
+        } else if (event.data?.type === 'RESULT_CHANGE' && event.data.payload) {
+          resultChangeListeners.forEach(fn => {
+            try { fn(event.data.payload); } catch {}
           });
         }
       });
@@ -94,6 +110,14 @@ function initSupabaseChannel() {
             });
           }
         })
+        .on('broadcast', { event: 'result_change' }, (payload: any) => {
+          const changePayload: ResultChangePayload = payload.payload;
+          if (changePayload) {
+            resultChangeListeners.forEach(fn => {
+              try { fn(changePayload); } catch {}
+            });
+          }
+        })
         .subscribe((status: string) => {
           if (status === 'SUBSCRIBED') {
             // Channel aktif terhubung
@@ -138,8 +162,8 @@ export function getStoredSessions(): ExamSession[] {
     if (!raw) return [];
     const list: ExamSession[] = JSON.parse(raw);
     const now = Date.now();
-    // Bersihkan sesi usang (tidak ada heartbeat > 120 detik)
-    const active = list.filter(s => (now - s.lastHeartbeat) < 120000);
+    // Bersihkan sesi usang (tidak ada heartbeat > 120 detik, KECUALI yang statusnya blocked/terkunci)
+    const active = list.filter(s => s.status === 'blocked' || (now - s.lastHeartbeat) < 120000);
     if (active.length !== list.length) {
       localStorage.setItem(SESSIONS_STORAGE_KEY, JSON.stringify(active));
     }
@@ -253,9 +277,24 @@ export function sendProctorCommand(cmd: { action: ProctorActionType; studentName
 
   // 3. Update sesi lokal seketika
   if (cmd.action === 'RESET_VIOLATION') {
+    const cleanName = cmd.studentName.toLowerCase().trim();
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.removeItem(`cbt_blocked_${cmd.subjectId}_${cleanName}`);
+        const stateKey = `cbt_exam_state_${cmd.subjectId}_${cleanName}`;
+        const saved = localStorage.getItem(stateKey);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          parsed.violationCount = 0;
+          parsed.isLocked = false;
+          localStorage.setItem(stateKey, JSON.stringify(parsed));
+        }
+      } catch {}
+    }
+
     const current = getStoredSessions();
     const updated = current.map(s => {
-      if (s.studentName.toLowerCase().trim() === cmd.studentName.toLowerCase().trim() && s.subjectId === cmd.subjectId) {
+      if (s.studentName.toLowerCase().trim() === cleanName && s.subjectId === cmd.subjectId) {
         return {
           ...s,
           violationCount: 0,
@@ -270,7 +309,24 @@ export function sendProctorCommand(cmd: { action: ProctorActionType; studentName
     liveSessionListeners.forEach(fn => {
       try { fn(updated); } catch {}
     });
-  } else if (cmd.action === 'FORCE_FINISH' || cmd.action === 'RESET_EXAM') {
+  } else if (cmd.action === 'RESET_EXAM') {
+    const cleanName = cmd.studentName.toLowerCase().trim();
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.removeItem(`cbt_blocked_${cmd.subjectId}_${cleanName}`);
+        localStorage.removeItem(`cbt_exam_state_${cmd.subjectId}_${cleanName}`);
+        localStorage.removeItem(`cbt_answers_${cmd.studentName}_${cmd.subjectId}`);
+      } catch {}
+    }
+    removeStudentSession(cmd.studentName, cmd.subjectId);
+  } else if (cmd.action === 'FORCE_FINISH') {
+    const cleanName = cmd.studentName.toLowerCase().trim();
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.removeItem(`cbt_blocked_${cmd.subjectId}_${cleanName}`);
+        localStorage.removeItem(`cbt_exam_state_${cmd.subjectId}_${cleanName}`);
+      } catch {}
+    }
     removeStudentSession(cmd.studentName, cmd.subjectId);
   }
 
@@ -285,6 +341,48 @@ export function sendProctorCommand(cmd: { action: ProctorActionType; studentName
       });
     } catch {}
   }
+}
+
+/**
+ * Mengirim notifikasi perubahan data hasil ujian (Realtime Broadcast ke Dashboard & Database Nilai)
+ */
+export function notifyResultChanged(payload: ResultChangePayload) {
+  if (typeof window === 'undefined') return;
+
+  // 1. Notifikasi listeners lokal di tab aktif
+  resultChangeListeners.forEach(fn => {
+    try { fn(payload); } catch {}
+  });
+
+  // 2. Siarkan via BroadcastChannel lokal (antar-tab browser sama)
+  const bc = getSharedBroadcastChannel();
+  if (bc) {
+    try {
+      bc.postMessage({ type: 'RESULT_CHANGE', payload });
+    } catch {}
+  }
+
+  // 3. Siarkan via Supabase Realtime Channel (lintas perangkat / PC guru & laptop siswa)
+  const supa = initSupabaseChannel();
+  if (supa) {
+    try {
+      supa.send({
+        type: 'broadcast',
+        event: 'result_change',
+        payload
+      });
+    } catch {}
+  }
+}
+
+/**
+ * Guru/Dashboard mendengarkan pembaruan hasil ujian secara realtime
+ */
+export function subscribeToResultChanges(onResultChange: (payload: ResultChangePayload) => void): () => void {
+  resultChangeListeners.add(onResultChange);
+  return () => {
+    resultChangeListeners.delete(onResultChange);
+  };
 }
 
 /**

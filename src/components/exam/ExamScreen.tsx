@@ -57,14 +57,68 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
 }) => {
   const { theme, toggleTheme } = useTheme();
   const { language } = useLanguage();
+
+  const stateKey = `cbt_exam_state_${subject.id}_${studentName.toLowerCase().trim()}`;
+  const blockedKey = `cbt_blocked_${subject.id}_${studentName.toLowerCase().trim()}`;
+
+  // Baca status simpanan lokal jika siswa me-refresh browser saat ujian berlangsung
+  const [savedLocalState] = useState(() => {
+    if (typeof window === 'undefined') return null;
+    try {
+      const raw = localStorage.getItem(stateKey);
+      if (raw) return JSON.parse(raw);
+    } catch {}
+    return null;
+  });
+
+  const [isInitiallyBlocked] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    try {
+      const raw = localStorage.getItem(blockedKey);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed.isBlocked) return true;
+      }
+    } catch {}
+    return false;
+  });
+
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [answers, setAnswers] = useState<StudentAnswerItem[]>(() =>
-    questions.map(q => ({ questionId: q.id, answer: null, isDoubtful: false }))
-  );
-  const [secondsRemaining, setSecondsRemaining] = useState(subject.durationMinutes * 60);
-  const [violationCount, setViolationCount] = useState(0);
-  const [isLocked, setIsLocked] = useState(false);
-  const [lastViolationReason, setLastViolationReason] = useState('');
+  const [answers, setAnswers] = useState<StudentAnswerItem[]>(() => {
+    if (savedLocalState && Array.isArray(savedLocalState.answers) && savedLocalState.answers.length > 0) {
+      const map = new Map<string, StudentAnswerItem>(
+        savedLocalState.answers.map((a: StudentAnswerItem) => [a.questionId, a])
+      );
+      return questions.map((q): StudentAnswerItem => map.get(q.id) || { questionId: q.id, answer: null, isDoubtful: false });
+    }
+    return questions.map((q): StudentAnswerItem => ({ questionId: q.id, answer: null, isDoubtful: false }));
+  });
+
+  const [secondsRemaining, setSecondsRemaining] = useState<number>(() => {
+    if (savedLocalState && typeof savedLocalState.secondsRemaining === 'number' && savedLocalState.secondsRemaining > 0) {
+      return savedLocalState.secondsRemaining;
+    }
+    return subject.durationMinutes * 60;
+  });
+
+  const [violationCount, setViolationCount] = useState<number>(() => {
+    if (savedLocalState && typeof savedLocalState.violationCount === 'number') {
+      return savedLocalState.violationCount;
+    }
+    return isInitiallyBlocked ? (subject.violationLimit || 3) : 0;
+  });
+
+  const [isLocked, setIsLocked] = useState<boolean>(() => {
+    if (isInitiallyBlocked) return true;
+    if (savedLocalState && (savedLocalState.isLocked || (savedLocalState.violationCount && savedLocalState.violationCount >= (subject.violationLimit || 3)))) {
+      return true;
+    }
+    return false;
+  });
+
+  const [lastViolationReason, setLastViolationReason] = useState(() => {
+    return savedLocalState?.lastViolationReason || '';
+  });
   const [showWarningModal, setShowWarningModal] = useState(false);
   const [warningCountdown, setWarningCountdown] = useState(5);
   const [showConfirmSubmit, setShowConfirmSubmit] = useState(false);
@@ -185,6 +239,23 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
     };
   }, [isExamCompleted, subject.id, subject.className, studentName, studentClass, questions.length]);
 
+  // Auto-save State Ujian Siswa ke LocalStorage (Fail-safe agar refresh tidak mereset jawaban/pelanggaran)
+  useEffect(() => {
+    if (isExamCompleted) return;
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem(stateKey, JSON.stringify({
+          answers,
+          secondsRemaining,
+          violationCount,
+          isLocked,
+          lastViolationReason,
+          startTime: startTimeRef.current
+        }));
+      } catch {}
+    }
+  }, [answers, secondsRemaining, violationCount, isLocked, lastViolationReason, isExamCompleted, stateKey]);
+
   // 3. LISTEN TO PROCTOR COMMANDS (Buka Kunci, Paksa Selesai, Reset)
   useEffect(() => {
     const unsubscribe = subscribeToStudentCommands(studentName, subject.id, (cmd) => {
@@ -195,6 +266,18 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
         setShowWarningModal(false);
         setUnlockedNotice(true);
         setTimeout(() => setUnlockedNotice(false), 4000);
+        if (typeof window !== 'undefined') {
+          try {
+            localStorage.removeItem(blockedKey);
+            localStorage.setItem(stateKey, JSON.stringify({
+              answers: answersRef.current,
+              secondsRemaining: secondsRemainingRef.current,
+              violationCount: 0,
+              isLocked: false,
+              startTime: startTimeRef.current
+            }));
+          } catch {}
+        }
         requestFullscreenMode();
       } else if (cmd.action === 'FORCE_FINISH') {
         // Pengawas menyelesaikan ujian secara paksa
@@ -206,6 +289,8 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
         removeStudentSession(studentName, subject.id);
         if (typeof window !== 'undefined') {
           try {
+            localStorage.removeItem(stateKey);
+            localStorage.removeItem(blockedKey);
             const stored = localStorage.getItem(`cbt_results_${subject.id}`);
             if (stored) {
               const list = JSON.parse(stored);
@@ -220,7 +305,7 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
     });
 
     return () => unsubscribe();
-  }, [studentName, subject.id, onExit, requestFullscreenMode]);
+  }, [studentName, subject.id, onExit, requestFullscreenMode, stateKey, blockedKey]);
 
   // 4. ANTI-CHEAT ENGINE & VIOLATION HANDLER
   const handleViolation = useCallback(async (reason: string) => {
@@ -274,6 +359,15 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
       // BEKUKAN & KUNCI UJIAN (Layar Merah Mati)
       setIsLocked(true);
       setShowWarningModal(false);
+      if (typeof window !== 'undefined') {
+        try {
+          localStorage.setItem(blockedKey, JSON.stringify({
+            isBlocked: true,
+            violationCount: nextCount,
+            lockedAt: Date.now()
+          }));
+        } catch {}
+      }
     } else {
       // Tampilkan Modal Peringatan dengan Countdown 5 Detik
       setShowWarningModal(true);
@@ -501,8 +595,14 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
     setIsExamCompleted(true);
     setIsLocked(false);
 
-    // Hapus sesi live monitoring
+    // Hapus sesi live monitoring & bersihkan kunci/state lokal
     removeStudentSession(studentName, subject.id);
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.removeItem(stateKey);
+        localStorage.removeItem(blockedKey);
+      } catch {}
+    }
 
     onFinishExam(payload);
 

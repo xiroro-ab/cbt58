@@ -29,6 +29,8 @@ import {
   insertSubject,
   deleteSubject,
   subscribeToExamResults,
+  checkStudentLockStatus,
+  clearStudentAutolockInSupabase,
   fetchNotifications,
   fetchMessages,
   markAllNotificationsAsRead,
@@ -351,12 +353,28 @@ export default function Home() {
   useEffect(() => {
     if (!subject?.id) return;
 
-    // Realtime hasil ujian
-    const unsubResults = subscribeToExamResults(subject.id, newResult => {
-      setResults(prev => {
-        if (prev.some(r => r.id === newResult.id)) return prev;
-        return [newResult, ...prev];
-      });
+    // Realtime hasil ujian (Mendukung INSERT, UPDATE, dan DELETE seketika)
+    const unsubResults = subscribeToExamResults(subject.id, changePayload => {
+      if (changePayload.action === 'DELETE') {
+        setResults(prev => prev.filter(r =>
+          r.id !== changePayload.resultId &&
+          !(changePayload.studentName && r.studentName.toLowerCase().trim() === changePayload.studentName.toLowerCase().trim() && r.subjectId === changePayload.subjectId)
+        ));
+      } else if (changePayload.result) {
+        const res = changePayload.result;
+        setResults(prev => {
+          const matchIdx = prev.findIndex(r =>
+            r.id === res.id ||
+            (r.studentName.toLowerCase().trim() === res.studentName.toLowerCase().trim() && r.subjectId === res.subjectId)
+          );
+          if (matchIdx >= 0) {
+            const next = [...prev];
+            next[matchIdx] = res;
+            return next;
+          }
+          return [res, ...prev];
+        });
+      }
     });
 
     // Realtime notifikasi event sistem (Lonceng 🔔)
@@ -381,6 +399,35 @@ export default function Home() {
       unsubMsgs();
     };
   }, [subject?.id]);
+
+  // 2b. Auto-sync background poller untuk Teacher Dashboard & Database Nilai
+  // Memastikan data 100% selalu up-to-date setiap beberapa detik tanpa perlu refresh manual browser
+  useEffect(() => {
+    if (viewMode !== 'teacher' || !subject?.id) return;
+
+    let isMounted = true;
+    const interval = setInterval(async () => {
+      try {
+        const cloudResults = await fetchExamResults(subject.id);
+        if (!isMounted || !cloudResults) return;
+
+        setResults(prev => {
+          if (prev.length !== cloudResults.length) return cloudResults;
+          const hasDiff = cloudResults.some((c, i) => {
+            const p = prev[i];
+            if (!p) return true;
+            return p.id !== c.id || p.score !== c.score || p.violationCount !== c.violationCount;
+          });
+          return hasDiff ? cloudResults : prev;
+        });
+      } catch {}
+    }, 4000);
+
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [viewMode, subject?.id]);
 
   const handleUpdateSubject = async (updated: Subject) => {
     setSubject(updated);
@@ -794,6 +841,17 @@ export default function Home() {
         language === 'id'
           ? `AKSES DITOLAK (ANTI-RELOGIN): Siswa "${studentName}" sudah pernah menyelesaikan dan mengumpulkan ujian "${matchedSub.title}" pada ${previousSubmission.submittedAt || 'sesi sebelumnya'} (Skor: ${previousSubmission.score}%). Anda tidak diperbolehkan mengerjakan ulang kecuali lembar ujian Anda di-reset oleh Guru Pengawas.`
           : `ACCESS DENIED: Student "${studentName}" has already completed and submitted "${matchedSub.title}" on ${previousSubmission.submittedAt || 'previous session'}. Retakes are not allowed unless reset by your proctor.`
+      );
+      return;
+    }
+
+    // 3b. Validasi Anti-Cheat Lock (Cegah Siswa Terkunci Mengulang dari Awal dengan Me-refresh Browser)
+    const lockStatus = await checkStudentLockStatus(matchedSub.id, studentName, matchedSub.violationLimit || 3);
+    if (lockStatus.isBlocked) {
+      setLoginError(
+        language === 'id'
+          ? `AKSES DITOLAK (UJIAN DIBLOKIR): Akun siswa "${studentName}" saat ini sedang DIBLOKIR oleh sistem anti-cheat karena telah melampaui batas toleransi pelanggaran (${matchedSub.violationLimit || 3}x). Anda TIDAK DAPAT mengerjakan ujian dari awal. Silakan hubungi Guru Pengawas untuk membuka kunci ("Buka Kunci") atau mereset ujian Anda.`
+          : `ACCESS DENIED (EXAM LOCKED): Student "${studentName}" is currently BLOCKED by the anti-cheat system for exceeding the violation limit (${matchedSub.violationLimit || 3}x). Retakes are forbidden. Please contact your proctor to unlock or reset your exam.`
       );
       return;
     }

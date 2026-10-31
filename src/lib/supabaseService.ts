@@ -3,6 +3,7 @@ import { Subject, Question, ExamResult, ScoringRules, ExamNotification, ExamMess
 import { initialSubject, sampleSubjects, sampleQuestions } from './mockData';
 import { initialStudents } from './rosterStudents';
 import { initialTeachers } from './rosterTeachers';
+import { notifyResultChanged, subscribeToResultChanges, ResultChangePayload } from './liveMonitoringService';
 
 /**
  * Mengambil seluruh daftar mata pelajaran dari Supabase (fallback ke sampleSubjects)
@@ -267,6 +268,7 @@ export async function saveExamResult(result: ExamResult): Promise<boolean> {
       console.error('Error saveExamResult to Supabase:', error);
       return false;
     }
+    notifyResultChanged({ action: 'INSERT', subjectId: result.subjectId, result });
     return true;
   } catch (err) {
     console.error('Exception saveExamResult:', err);
@@ -318,9 +320,12 @@ export async function saveOrUpdateExamResult(result: ExamResult): Promise<boolea
         answers: result.answers,
         violation_count: result.violationCount
       }).eq('id', existingId);
+      if (!error) {
+        notifyResultChanged({ action: 'UPDATE', subjectId: result.subjectId, result: { ...result, id: existingId } });
+      }
       return !error;
     } else {
-      const { error } = await supabase.from('exam_results').insert({
+      const { data: insertedData, error } = await supabase.from('exam_results').insert({
         subject_id: result.subjectId,
         student_name: result.studentName,
         class_name: result.className,
@@ -329,7 +334,14 @@ export async function saveOrUpdateExamResult(result: ExamResult): Promise<boolea
         total_max: result.totalMax,
         answers: result.answers,
         violation_count: result.violationCount
-      });
+      }).select().single();
+      if (!error) {
+        notifyResultChanged({
+          action: 'INSERT',
+          subjectId: result.subjectId,
+          result: insertedData ? { ...result, id: insertedData.id } : result
+        });
+      }
       return !error;
     }
   } catch (err) {
@@ -379,6 +391,12 @@ export async function deleteExamResult(resultId: string, subjectId?: string, stu
         .eq('subject_id', subjectId)
         .ilike('student_name', studentName.trim());
     }
+    notifyResultChanged({
+      action: 'DELETE',
+      subjectId: subjectId || '',
+      resultId,
+      studentName
+    });
     return true;
   } catch (err) {
     console.error('Exception deleteExamResult:', err);
@@ -544,24 +562,44 @@ export async function updateQuestionInSupabase(q: Question): Promise<boolean> {
 }
 
 /**
- * Berlangganan (Realtime Subscription) hasil ujian baru dari Supabase
+ * Berlangganan (Realtime Subscription) hasil ujian dari Supabase & Realtime Broadcast
+ * Mendukung event INSERT, UPDATE, dan DELETE secara instan tanpa perlu refresh manual.
  */
 export function subscribeToExamResults(
   subjectId: string,
-  onNewResult: (result: ExamResult) => void
+  onResultChange: (payload: ResultChangePayload) => void
 ) {
+  // 1. Dengarkan Supabase Realtime Broadcast (sub-detik lintas perangkat guru & siswa)
+  const unsubBroadcast = subscribeToResultChanges(changePayload => {
+    if (!subjectId || !changePayload.subjectId || changePayload.subjectId === subjectId) {
+      onResultChange(changePayload);
+    }
+  });
+
+  // 2. Dengarkan Postgres Changes (Database replication fallback)
+  let channel: any = null;
   try {
-    const channel = supabase
-      .channel('realtime_exam_results')
+    const channelName = `realtime_exam_results_${subjectId || 'all'}_${Date.now()}`;
+    channel = supabase
+      .channel(channelName)
       .on(
         'postgres_changes',
         {
-          event: 'INSERT',
+          event: '*',
           schema: 'public',
           table: 'exam_results',
-          filter: `subject_id=eq.${subjectId}`
+          ...(subjectId ? { filter: `subject_id=eq.${subjectId}` } : {})
         },
         payload => {
+          const eventType = payload.eventType;
+          if (eventType === 'DELETE') {
+            onResultChange({
+              action: 'DELETE',
+              subjectId,
+              resultId: payload.old?.id
+            });
+            return;
+          }
           const r = payload.new;
           if (r) {
             const mappedResult: ExamResult = {
@@ -578,18 +616,123 @@ export function subscribeToExamResults(
               submittedAt: new Date(r.submitted_at || Date.now()).toLocaleString('id-ID'),
               violationCount: r.violation_count || 0
             };
-            onNewResult(mappedResult);
+            onResultChange({
+              action: eventType === 'UPDATE' ? 'UPDATE' : 'INSERT',
+              subjectId: r.subject_id,
+              result: mappedResult
+            });
           }
         }
       )
       .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
   } catch (err) {
-    console.warn('Realtime subscription not available, fallback to manual refresh:', err);
-    return () => {};
+    console.warn('Realtime postgres_changes subscription fallback to broadcast:', err);
+  }
+
+  return () => {
+    unsubBroadcast();
+    if (channel) {
+      try {
+        supabase.removeChannel(channel);
+      } catch {}
+    }
+  };
+}
+
+/**
+ * Memeriksa apakah siswa sedang terkunci/diblokir oleh sistem anti-cheat (di database Supabase & memori sesi)
+ */
+export async function checkStudentLockStatus(
+  subjectId: string,
+  studentName: string,
+  violationLimit: number = 3
+): Promise<{ isBlocked: boolean; violationCount: number; reason?: string }> {
+  const cleanName = studentName.toLowerCase().trim();
+
+  // 1. Cek dari memori lokal HP/Browser siswa (Instan)
+  if (typeof window !== 'undefined') {
+    try {
+      const blockedFlag = localStorage.getItem(`cbt_blocked_${subjectId}_${cleanName}`);
+      if (blockedFlag) {
+        const parsed = JSON.parse(blockedFlag);
+        if (parsed.isBlocked) {
+          return {
+            isBlocked: true,
+            violationCount: parsed.violationCount || violationLimit,
+            reason: 'Terkunci karena melampaui batas pelanggaran di perangkat ini.'
+          };
+        }
+      }
+
+      const examState = localStorage.getItem(`cbt_exam_state_${subjectId}_${cleanName}`);
+      if (examState) {
+        const parsed = JSON.parse(examState);
+        if (parsed.isLocked || (parsed.violationCount && parsed.violationCount >= violationLimit)) {
+          return {
+            isBlocked: true,
+            violationCount: parsed.violationCount,
+            reason: parsed.lastViolationReason || 'Terkunci karena pelanggaran anti-cheat.'
+          };
+        }
+      }
+    } catch {}
+  }
+
+  // 2. Cek notifikasi autolock yang belum di-reset oleh guru di database Supabase
+  try {
+    const { data, error } = await supabase
+      .from('exam_notifications')
+      .select('id, message, created_at')
+      .eq('subject_id', subjectId)
+      .ilike('student_name', studentName.trim())
+      .eq('type', 'autolock')
+      .eq('is_read', false)
+      .order('created_at', { ascending: false })
+      .limit(1);
+
+    if (!error && data && data.length > 0) {
+      return {
+        isBlocked: true,
+        violationCount: violationLimit,
+        reason: data[0].message || 'Terkunci di server pengawas.'
+      };
+    }
+  } catch (err) {
+    console.warn('Gagal cek status lock siswa di Supabase:', err);
+  }
+
+  return { isBlocked: false, violationCount: 0 };
+}
+
+/**
+ * Membersihkan notifikasi autolock siswa di Supabase saat guru membuka kunci atau mereset ujian
+ */
+export async function clearStudentAutolockInSupabase(subjectId: string, studentName: string): Promise<boolean> {
+  try {
+    if (typeof window !== 'undefined') {
+      const cleanName = studentName.toLowerCase().trim();
+      localStorage.removeItem(`cbt_blocked_${subjectId}_${cleanName}`);
+      const stateKey = `cbt_exam_state_${subjectId}_${cleanName}`;
+      const saved = localStorage.getItem(stateKey);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        parsed.violationCount = 0;
+        parsed.isLocked = false;
+        localStorage.setItem(stateKey, JSON.stringify(parsed));
+      }
+    }
+
+    const { error } = await supabase
+      .from('exam_notifications')
+      .update({ is_read: true })
+      .eq('subject_id', subjectId)
+      .ilike('student_name', studentName.trim())
+      .eq('type', 'autolock');
+
+    return !error;
+  } catch (err) {
+    console.warn('Exception clearStudentAutolockInSupabase:', err);
+    return false;
   }
 }
 

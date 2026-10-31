@@ -120,9 +120,8 @@ export function AiQuestionGeneratorModal({
   const [pasteError, setPasteError] = useState<string | null>(null);
   const [previewNotice, setPreviewNotice] = useState<string | null>(null);
 
-  // Status Kunci Vercel Server & Model Resmi yang Aktif
+  // Status Kunci Vercel Server
   const [hasServerKey, setHasServerKey] = useState<boolean | null>(null);
-  const [availableModels, setAvailableModels] = useState<string[]>([]);
 
   // Periksa apakah Vercel sudah terpasang GEMINI_API_KEY setiap modal dibuka
   useEffect(() => {
@@ -132,9 +131,6 @@ export function AiQuestionGeneratorModal({
         .then(data => {
           if (data && typeof data.hasServerKey === 'boolean') {
             setHasServerKey(data.hasServerKey);
-          }
-          if (data && Array.isArray(data.availableModels) && data.availableModels.length > 0) {
-            setAvailableModels(data.availableModels);
           }
         })
         .catch(() => {
@@ -904,32 +900,8 @@ export function AiQuestionGeneratorModal({
                           className="w-full text-xs font-mono px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500"
                         />
                         <p className="text-[10px] text-slate-400 mt-1">
-                          Ketik kode model yang aktif dari Google AI Studio (misal: <code className="text-violet-600 dark:text-violet-400 font-bold">gemini-1.5-flash</code> atau model terbaru).
+                          Ketik kode model yang aktif dari Google AI Studio (misal: <code className="text-violet-600 dark:text-violet-400 font-bold">gemini-1.5-flash</code> atau model lainnya).
                         </p>
-
-                        {/* Pilihan Cepat Model Resmi Aktif */}
-                        <div className="flex flex-wrap items-center gap-1.5 mt-2">
-                          <span className="text-[10px] text-slate-500 dark:text-slate-400">Pilihan cepat:</span>
-                          {(availableModels.length > 0 ? availableModels.slice(0, 5) : ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-2.5-flash', 'gemini-3.8-flash']).map(m => (
-                            <button
-                              key={m}
-                              type="button"
-                              onClick={() => {
-                                setModelName(m);
-                                if (typeof window !== 'undefined') {
-                                  localStorage.setItem('cbt_gemini_model', m);
-                                }
-                              }}
-                              className={`text-[10px] font-mono px-2 py-0.5 rounded-lg border transition cursor-pointer ${
-                                modelName === m
-                                  ? 'bg-violet-600 text-white border-violet-600 font-bold shadow-2xs'
-                                  : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-violet-400'
-                              }`}
-                            >
-                              {m}
-                            </button>
-                          ))}
-                        </div>
                       </div>
 
                       <div className="text-[11px] text-slate-500 dark:text-slate-400 flex flex-col justify-center">

@@ -21,35 +21,13 @@ function getServerGeminiApiKey(): string {
 
 /**
  * Endpoint status untuk memeriksa apakah Vercel sudah terpasang API Key Gemini
- * serta mengambil daftar model resmi yang sedang aktif dari Google
  */
 export async function GET() {
   const serverKey = getServerGeminiApiKey();
-  let availableModels: string[] = [];
-
-  if (serverKey) {
-    try {
-      const res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models?key=${serverKey}`,
-        { next: { revalidate: 1800 } }
-      );
-      if (res.ok) {
-        const data = await res.json();
-        availableModels = (data.models || [])
-          .filter((m: any) => m.supportedGenerationMethods?.includes('generateContent'))
-          .map((m: any) => m.name.replace(/^models\//i, ''))
-          .filter((name: string) => name.includes('flash') || name.includes('pro'));
-      }
-    } catch {
-      // fail-safe jika endpoint list models gagal
-    }
-  }
-
   return NextResponse.json({
     status: 'ok',
     hasServerKey: Boolean(serverKey),
-    envDetected: serverKey ? 'GEMINI_API_KEY_ACTIVE' : 'NONE',
-    availableModels
+    envDetected: serverKey ? 'GEMINI_API_KEY_ACTIVE' : 'NONE'
   });
 }
 

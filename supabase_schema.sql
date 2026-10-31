@@ -1,21 +1,14 @@
 -- ===============================================================
 -- SKEMA DATABASE CBT MODERN - SUPABASE (POSTGRESQL)
--- Salin SELURUH isi file ini lalu tempel (paste) di SQL Editor Supabase
--- dan klik tombol "Run"
+-- Salin isi file ini lalu tempel (paste) di SQL Editor Supabase
+-- dan klik tombol "Run" (100% AMAN: Tidak akan menghapus data yang ada)
 -- ===============================================================
 
--- 1. Bersihkan tabel lama jika sebelumnya pernah dibuat (Opsional)
-DROP TABLE IF EXISTS exam_results CASCADE;
-DROP TABLE IF EXISTS exam_sessions CASCADE;
-DROP TABLE IF EXISTS questions CASCADE;
-DROP TABLE IF EXISTS subjects CASCADE;
-DROP TABLE IF EXISTS profiles CASCADE;
-
--- 2. Aktifkan ekstensi UUID
+-- 1. Aktifkan ekstensi UUID
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
--- 3. TABEL PROFIL (Guru / Siswa)
-CREATE TABLE profiles (
+-- 2. TABEL PROFIL (Guru / Siswa)
+CREATE TABLE IF NOT EXISTS profiles (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     username VARCHAR(50) UNIQUE NOT NULL,
     full_name VARCHAR(100) NOT NULL,
@@ -24,8 +17,8 @@ CREATE TABLE profiles (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 4. TABEL MATA PELAJARAN / UJIAN
-CREATE TABLE subjects (
+-- 3. TABEL MATA PELAJARAN / UJIAN
+CREATE TABLE IF NOT EXISTS subjects (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     title VARCHAR(150) NOT NULL,
     class_target VARCHAR(50) NOT NULL,
@@ -44,8 +37,8 @@ CREATE TABLE subjects (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 5. TABEL SOAL UJIAN
-CREATE TABLE questions (
+-- 4. TABEL SOAL UJIAN
+CREATE TABLE IF NOT EXISTS questions (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     subject_id UUID NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
     type VARCHAR(30) NOT NULL CHECK (
@@ -66,8 +59,8 @@ CREATE TABLE questions (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 6. TABEL SESI UJIAN AKTIF (Untuk Monitoring Guru & Anti-Cheat)
-CREATE TABLE exam_sessions (
+-- 5. TABEL SESI UJIAN AKTIF (Untuk Monitoring Guru & Anti-Cheat)
+CREATE TABLE IF NOT EXISTS exam_sessions (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     subject_id UUID NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
     student_name VARCHAR(100) NOT NULL,
@@ -80,8 +73,8 @@ CREATE TABLE exam_sessions (
     status VARCHAR(20) DEFAULT 'ongoing' CHECK (status IN ('ongoing', 'completed', 'blocked'))
 );
 
--- 7. TABEL HASIL UJIAN (Arsip Nilai Siswa)
-CREATE TABLE exam_results (
+-- 6. TABEL HASIL UJIAN (Arsip Nilai Siswa)
+CREATE TABLE IF NOT EXISTS exam_results (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     subject_id UUID NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
     student_name VARCHAR(100) NOT NULL,
@@ -96,10 +89,10 @@ CREATE TABLE exam_results (
 
 -- ===============================================================
 -- DATA AWAL CONTOH (SEED DATA)
--- Agar langsung ada 1 Mapel & 6 Contoh Soal (termasuk Benar/Salah baru)
+-- Hanya ditambahkan jika belum ada data sebelumnya (ON CONFLICT DO NOTHING)
 -- ===============================================================
 
--- 1. Buat Contoh Mapel
+-- 1. Buat Contoh Mapel (Hanya jika belum ada)
 INSERT INTO subjects (id, title, class_target, duration_minutes, violation_limit, token, is_active, scoring_rules)
 VALUES (
     'a1b2c3d4-e5f6-4a5b-8c9d-0e1f2a3b4c5d',
@@ -110,19 +103,22 @@ VALUES (
     'IPA2026',
     TRUE,
     '{"Pilihan Ganda": 1, "Pilihan Ganda Kompleks": 2, "Benar/Salah": 2, "Menjodohkan": 2, "Isian Singkat": 2, "Esai": 4}'::jsonb
-);
+)
+ON CONFLICT (id) DO NOTHING;
 
--- 2. Buat Contoh Soal (6 Tipe Soal Lengkap)
+-- 2. Buat Contoh Soal (Hanya jika belum ada)
 -- Soal 1: Pilihan Ganda
-INSERT INTO questions (subject_id, type, question_text, options, answer, order_index)
+INSERT INTO questions (id, subject_id, type, question_text, options, answer, order_index)
 VALUES (
+    'b1b2c3d4-e5f6-4a5b-8c9d-0e1f2a3b4c51',
     'a1b2c3d4-e5f6-4a5b-8c9d-0e1f2a3b4c5d',
     'Pilihan Ganda',
     'Organel sel yang berfungsi sebagai tempat berlangsungnya respirasi sel dan menghasilkan energi (ATP) adalah...',
     '[{"text": "Ribosom"}, {"text": "Mitokondria"}, {"text": "Badan Golgi"}, {"text": "Retikulum Endoplasma"}]'::jsonb,
     '"B"'::jsonb,
     1
-);
+)
+ON CONFLICT (id) DO NOTHING;
 
 -- Soal 2: Benar / Salah (Format Baru: Banyak Pernyataan)
 INSERT INTO questions (subject_id, type, question_text, options, answer, order_index)

@@ -2109,3 +2109,39 @@ export const initialStudents: Student[] = [
     "className": "VIII.3"
   }
 ];
+
+/**
+ * Menyelesaikan nama kelas tunggal siswa yang akurat dan bersih (misal: "VIII.3"),
+ * menghindari penulisan seluruh rombel (misal: "VIII.1, VIII.2, VIII.3") pada laporan kendala,
+ * monitoring siswa, notifikasi, dan rekap nilai.
+ */
+export function resolveStudentSingleClass(
+  studentName?: string,
+  fallbackClass?: string,
+  customStudentsList?: Student[]
+): string {
+  // 1. Jika fallbackClass sudah merupakan kelas tunggal yang bersih (bukan multi-kelas dengan koma dan bukan "semua")
+  if (fallbackClass && !fallbackClass.includes(',') && !fallbackClass.toLowerCase().includes('semua')) {
+    return fallbackClass.trim();
+  }
+
+  // 2. Cari di daftar roster siswa (DAPODIK) berdasarkan nama lengkap siswa
+  if (studentName && studentName.trim()) {
+    const cleanName = studentName.toLowerCase().trim();
+    const list = (customStudentsList && customStudentsList.length > 0) ? customStudentsList : initialStudents;
+    const found = list.find(s => s.name.toLowerCase().trim() === cleanName);
+    if (found && found.className) {
+      return found.className.trim();
+    }
+  }
+
+  // 3. Jika fallbackClass mengandung koma (misal "VIII.1, VIII.2, VIII.3"), ambil kelas pertamanya
+  if (fallbackClass && fallbackClass.trim()) {
+    const parts = fallbackClass.split(',').map(p => p.trim()).filter(Boolean);
+    if (parts.length > 0 && !parts[0].toLowerCase().includes('semua')) {
+      return parts[0];
+    }
+  }
+
+  return fallbackClass || 'Siswa';
+}

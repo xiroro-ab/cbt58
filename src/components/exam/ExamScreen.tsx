@@ -1,9 +1,10 @@
 'use client';
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Subject, Question, StudentAnswerItem, QuestionAnswer } from '@/types/cbt';
 import { QuestionRenderer } from './QuestionRenderer';
 import { evaluateFullExam } from '@/lib/scoringEngine';
+import { resolveStudentSingleClass } from '@/lib/rosterStudents';
 import { useTheme } from '@/context/ThemeContext';
 import { useLanguage } from '@/context/LanguageContext';
 import {
@@ -64,6 +65,11 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
 }) => {
   const { theme, toggleTheme } = useTheme();
   const { language } = useLanguage();
+
+  // Bersihkan dan tetapkan nama kelas tunggal siswa yang akurat (misal: "VIII.3", bukan "VIII.1, VIII.2, VIII.3")
+  const studentActualClass = useMemo(() => {
+    return resolveStudentSingleClass(studentName, studentClass);
+  }, [studentName, studentClass]);
 
   const stateKey = `cbt_exam_state_${subject.id}_${studentName.toLowerCase().trim()}`;
   const blockedKey = `cbt_blocked_${subject.id}_${studentName.toLowerCase().trim()}`;
@@ -173,10 +179,18 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
   });
   const dismissedTextsRef = useRef<Set<string>>(new Set(dismissedAnnouncementTexts));
 
-  // Inisialisasi pengumuman aktif dari storage lokal (agar icon 📢 di header muncul),
-  // TETAPI pop-up otomatis WAJIB FALSE saat awal masuk ujian (tidak mengganggu siswa dengan pesan lama)
+  // Inisialisasi pengumuman aktif HANYA jika ada siaran pengumuman di sesi ujian ini (sessionStorage),
+  // BUKAN dari localStorage lama sesi/hari sebelumnya, sehingga siswa baru BUKA ujian TIDAK melihat data lama
   const [activeAnnouncement, setActiveAnnouncement] = useState<BroadcastAnnouncement | null>(() => {
-    return getLatestStoredAnnouncement();
+    if (typeof window === 'undefined') return null;
+    try {
+      const raw = sessionStorage.getItem(`cbt_session_broadcast_${subject.id}`);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && parsed.text) return parsed;
+      }
+    } catch {}
+    return null;
   });
   const [showBroadcastPopup, setShowBroadcastPopup] = useState<boolean>(false);
   const activeAnnouncementRef = useRef<BroadcastAnnouncement | null>(activeAnnouncement);
@@ -218,6 +232,11 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
           timestamp: annTimestamp
         };
         activeAnnouncementRef.current = newAnn;
+        if (typeof window !== 'undefined') {
+          try {
+            sessionStorage.setItem(`cbt_session_broadcast_${subject.id}`, JSON.stringify(newAnn));
+          } catch {}
+        }
         return newAnn;
       }
 
@@ -327,7 +346,7 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
       subjectId: subject.id,
       studentId: studentName,
       studentName,
-      className: studentClass || subject.className,
+      className: studentActualClass,
       startTime: startTimeRef.current,
       lastHeartbeat: Date.now(),
       progressCount: answered,
@@ -338,7 +357,7 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
       isFocus: currentFocus,
       remainingSeconds: secondsRemainingRef.current
     });
-  }, [studentName, subject.id, studentClass, subject.className, questions.length]);
+  }, [studentName, subject.id, studentActualClass, questions.length]);
 
   // 2. LIVE MONITORING HEARTBEAT & BROADCAST TO PROCTOR (EVERY 1.5 SECONDS)
   useEffect(() => {
@@ -421,7 +440,7 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
         const evaluation = evaluateFullExam(questions, answersRef.current, subject.scoringRules);
         setCompletedResult({
           studentName,
-          className: studentClass || subject.className,
+          className: studentActualClass,
           score: evaluation.finalScore,
           totalEarned: evaluation.totalEarned,
           totalMax: evaluation.totalMax,
@@ -558,7 +577,7 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
     setLastViolationReason(reason);
 
     const limit = subject.violationLimit || 3;
-    const actualClass = studentClass || subject.className;
+    const actualClass = studentActualClass;
 
     // Catat notifikasi otomatis ke Supabase
     try {
@@ -578,7 +597,7 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
       subjectId: subject.id,
       studentId: studentName,
       studentName,
-      className: studentClass || subject.className,
+      className: studentActualClass,
       startTime: startTimeRef.current,
       lastHeartbeat: Date.now(),
       progressCount: answered,
@@ -879,20 +898,24 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
       }
     });
 
-    // C. Muat pesan broadcast yang sudah ada dari Supabase saat awal masuk (isLiveEvent = false)
-    // Supaya pengumuman lama TIDAK memicu pop-up otomatis di wajah siswa, namun tetap tersedia di icon 📢
+    // C. Muat pesan broadcast yang terbit SETELAH sesi siswa dimulai
+    // Supaya pengumuman lama dari sesi sebelumnya TIDAK terbaca oleh siswa baru
     const checkCloudBroadcasts = () => {
       if (!subject.id) return;
       fetchMessages(subject.id).then(msgs => {
         const broadcasts = msgs.filter(m => m.targetType === 'broadcast');
         if (broadcasts.length > 0 && broadcasts[0].body) {
-          processIncomingAnnouncement({
-            id: broadcasts[0].id,
-            text: broadcasts[0].body,
-            senderName: broadcasts[0].senderName || 'Guru Pengawas',
-            subjectId: broadcasts[0].subjectId,
-            timestamp: broadcasts[0].createdAtTime || 0
-          }, false);
+          const annTime = broadcasts[0].createdAtTime || 0;
+          // Hanya muat jika dikirim setelah sesi siswa aktif dimulai
+          if (annTime >= sessionStartTimeRef.current) {
+            processIncomingAnnouncement({
+              id: broadcasts[0].id,
+              text: broadcasts[0].body,
+              senderName: broadcasts[0].senderName || 'Guru Pengawas',
+              subjectId: broadcasts[0].subjectId,
+              timestamp: annTime
+            }, false);
+          }
         }
       }).catch(() => {});
     };
@@ -901,10 +924,6 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
 
     // D. Polling berkala fail-safe (tiap 5 detik jika koneksi websocket sempat terputus)
     const pollInterval = setInterval(() => {
-      const stored = getLatestStoredAnnouncement();
-      if (stored?.text) {
-        processIncomingAnnouncement(stored, false);
-      }
       checkCloudBroadcasts();
     }, 5000);
 
@@ -979,7 +998,7 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
         senderName: studentName,
         senderRole: 'student',
         targetType: 'proctor',
-        studentClass: subject.className,
+        studentClass: studentActualClass,
         questionNumber: currentIndex + 1,
         title: reportCategory,
         body: reportDescription || `Kendala pada soal no. ${currentIndex + 1}: ${reportCategory}`,
@@ -1006,7 +1025,7 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
     // Evaluasi lembar ujian lengkap
     const evaluation = evaluateFullExam(questions, answers, subject.scoringRules);
 
-    const currentClass = studentClass || subject.className;
+    const currentClass = studentActualClass;
     const payload = {
       studentName,
       className: currentClass,
@@ -1099,7 +1118,7 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
 
           <div className="text-xs text-slate-500 space-y-1">
             <p>Mata Pelajaran: <strong>{subject.title}</strong></p>
-            <p>Kelas: <strong>{subject.className}</strong></p>
+            <p>Kelas: <strong>{studentActualClass}</strong></p>
             <p>Jumlah Pelanggaran: <strong>{violationCount} kali</strong></p>
           </div>
 
@@ -1236,9 +1255,9 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
             </h1>
             <p
               className="text-[10px] sm:text-[11px] text-slate-400 dark:text-slate-500 font-medium truncate max-w-[120px] xs:max-w-[180px] sm:max-w-xs md:max-w-sm"
-              title={`${studentName} • ${studentClass || subject.className}`}
+              title={`${studentName} • ${studentActualClass}`}
             >
-              {studentName} • {studentClass || subject.className}
+              {studentName} • {studentActualClass}
             </p>
           </div>
         </div>
@@ -1257,17 +1276,16 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
             </button>
           )}
 
-          {/* Icon Pengumuman Pengawas di Pojok Atas */}
+          {/* Icon Pengumuman Pengawas di Pojok Atas (Tenang, Tanpa Animasi & Tanpa Bulatan) */}
           {activeAnnouncement && (
             <button
               type="button"
               onClick={() => setShowBroadcastPopup(true)}
-              className="p-1.5 sm:px-2.5 sm:py-1.5 rounded-xl border border-amber-400 bg-amber-500/15 hover:bg-amber-500/25 text-amber-800 dark:text-amber-300 font-bold text-xs transition cursor-pointer flex items-center gap-1.5 shadow-xs animate-pulse"
-              title="Klik untuk membuka pesan pengumuman pengawas ruangan"
+              className="p-1.5 sm:px-2.5 sm:py-1.5 rounded-xl border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 dark:hover:bg-amber-900/50 text-amber-800 dark:text-amber-300 font-bold text-xs transition cursor-pointer flex items-center gap-1.5 shadow-xs"
+              title="Klik untuk membaca pesan pengumuman pengawas ruangan"
             >
-              <Megaphone className="w-4 h-4 text-amber-600 dark:text-amber-400 flex-shrink-0 animate-bounce" />
+              <Megaphone className="w-4 h-4 text-amber-600 dark:text-amber-400 flex-shrink-0" />
               <span className="hidden md:inline">Pengumuman</span>
-              <span className="w-2 h-2 rounded-full bg-amber-500"></span>
             </button>
           )}
 

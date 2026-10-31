@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { initialSubject } from '@/lib/mockData';
-import { initialStudents } from '@/lib/rosterStudents';
+import { initialStudents, resolveStudentSingleClass } from '@/lib/rosterStudents';
 import { initialTeachers } from '@/lib/rosterTeachers';
 import { Subject, Question, ExamResult, ExamNotification, ExamMessage, Student, Teacher } from '@/types/cbt';
 import { shuffleQuestionsGroupedByType } from '@/lib/questionRandomizer';
@@ -939,7 +939,7 @@ export default function Home() {
       subjectTitle: subject.title,
       studentId: matchedStudent?.id || `std-${Date.now()}`,
       studentName: resultData.studentName,
-      className: resultData.className || selectedStudentClass || subject.className,
+      className: resolveStudentSingleClass(resultData.studentName, resultData.className || selectedStudentClass),
       score: resultData.score,
       totalEarned: resultData.totalEarned,
       totalMax: resultData.totalMax,
@@ -1185,7 +1185,7 @@ export default function Home() {
         subject={subject}
         questions={questions}
         studentName={studentName}
-        studentClass={selectedStudentClass}
+        studentClass={resolveStudentSingleClass(studentName, selectedStudentClass || matchedStudent?.className)}
         onFinishExam={handleFinishExam}
         onExit={() => {
           if (currentTeacher) {

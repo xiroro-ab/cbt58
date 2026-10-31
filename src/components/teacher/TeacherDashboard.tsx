@@ -8,6 +8,7 @@ import { StudentManagement } from './StudentManagement';
 import { evaluateFullExam, calculateSingleQuestionScore } from '@/lib/scoringEngine';
 import { sendProctorCommand, subscribeToLiveSessions, removeStudentSession, broadcastAnnouncementToStudents } from '@/lib/liveMonitoringService';
 import { clearStudentAutolockInSupabase, insertMessage } from '@/lib/supabaseService';
+import { resolveStudentSingleClass } from '@/lib/rosterStudents';
 import {
   TrendingUp,
   Award,
@@ -2949,7 +2950,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                             <tr key={res.id} className="border-b border-slate-300 text-center">
                               <td className="py-2 px-3 font-bold border-r border-slate-900">{idx + 1}</td>
                               <td className="py-2 px-3 border-r border-slate-900 font-semibold text-left uppercase">{res.studentName}</td>
-                              <td className="py-2 px-3 border-r border-slate-900">{res.className}</td>
+                              <td className="py-2 px-3 border-r border-slate-900">{resolveStudentSingleClass(res.studentName, res.className, students)}</td>
                               <td className="py-2 px-3 border-r border-slate-900 font-mono">{res.totalEarned} / {res.totalMax}</td>
                               <td className="py-2 px-3 border-r border-slate-900 font-bold text-sm">{res.score}</td>
                               <td className="py-2 px-3 border-r border-slate-900 font-bold">{pred}</td>
@@ -3257,7 +3258,8 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
         for (const s of liveSessions) {
           if (!s || !s.studentName) continue;
           if (monitoringFilterSubId !== 'ALL' && s.subjectId !== monitoringFilterSubId) continue;
-          if (monitoringFilterClass !== 'ALL' && s.className !== monitoringFilterClass) continue;
+          const actualStudentCls = resolveStudentSingleClass(s.studentName, s.className, students);
+          if (monitoringFilterClass !== 'ALL' && actualStudentCls !== monitoringFilterClass) continue;
           const key = s.studentName.toLowerCase().trim();
           const existing = sessionMap.get(key);
           if (!existing || s.lastHeartbeat > existing.lastHeartbeat) {
@@ -3503,7 +3505,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
 
                             {/* KELAS */}
                             <td className="p-4 text-slate-600 dark:text-slate-400 whitespace-nowrap">
-                              {s.className}
+                              {resolveStudentSingleClass(s.studentName, s.className, students)}
                             </td>
 
                             {/* MATA PELAJARAN */}
@@ -3645,7 +3647,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                                           subjectTitle: matchedSub.title,
                                           studentId: s.studentId,
                                           studentName: s.studentName,
-                                          className: s.className,
+                                          className: resolveStudentSingleClass(s.studentName, s.className, students),
                                           score: evalRes.finalScore,
                                           totalEarned: evalRes.totalEarned,
                                           totalMax: evalRes.totalMax,

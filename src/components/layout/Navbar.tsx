@@ -5,6 +5,7 @@ import { useTheme } from '@/context/ThemeContext';
 import { useLanguage } from '@/context/LanguageContext';
 import { ExamNotification, ExamMessage, Teacher, Subject } from '@/types/cbt';
 import { initialTeachers } from '@/lib/rosterTeachers';
+import { resolveStudentSingleClass } from '@/lib/rosterStudents';
 import {
   Sun,
   Moon,
@@ -283,7 +284,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-1.5 font-bold text-slate-900 dark:text-white">
                             <span className="text-violet-600 dark:text-violet-400">{rep.senderName}</span>
-                            <span className="text-[10px] text-slate-400">({rep.studentClass || 'Siswa'})</span>
+                            <span className="text-[10px] text-slate-400">({resolveStudentSingleClass(rep.senderName, rep.studentClass)})</span>
                           </div>
                           <span className="text-[10px] text-slate-400">{rep.createdAt}</span>
                         </div>

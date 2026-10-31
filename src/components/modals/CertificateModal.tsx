@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { ExamResult } from '@/types/cbt';
+import { resolveStudentSingleClass } from '@/lib/rosterStudents';
 import { useLanguage } from '@/context/LanguageContext';
 import { Award, Printer, X, CheckCircle, ShieldCheck } from 'lucide-react';
 
@@ -136,7 +137,7 @@ export const CertificateModal: React.FC<CertificateModalProps> = ({
                   </h3>
                 </div>
                 <p className="text-xs text-slate-500">
-                  Kelas: <strong>{currentResult.className}</strong>
+                  Kelas: <strong>{resolveStudentSingleClass(currentResult.studentName, currentResult.className)}</strong>
                 </p>
                 <p className="text-sm text-slate-700 leading-relaxed pt-2">
                   Telah mengikuti dan menyelesaikan Ujian Penilaian Berbasis Komputer mata pelajaran{' '}

@@ -1,4 +1,5 @@
 import { Question, QuestionType } from '@/types/cbt';
+import { jsonrepair } from 'jsonrepair';
 
 export type StandardBadge = 'AKM' | 'PISA' | 'TKA' | 'HARIAN';
 
@@ -495,4 +496,97 @@ export function validateAndConvertRawQuestions(
   });
 
   return results;
+}
+
+/**
+ * Membersihkan dan memperbaiki teks JSON mentah dari AI
+ * Termasuk menangani kutip ganda tak ter-escape di dalam opsi / pertanyaan
+ */
+export function sanitizeAndParseAiJson(rawText: string): any[] {
+  let cleaned = (rawText || '').trim();
+
+  // 1. Bersihkan pembungkus markdown block ```json ... ```
+  if (cleaned.startsWith('```json')) {
+    cleaned = cleaned.replace(/^```json\s*/, '').replace(/\s*```$/, '');
+  } else if (cleaned.startsWith('```')) {
+    cleaned = cleaned.replace(/^```\s*/, '').replace(/\s*```$/, '');
+  }
+
+  // Cari index array pertama '[' dan array terakhir ']' jika AI menambahkan teks pembuka/penutup
+  const firstBracket = cleaned.indexOf('[');
+  const lastBracket = cleaned.lastIndexOf(']');
+  if (firstBracket !== -1 && lastBracket !== -1 && lastBracket >= firstBracket) {
+    cleaned = cleaned.substring(firstBracket, lastBracket + 1);
+  }
+
+  // Coba parse langsung jika format sudah valid sempurna
+  try {
+    const directParsed = JSON.parse(cleaned);
+    if (Array.isArray(directParsed)) return directParsed;
+    if (directParsed && typeof directParsed === 'object' && Array.isArray((directParsed as any).questions)) {
+      return (directParsed as any).questions;
+    }
+  } catch {
+    // Lanjut ke perbaikan baris demi baris
+  }
+
+  // 2. Perbaiki tanda kutip unescaped di dalam baris string nilai
+  const lines = cleaned.split('\n');
+  const fixedLines: string[] = [];
+
+  for (let i = 0; i < lines.length; i++) {
+    let line = lines[i];
+
+    // Cek apakah baris berupa pasangan key-value string:
+    const m = line.match(/^(\s*(?:\{\s*)?"[a-zA-Z0-9_]+"\s*:\s*")(.*)("(?:,\s*|\s*\}|\s*\},|\s*)?\s*)$/);
+    if (m) {
+      const prefix = m[1];
+      let inner = m[2];
+      const suffix = m[3];
+
+      // Ganti tanda kutip ganda unescaped di dalam nilai string menjadi kutip tunggal aman
+      if (inner.includes('"')) {
+        inner = inner.replace(/(?<!\\)"/g, "'");
+      }
+      line = prefix + inner + suffix;
+    }
+    fixedLines.push(line);
+  }
+
+  const step1 = fixedLines.join('\n');
+
+  // Coba parse setelah perbaikan baris
+  try {
+    const step1Parsed = JSON.parse(step1);
+    if (Array.isArray(step1Parsed)) return step1Parsed;
+    if (step1Parsed && typeof step1Parsed === 'object' && Array.isArray((step1Parsed as any).questions)) {
+      return (step1Parsed as any).questions;
+    }
+  } catch {
+    // Lanjut ke jsonrepair
+  }
+
+  // 3. Gunakan jsonrepair untuk menangani trailing commas, bracket tidak tertutup, dll
+  try {
+    const repaired = jsonrepair(step1);
+    const repairedParsed = JSON.parse(repaired);
+    if (Array.isArray(repairedParsed)) return repairedParsed;
+    if (repairedParsed && typeof repairedParsed === 'object' && Array.isArray((repairedParsed as any).questions)) {
+      return (repairedParsed as any).questions;
+    }
+  } catch {
+    // Coba jsonrepair pada cleaned asli
+    try {
+      const repairedOriginal = jsonrepair(cleaned);
+      const originalParsed = JSON.parse(repairedOriginal);
+      if (Array.isArray(originalParsed)) return originalParsed;
+      if (originalParsed && typeof originalParsed === 'object' && Array.isArray((originalParsed as any).questions)) {
+        return (originalParsed as any).questions;
+      }
+    } catch {
+      throw new Error('Format teks yang ditempel bukan format JSON yang valid. Pastikan Anda menyalin seluruh teks mulai dari tanda [ hingga ].');
+    }
+  }
+
+  throw new Error('Tidak ditemukan daftar butir soal yang valid di dalam teks JSON.');
 }

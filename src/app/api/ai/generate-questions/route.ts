@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { buildAiQuestionPrompt, StandardBadge } from '@/lib/aiQuestionGenerator';
+import { buildAiQuestionPrompt, StandardBadge, sanitizeAndParseAiJson } from '@/lib/aiQuestionGenerator';
 
 export async function POST(req: NextRequest) {
   try {
@@ -116,32 +116,18 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Parse JSON hasil dari Gemini
-    let cleanedJson = rawOutputText.trim();
-    if (cleanedJson.startsWith('```json')) {
-      cleanedJson = cleanedJson.replace(/^```json\s*/, '').replace(/\s*```$/, '');
-    } else if (cleanedJson.startsWith('```')) {
-      cleanedJson = cleanedJson.replace(/^```\s*/, '').replace(/\s*```$/, '');
-    }
-
+    // Parse & bersihkan JSON hasil dari Gemini dengan auto-repair
     let parsedQuestions: any[] = [];
     try {
-      parsedQuestions = JSON.parse(cleanedJson);
-      if (!Array.isArray(parsedQuestions)) {
-        if (parsedQuestions && typeof parsedQuestions === 'object' && Array.isArray((parsedQuestions as any).questions)) {
-          parsedQuestions = (parsedQuestions as any).questions;
-        } else {
-          parsedQuestions = [parsedQuestions];
-        }
-      }
-    } catch (parseErr) {
-      console.error('Error parsing Gemini JSON output:', parseErr, cleanedJson);
+      parsedQuestions = sanitizeAndParseAiJson(rawOutputText);
+    } catch (parseErr: any) {
+      console.error('Error parsing Gemini JSON output:', parseErr, rawOutputText);
       return NextResponse.json(
         {
           error: 'JSON_PARSE_ERROR',
           message:
             'Format balasan dari AI belum berupa array JSON yang valid. Silakan klik generate ulang atau coba dengan model lain.',
-          raw: cleanedJson
+          raw: rawOutputText
         },
         { status: 500 }
       );

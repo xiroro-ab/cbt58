@@ -41,6 +41,57 @@ export async function fetchAllSubjects(): Promise<Subject[]> {
 }
 
 /**
+ * Mencari mata pelajaran yang cocok dari Supabase berdasarkan ID, judul, atau kata kunci mapel guru.
+ * Menghindari pembuatan ID buatan (sub-...) yang menyebabkan data hilang atau berkedip.
+ */
+export function findMatchingSubject(subjectsList: Subject[], targetName: string): Subject | undefined {
+  if (!subjectsList || subjectsList.length === 0) return undefined;
+  if (!targetName) return subjectsList.find(s => s.isActive) || subjectsList[0];
+
+  const cleanTarget = targetName.toLowerCase().trim();
+
+  // 1. Cocok ID eksak
+  const exactId = subjectsList.find(s => s.id === targetName);
+  if (exactId) return exactId;
+
+  // 2. Cocok judul eksak
+  const exactTitle = subjectsList.find(s => s.title.toLowerCase().trim() === cleanTarget);
+  if (exactTitle) return exactTitle;
+
+  // 3. Substring dua arah (misal "Informatika" di dalam "ASAS GANJIL INFORMATIKA KELAS 8")
+  const substringMatch = subjectsList.find(
+    s => s.title.toLowerCase().includes(cleanTarget) || cleanTarget.includes(s.title.toLowerCase())
+  );
+  if (substringMatch) return substringMatch;
+
+  // 4. Pencocokan kata kunci signifikan (misal "Informatika & TIK" cocok dengan "ASAS GANJIL INFORMATIKA KELAS 8")
+  const stopWords = new Set(['&', 'dan', 'ilmu', 'pengetahuan', 'alam', 'sosial', 'asesmen', 'sumatif', 'ujian', 'kelas', 'smp', 'smpn', '58']);
+  const targetWords = cleanTarget
+    .replace(/[^a-z0-9]/g, ' ')
+    .split(/\s+/)
+    .filter(w => w.length > 2 && !stopWords.has(w));
+
+  for (const sub of subjectsList) {
+    const subWords = sub.title
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, ' ')
+      .split(/\s+/)
+      .filter(w => w.length > 2 && !stopWords.has(w));
+
+    const hasCommon = targetWords.some(tw => subWords.some(sw => sw.includes(tw) || tw.includes(sw)));
+    if (hasCommon) return sub;
+  }
+
+  // 5. Jika hanya ada 1 mapel di database sekolah, gunakan mapel riil tersebut
+  if (subjectsList.length === 1) {
+    return subjectsList[0];
+  }
+
+  // 6. Fallback ke mapel aktif atau mapel pertama yang ada di Supabase
+  return subjectsList.find(s => s.isActive) || subjectsList[0];
+}
+
+/**
  * Mengambil data mata pelajaran aktif dari Supabase
  */
 export async function fetchActiveSubject(): Promise<Subject> {

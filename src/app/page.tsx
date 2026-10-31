@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { initialSubject, sampleSubjects, sampleQuestions } from '@/lib/mockData';
+import { initialSubject } from '@/lib/mockData';
 import { initialStudents } from '@/lib/rosterStudents';
 import { initialTeachers } from '@/lib/rosterTeachers';
 import { Subject, Question, ExamResult, ExamNotification, ExamMessage, Student, Teacher } from '@/types/cbt';
@@ -52,7 +52,8 @@ import {
   fetchTeachers,
   insertTeacher,
   updateTeacherStatusInSupabase,
-  mergeTeachers
+  mergeTeachers,
+  findMatchingSubject
 } from '@/lib/supabaseService';
 import { useTheme } from '@/context/ThemeContext';
 import { useLanguage } from '@/context/LanguageContext';
@@ -132,14 +133,14 @@ export default function Home() {
   const [certificateTargetResult, setCertificateTargetResult] = useState<ExamResult | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
 
-  const [subjects, setSubjects] = useState<Subject[]>(sampleSubjects);
+  const [subjects, setSubjects] = useState<Subject[]>([]);
   const [subject, setSubject] = useState<Subject>(initialSubject);
   const [questions, setQuestions] = useState<Question[]>([]);
   const [results, setResults] = useState<ExamResult[]>([]);
   const [students, setStudents] = useState<Student[]>(initialStudents);
-  const [selectedStudentClass, setSelectedStudentClass] = useState<string>('VII.1');
-  const [studentName, setStudentName] = useState('AISYAH');
-  const [inputToken, setInputToken] = useState('IPA2026');
+  const [selectedStudentClass, setSelectedStudentClass] = useState<string>('VIII.1');
+  const [studentName, setStudentName] = useState('');
+  const [inputToken, setInputToken] = useState('');
   const [loginError, setLoginError] = useState('');
   const [isLoading, setIsLoading] = useState(true);
 
@@ -150,46 +151,11 @@ export default function Home() {
   const MSG_RESOLVED_KEY = 'cbt_msg_resolved_ids';
   const MSG_DELETED_KEY = 'cbt_msg_deleted_ids';
 
-  // Seed data default yang sudah aman (default dibaca agar tidak ada badge palsu saat refresh)
-  const initialSeedNotifications: ExamNotification[] = [
-    {
-      id: 'notif-seed-1',
-      type: 'submission',
-      title: 'Ujian IPA Selesai',
-      message: 'Siswa AISYAH (Kelas VII.1) telah menyelesaikan ujian dengan skor 87%.',
-      isRead: true,
-      createdAt: 'Baru saja'
-    },
-    {
-      id: 'notif-seed-2',
-      type: 'system',
-      title: 'Database Supabase Terhubung',
-      message: 'Koneksi cloud PostgreSQL lxglsphqrpnrzfnvpwoa aktif & sinkron.',
-      isRead: true,
-      createdAt: '08:00'
-    }
-  ];
+  // Live Notifications State (Lonceng 🔔) - Murni 100% dari Supabase Cloud (tanpa placeholder)
+  const [notifications, setNotifications] = useState<ExamNotification[]>([]);
 
-  const initialSeedMessages: ExamMessage[] = [
-    {
-      id: 'msg-seed-1',
-      senderName: 'AISYAH',
-      senderRole: 'student',
-      targetType: 'proctor',
-      studentClass: 'VII.1',
-      questionNumber: 4,
-      title: 'Kendala Gambar Soal',
-      body: 'Pak/Bu Pengawas, gambar diagram sel pada soal no. 4 tidak muncul di layar saya.',
-      status: 'resolved',
-      createdAt: '08:15'
-    }
-  ];
-
-  // Live Notifications State (Lonceng 🔔)
-  const [notifications, setNotifications] = useState<ExamNotification[]>(initialSeedNotifications);
-
-  // Live Messages State (Amplop ✉️ - Opsi A: Kendala Siswa & Broadcast Pengawas)
-  const [messages, setMessages] = useState<ExamMessage[]>(initialSeedMessages);
+  // Live Messages State (Amplop ✉️ - Kendala Siswa & Broadcast Pengawas) - Murni 100% dari Supabase
+  const [messages, setMessages] = useState<ExamMessage[]>([]);
 
   // Unique class list strictly from student roster
   const availableClasses = useMemo(() => {
@@ -226,27 +192,66 @@ export default function Home() {
     async function loadData() {
       setIsLoading(true);
       try {
+        // Ambil data guru dari Supabase & deteksi sesi aktif
+        const tList = await fetchTeachers();
+        let loadedTeachers = initialTeachers;
+        if (tList && tList.length > 0) {
+          loadedTeachers = tList;
+          setTeachers(tList);
+          if (typeof window !== 'undefined') {
+            try {
+              localStorage.setItem('cbt_cached_teachers', JSON.stringify(tList));
+            } catch (e) {}
+          }
+        }
+
+        let savedTeacher: Teacher | null = null;
+        if (typeof window !== 'undefined') {
+          const savedTeacherId = localStorage.getItem('cbt_logged_teacher_id');
+          if (savedTeacherId) {
+            savedTeacher = loadedTeachers.find(t => t.id === savedTeacherId) || null;
+            if (savedTeacher) {
+              setCurrentTeacher(savedTeacher);
+              setViewMode('teacher');
+            }
+          }
+        }
+
+        // Ambil seluruh mata pelajaran resmi dari Supabase Cloud
         const allSubs = await fetchAllSubjects();
         let activeSub: Subject;
+
         if (allSubs && allSubs.length > 0) {
           setSubjects(allSubs);
-          activeSub = allSubs.find(s => s.isActive) || allSubs[0];
+
+          if (savedTeacher) {
+            const firstAsg = savedTeacher.assignments?.[0];
+            const targetName = firstAsg ? firstAsg.subject : (savedTeacher.subject || '');
+            const matched = findMatchingSubject(allSubs, targetName);
+            activeSub = matched || allSubs.find(s => s.isActive) || allSubs[0];
+            setActiveAssignmentSubject(firstAsg ? firstAsg.subject : activeSub.title);
+            if (firstAsg?.classes?.length) {
+              setSelectedStudentClass(firstAsg.classes[0]);
+            } else if (activeSub.className) {
+              setSelectedStudentClass(activeSub.className.split(',')[0].trim());
+            }
+          } else {
+            activeSub = allSubs.find(s => s.isActive) || allSubs[0];
+            setActiveAssignmentSubject(activeSub.title);
+            if (activeSub.className) {
+              setSelectedStudentClass(activeSub.className.split(',')[0].trim());
+            }
+          }
+
           setSubject(activeSub);
           if (activeSub.token) setInputToken(activeSub.token);
 
+          // Muat soal dan hasil ujian dari Supabase langsung untuk activeSub
           const qList = await fetchQuestionsBySubject(activeSub.id);
-          if (qList && qList.length > 0) {
-            setQuestions(qList);
-          } else {
-            setQuestions([]);
-          }
+          setQuestions(qList || []);
 
           const resList = await fetchExamResults(activeSub.id);
-          if (resList && resList.length > 0) {
-            setResults(resList);
-          } else {
-            setResults([]);
-          }
+          setResults(resList || []);
         } else {
           activeSub = {
             id: '',
@@ -264,13 +269,13 @@ export default function Home() {
           setResults([]);
         }
 
-        // Ambil data roster siswa dari Supabase (fallback ke 301 initialStudents)
+        // Ambil data roster siswa dari Supabase (fallback ke 301 siswa resmi DAPODIK)
         const stdList = await fetchStudents();
         if (stdList && stdList.length > 0) {
           setStudents(stdList);
         }
 
-        // Baca cache localStorage
+        // Baca cache notifikasi & filter localStorage
         let readNotifIds: string[] = [];
         let allNotifsRead = false;
         let deletedNotifIds: string[] = [];
@@ -289,37 +294,28 @@ export default function Home() {
           }
         }
 
-        // Ambil notifikasi dari Supabase & filter dengan status localStorage
-        const notifList = await fetchNotifications(activeSub.id);
-        const sourceNotifs = notifList && notifList.length > 0 ? notifList : initialSeedNotifications;
-        const filteredNotifs = sourceNotifs
-          .filter(n => !deletedNotifIds.includes(n.id))
-          .map(n => ({
-            ...n,
-            isRead: n.isRead || allNotifsRead || readNotifIds.includes(n.id)
-          }));
-        setNotifications(filteredNotifs);
+        // Ambil notifikasi & kendala siswa MURNI 100% dari Supabase (tanpa placeholder apapun)
+        if (activeSub.id) {
+          const notifList = await fetchNotifications(activeSub.id);
+          const filteredNotifs = (notifList || [])
+            .filter(n => !deletedNotifIds.includes(n.id))
+            .map(n => ({
+              ...n,
+              isRead: n.isRead || allNotifsRead || readNotifIds.includes(n.id)
+            }));
+          setNotifications(filteredNotifs);
 
-        // Ambil pesan kendala dari Supabase & filter dengan status localStorage
-        const msgList = await fetchMessages(activeSub.id);
-        const sourceMsgs = msgList && msgList.length > 0 ? msgList : initialSeedMessages;
-        const filteredMsgs = sourceMsgs
-          .filter(m => !deletedMsgIds.includes(m.id))
-          .map(m => ({
-            ...m,
-            status: (resolvedMsgIds.includes(m.id) ? 'resolved' : m.status) as 'pending' | 'resolved' | 'acknowledged'
-          }));
-        setMessages(filteredMsgs);
-
-        // Ambil data 30 guru dari Supabase (fallback ke initialTeachers)
-        const tList = await fetchTeachers();
-        if (tList && tList.length > 0) {
-          setTeachers(tList);
-          if (typeof window !== 'undefined') {
-            try {
-              localStorage.setItem('cbt_cached_teachers', JSON.stringify(tList));
-            } catch (e) {}
-          }
+          const msgList = await fetchMessages(activeSub.id);
+          const filteredMsgs = (msgList || [])
+            .filter(m => !deletedMsgIds.includes(m.id))
+            .map(m => ({
+              ...m,
+              status: (resolvedMsgIds.includes(m.id) ? 'resolved' : m.status) as 'pending' | 'resolved' | 'acknowledged'
+            }));
+          setMessages(filteredMsgs);
+        } else {
+          setNotifications([]);
+          setMessages([]);
         }
 
         // Cek parameter URL untuk membuka ruang ujian siswa secara langsung (?mode=student)
@@ -327,39 +323,6 @@ export default function Home() {
           const urlParams = new URLSearchParams(window.location.search);
           if (urlParams.get('mode') === 'student' || urlParams.get('view') === 'student') {
             setViewMode('student_login');
-          }
-        }
-        if (typeof window !== 'undefined') {
-          const savedTeacherId = localStorage.getItem('cbt_logged_teacher_id');
-          if (savedTeacherId) {
-            const listToSearch = tList && tList.length > 0 ? tList : initialTeachers;
-            const foundTeacher = listToSearch.find(t => t.id === savedTeacherId);
-            if (foundTeacher) {
-              setCurrentTeacher(foundTeacher);
-              const firstAsg = foundTeacher.assignments?.[0];
-              if (firstAsg) {
-                setActiveAssignmentSubject(firstAsg.subject);
-                setSubject(prev => ({
-                  ...prev,
-                  title: `Asesmen Sumatif - ${firstAsg.subject}`,
-                  className: firstAsg.classes.join(', ')
-                }));
-                if (firstAsg.classes.length > 0) {
-                  setSelectedStudentClass(firstAsg.classes[0]);
-                }
-              } else {
-                setActiveAssignmentSubject(foundTeacher.subject);
-                if (foundTeacher.classes?.length > 0) {
-                  setSubject(prev => ({
-                    ...prev,
-                    title: `Asesmen Sumatif - ${foundTeacher.subject}`,
-                    className: foundTeacher.classes.join(', ')
-                  }));
-                  setSelectedStudentClass(foundTeacher.classes[0]);
-                }
-              }
-              setViewMode('teacher');
-            }
           }
         }
       } catch (err) {
@@ -629,70 +592,35 @@ export default function Home() {
       ? teacher.assignments[0]
       : null;
 
-    if (teacher.role === 'admin' || teacher.role === 'pengawas') {
-      try {
-        const allSubs = await fetchAllSubjects();
-        const subsToUse = allSubs && allSubs.length > 0 ? allSubs : subjects;
-        setSubjects(subsToUse);
-        const firstSub = subsToUse[0] || initialSubject;
-        setActiveAssignmentSubject(firstSub.title);
-        setSubject(firstSub);
-        if (firstSub.className) {
-          setSelectedStudentClass(firstSub.className.split(',')[0].trim());
+    try {
+      const allSubs = await fetchAllSubjects();
+      const subsToUse = allSubs && allSubs.length > 0 ? allSubs : subjects;
+      setSubjects(subsToUse);
+
+      const targetSubName = firstAsg ? firstAsg.subject : (teacher.subject || '');
+      const matchedSub = findMatchingSubject(subsToUse, targetSubName);
+
+      if (matchedSub) {
+        setSubject({
+          ...matchedSub,
+          className: firstAsg?.classes?.length ? firstAsg.classes.join(', ') : matchedSub.className
+        });
+        setActiveAssignmentSubject(firstAsg ? firstAsg.subject : matchedSub.title);
+        if (firstAsg?.classes?.length) {
+          setSelectedStudentClass(firstAsg.classes[0]);
+        } else if (matchedSub.className) {
+          setSelectedStudentClass(matchedSub.className.split(',')[0].trim());
         }
-        if (firstSub.id) {
-          const qList = await fetchQuestionsBySubject(firstSub.id);
+
+        if (matchedSub.id) {
+          const qList = await fetchQuestionsBySubject(matchedSub.id);
           setQuestions(qList || []);
-          const resList = await fetchExamResults(firstSub.id);
+          const resList = await fetchExamResults(matchedSub.id);
           setResults(resList || []);
         }
-      } catch (err) {
-        console.warn('Gagal memuat mapel untuk admin/pengawas:', err);
       }
-    } else if (firstAsg) {
-      setActiveAssignmentSubject(firstAsg.subject);
-      const match = subjects.find(s => s.title.toLowerCase().includes(firstAsg.subject.toLowerCase()));
-      if (match) {
-        setSubject({
-          ...match,
-          className: firstAsg.classes.join(', ')
-        });
-      } else {
-        setSubject(prev => ({
-          ...prev,
-          id: `sub-${firstAsg.subject.toLowerCase().replace(/[^a-z0-9]/g, '-')}`,
-          title: `Asesmen Sumatif - ${firstAsg.subject}`,
-          className: firstAsg.classes.join(', ')
-        }));
-      }
-      if (firstAsg.classes.length > 0) {
-        setSelectedStudentClass(firstAsg.classes[0]);
-      }
-    } else if (
-      teacher.subject &&
-      !teacher.subject.includes('Waka') &&
-      !teacher.subject.includes('Kepala Sekolah') &&
-      !teacher.subject.includes('BK')
-    ) {
-      setActiveAssignmentSubject(teacher.subject);
-      const match = subjects.find(s => s.title.toLowerCase().includes(teacher.subject.toLowerCase()));
-      if (match) {
-        setSubject({
-          ...match,
-          className: teacher.classes.join(', ') || match.className
-        });
-      } else {
-        setSubject(prev => ({
-          ...prev,
-          title: `Asesmen Sumatif - ${teacher.subject}`,
-          className: teacher.classes.join(', ') || prev.className
-        }));
-      }
-      if (teacher.classes.length > 0) {
-        setSelectedStudentClass(teacher.classes[0]);
-      }
-    } else {
-      setActiveAssignmentSubject(teacher.subject || '');
+    } catch (err) {
+      console.warn('Gagal memuat mapel untuk guru/pengawas:', err);
     }
 
     try {
@@ -702,52 +630,32 @@ export default function Home() {
     }
   };
 
-  const handleSelectAssignment = (subjectName: string) => {
+  const handleSelectAssignment = async (subjectName: string) => {
     setActiveAssignmentSubject(subjectName);
     if (!currentTeacher) return;
 
-    // 1. Cari kecocokan di daftar subjects lengkap (khusus Superadmin atau mapel umum)
-    const foundInSubjects = subjects.find(
-      s =>
-        s.title.toLowerCase().includes(subjectName.toLowerCase()) ||
-        subjectName.toLowerCase().includes(s.title.toLowerCase())
-    );
-
-    // 2. Cari kecocokan di assignments guru
-    const asg = currentTeacher.assignments?.find(a => a.subject === subjectName);
-
-    if (foundInSubjects) {
+    const matchedSub = findMatchingSubject(subjects, subjectName);
+    if (matchedSub) {
+      const asg = currentTeacher.assignments?.find(a => a.subject === subjectName);
       setSubject({
-        ...foundInSubjects,
-        className: asg ? asg.classes.join(', ') : foundInSubjects.className
+        ...matchedSub,
+        className: asg?.classes?.length ? asg.classes.join(', ') : matchedSub.className
       });
-      if (asg && asg.classes.length > 0) {
+      if (asg?.classes?.length) {
         setSelectedStudentClass(asg.classes[0]);
-      } else if (foundInSubjects.className) {
-        const firstCls = foundInSubjects.className.split(',')[0].trim();
-        setSelectedStudentClass(firstCls);
+      } else if (matchedSub.className) {
+        setSelectedStudentClass(matchedSub.className.split(',')[0].trim());
       }
-      return;
-    }
 
-    if (asg) {
-      setSubject(prev => ({
-        ...prev,
-        id: `sub-${asg.subject.toLowerCase().replace(/[^a-z0-9]/g, '-')}`,
-        title: `Asesmen Sumatif - ${asg.subject}`,
-        className: asg.classes.join(', ')
-      }));
-      if (asg.classes.length > 0) {
-        setSelectedStudentClass(asg.classes[0]);
-      }
-    } else if (currentTeacher.subject === subjectName) {
-      setSubject(prev => ({
-        ...prev,
-        title: `Asesmen Sumatif - ${currentTeacher.subject}`,
-        className: currentTeacher.classes.join(', ')
-      }));
-      if (currentTeacher.classes.length > 0) {
-        setSelectedStudentClass(currentTeacher.classes[0]);
+      if (matchedSub.id) {
+        try {
+          const qList = await fetchQuestionsBySubject(matchedSub.id);
+          setQuestions(qList || []);
+          const resList = await fetchExamResults(matchedSub.id);
+          setResults(resList || []);
+        } catch (err) {
+          console.warn('Gagal fetch data assignment dari Supabase:', err);
+        }
       }
     }
   };

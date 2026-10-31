@@ -1851,6 +1851,7 @@ export const defaultSchoolSettings: SchoolSettings = {
   logoRight: '/logo-sekolah.png',
   principalName: 'Hj. Rohana, S.Pd., M.Si.',
   principalNip: '19680512 199412 2 001',
+  principalTitle: 'Kepala SMPN 58 Palembang',
   principalPhoto: '',
   teacherName: 'Hendra Wijaya, S.Pd',
   teacherNip: '19870420 201201 1 004',

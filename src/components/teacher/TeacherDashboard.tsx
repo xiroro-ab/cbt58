@@ -6297,6 +6297,23 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                         className="w-full p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-mono font-semibold text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500"
                       />
                     </div>
+
+                    {/* Jabatan Penandatangan Utama (Kop / Leger) */}
+                    <div className="sm:col-span-2">
+                      <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                        Jabatan Penandatangan Utama (Leger Rekap Nilai):
+                      </label>
+                      <input
+                        type="text"
+                        value={localSettingsForm.principalTitle || ''}
+                        onChange={e => setLocalSettingsForm(prev => ({ ...prev, principalTitle: e.target.value }))}
+                        placeholder="Kepala SMPN 58 Palembang"
+                        className="w-full p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500"
+                      />
+                      <p className="text-[10px] text-slate-400 mt-0.5">
+                        Teks jabatan resmi di atas tanda tangan Kepala Sekolah pada lembar rekapan nilai (Default: Kepala SMPN 58 Palembang).
+                      </p>
+                    </div>
                   </div>
                 </div>
 

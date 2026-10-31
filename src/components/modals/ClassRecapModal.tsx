@@ -154,6 +154,7 @@ export const ClassRecapModal: React.FC<ClassRecapModalProps> = ({
     logoRight: schoolSettings?.logoRight || '/logo-sekolah.png',
     principalName: schoolSettings?.principalName || 'Hj. Rohana, S.Pd., M.Si.',
     principalNip: schoolSettings?.principalNip || '19680512 199412 2 001',
+    principalTitle: schoolSettings?.principalTitle || `Kepala ${schoolSettings?.schoolName?.replace('SMP NEGERI ', 'SMPN ') || 'SMPN 58 Palembang'}`,
     principalPhoto: schoolSettings?.principalPhoto || '',
     teacherName: currentTeacher?.name || schoolSettings?.teacherName || 'Hendra Wijaya, S.Pd',
     teacherNip: currentTeacher?.nip || schoolSettings?.teacherNip || '19870420 201201 1 004',
@@ -342,44 +343,49 @@ export const ClassRecapModal: React.FC<ClassRecapModalProps> = ({
 
           <div className="flex items-center gap-2 flex-wrap">
             {/* Pemilih Rombel Kelas */}
-            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs shadow-2xs">
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs shadow-xs">
               <Users className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
               <select
                 value={selectedClass}
                 onChange={e => setSelectedClass(e.target.value)}
-                className="bg-transparent font-bold text-slate-800 dark:text-slate-100 focus:outline-none cursor-pointer [color-scheme:light] dark:[color-scheme:dark]"
+                className="bg-transparent font-bold text-slate-900 dark:text-white focus:outline-none cursor-pointer"
               >
-                {otherClasses.length === 0 ? (
-                  targetClasses.map(cls => (
-                    <option key={cls} value={cls}>Rombel Kelas {cls}</option>
-                  ))
-                ) : (
+                {targetClasses.length > 0 && (
+                  <option disabled className="font-bold text-emerald-700 dark:text-emerald-400 bg-slate-100 dark:bg-slate-900 py-1">
+                    ── SASARAN MAPEL ({activeSubject.className}) ──
+                  </option>
+                )}
+                {targetClasses.map(cls => (
+                  <option key={cls} value={cls} className="font-semibold text-slate-900 dark:text-white bg-white dark:bg-slate-800 py-1">
+                    Rombel Kelas {cls}
+                  </option>
+                ))}
+                {otherClasses.length > 0 && (
                   <>
-                    <optgroup label={`Sasaran Mapel (${activeSubject.className})`}>
-                      {targetClasses.map(cls => (
-                        <option key={cls} value={cls}>Rombel Kelas {cls}</option>
-                      ))}
-                    </optgroup>
-                    <optgroup label="Rombel Lainnya">
-                      {otherClasses.map(cls => (
-                        <option key={cls} value={cls}>Rombel Kelas {cls}</option>
-                      ))}
-                    </optgroup>
+                    <option disabled className="font-bold text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-900 py-1">
+                      ── ROMBEL LAINNYA ──
+                    </option>
+                    {otherClasses.map(cls => (
+                      <option key={cls} value={cls} className="text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-800 py-1">
+                        Rombel Kelas {cls}
+                      </option>
+                    ))}
                   </>
                 )}
               </select>
             </div>
 
             {/* Pemilih Paket Mata Pelajaran (Khusus Mapel Milik Guru Ini) */}
-            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs shadow-2xs max-w-[200px] sm:max-w-[260px]">
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs shadow-xs max-w-[240px] sm:max-w-[340px] md:max-w-[420px]">
               <BookOpen className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
               <select
                 value={selectedSubjectId}
                 onChange={e => setSelectedSubjectId(e.target.value)}
-                className="bg-transparent font-bold text-slate-800 dark:text-slate-100 focus:outline-none cursor-pointer truncate [color-scheme:light] dark:[color-scheme:dark]"
+                className="bg-transparent font-bold text-slate-900 dark:text-white focus:outline-none cursor-pointer truncate"
+                title={activeSubject.title}
               >
                 {allSubjects.map(s => (
-                  <option key={s.id} value={s.id}>
+                  <option key={s.id} value={s.id} className="font-semibold text-slate-900 dark:text-white bg-white dark:bg-slate-800 py-1">
                     {s.title} ({s.className})
                   </option>
                 ))}
@@ -482,22 +488,22 @@ export const ClassRecapModal: React.FC<ClassRecapModalProps> = ({
             </div>
 
             {/* 3. ATRIBUT IDENTITAS UJIAN & KELAS */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 p-3 rounded-xl bg-slate-50 border border-slate-300 text-xs font-sans">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 p-3 rounded-xl bg-slate-50 border border-slate-300 text-xs font-sans print:bg-white print:border-slate-400">
               <div>
                 <span className="text-[10px] text-slate-500 uppercase block font-semibold">Mata Pelajaran:</span>
-                <strong className="text-slate-900 font-bold block truncate">{activeSubject.title}</strong>
+                <strong className="text-slate-900 font-bold block leading-tight">{activeSubject.title}</strong>
               </div>
               <div>
                 <span className="text-[10px] text-slate-500 uppercase block font-semibold">Rombel Kelas:</span>
-                <strong className="text-slate-900 font-bold block">Kelas {selectedClass}</strong>
+                <strong className="text-slate-900 font-bold block leading-tight">Kelas {selectedClass}</strong>
               </div>
               <div>
                 <span className="text-[10px] text-slate-500 uppercase block font-semibold">Standar KKM:</span>
-                <strong className="text-slate-900 font-bold block">75 (Tujuh Puluh Lima)</strong>
+                <strong className="text-slate-900 font-bold block leading-tight">75 (Tujuh Puluh Lima)</strong>
               </div>
               <div>
                 <span className="text-[10px] text-slate-500 uppercase block font-semibold">Guru Pengampu:</span>
-                <strong className="text-slate-900 font-bold block truncate">{effectiveSettings.teacherName}</strong>
+                <strong className="text-slate-900 font-bold block leading-tight">{effectiveSettings.teacherName}</strong>
               </div>
             </div>
 
@@ -602,68 +608,72 @@ export const ClassRecapModal: React.FC<ClassRecapModalProps> = ({
             <div className="pt-6 font-sans text-xs break-inside-avoid">
               <div className="grid grid-cols-2 gap-8 items-end text-center">
                 {/* Sisi Kiri: Mengetahui Kepala Sekolah */}
-                <div className="flex flex-col items-center justify-between min-h-[140px] space-y-2">
+                <div className="flex flex-col items-center justify-between min-h-[160px] space-y-2">
                   <div>
-                    <p className="text-[11px] text-slate-600">Mengetahui,</p>
-                    <p className="font-bold text-slate-900 uppercase">Kepala Satuan Pendidikan</p>
+                    <p className="text-[11px] text-slate-600 font-sans">Mengetahui,</p>
+                    <p className="font-bold text-slate-900 uppercase font-sans tracking-wide">
+                      {effectiveSettings.principalTitle || `Kepala ${effectiveSettings.schoolName?.replace('SMP NEGERI ', 'SMPN ') || 'SMPN 58 Palembang'}`}
+                    </p>
                   </div>
 
-                  <div className="py-1">
+                  <div className="py-1 flex items-center justify-center min-h-[85px]">
                     {effectiveSettings.enableTTE && showTTE ? (
                       <TTESignatureSeal
                         settings={effectiveSettings}
                         documentId={`LEGER-${selectedClass}-${activeSubject.token}`}
                         signerName={effectiveSettings.principalName}
-                        signerTitle="Kepala Sekolah SMPN 58"
+                        signerTitle={effectiveSettings.principalTitle || 'Kepala Sekolah'}
                         signerNip={effectiveSettings.principalNip}
                         signDate={new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}
-                        className="scale-85"
+                        sealOnly={true}
+                        className="scale-90"
                       />
                     ) : (
-                      <div className="h-14" />
+                      <div className="h-16" />
                     )}
                   </div>
 
                   <div>
-                    <strong className="underline font-bold text-slate-900 block leading-tight text-xs uppercase">
+                    <strong className="underline font-bold text-slate-900 block leading-tight text-xs uppercase font-sans">
                       {effectiveSettings.principalName}
                     </strong>
-                    <span className="text-[10px] text-slate-600 font-mono block">
+                    <span className="text-[10px] text-slate-600 font-mono block mt-0.5">
                       NIP. {effectiveSettings.principalNip}
                     </span>
                   </div>
                 </div>
 
-                {/* Sisi Kanan: Guru Mata Pelajaran / Wali Kelas */}
-                <div className="flex flex-col items-center justify-between min-h-[140px] space-y-2">
+                {/* Sisi Kanan: Guru Pengampu */}
+                <div className="flex flex-col items-center justify-between min-h-[160px] space-y-2">
                   <div>
-                    <p className="text-[11px] text-slate-600">
+                    <p className="text-[11px] text-slate-600 font-sans">
                       {effectiveSettings.city}, {new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}
                     </p>
-                    <p className="font-bold text-slate-900 uppercase">Guru Pengampu / Wali Kelas</p>
+                    <p className="font-bold text-slate-900 uppercase font-sans tracking-wide">Guru Pengampu</p>
                   </div>
 
-                  <div className="py-1">
+                  <div className="py-1 flex items-center justify-center min-h-[85px]">
                     {effectiveSettings.enableTTE && showTTE ? (
                       <TTESignatureSeal
                         settings={effectiveSettings}
                         documentId={`LEGER-GURU-${selectedClass}-${activeSubject.token}`}
                         signerName={effectiveSettings.teacherName}
-                        signerTitle="Guru Pengampu / Proktor"
+                        signerTitle="Guru Pengampu"
                         signerNip={effectiveSettings.teacherNip}
                         signDate={new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}
-                        className="scale-85"
+                        sealOnly={true}
+                        className="scale-90"
                       />
                     ) : (
-                      <div className="h-14" />
+                      <div className="h-16" />
                     )}
                   </div>
 
                   <div>
-                    <strong className="underline font-bold text-slate-900 block leading-tight text-xs uppercase">
+                    <strong className="underline font-bold text-slate-900 block leading-tight text-xs uppercase font-sans">
                       {effectiveSettings.teacherName}
                     </strong>
-                    <span className="text-[10px] text-slate-600 font-mono block">
+                    <span className="text-[10px] text-slate-600 font-mono block mt-0.5">
                       NIP. {effectiveSettings.teacherNip}
                     </span>
                   </div>
@@ -686,6 +696,22 @@ export const ClassRecapModal: React.FC<ClassRecapModalProps> = ({
         </div>
 
       </div>
+
+      {/* CSS KHUSUS PENCETAKAN FORMAL A4 */}
+      <style jsx global>{`
+        @media print {
+          @page {
+            size: A4 portrait;
+            margin: 10mm 12mm 10mm 12mm;
+          }
+          body {
+            background-color: #ffffff !important;
+            color: #000000 !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+        }
+      `}</style>
     </div>
   );
 };

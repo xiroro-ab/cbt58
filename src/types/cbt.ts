@@ -118,6 +118,7 @@ export interface SchoolSettings {
   // Data & Foto Kepala Sekolah
   principalName: string;
   principalNip: string;
+  principalTitle?: string;     // Default: 'Kepala SMPN 58 Palembang'
   principalPhoto?: string;     // Base64 / URL foto formal kepala sekolah
 
   // Data Default Guru / Proktor

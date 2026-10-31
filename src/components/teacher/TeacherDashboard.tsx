@@ -3219,8 +3219,8 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
 
         const now = Date.now();
         const activeCount = filteredSessions.length;
-        const focusCount = filteredSessions.filter(s => s.status === 'ongoing' && s.isFocus && (now - s.lastHeartbeat) <= 6000).length;
-        const blurCount = filteredSessions.filter(s => s.status === 'ongoing' && (!s.isFocus || (now - s.lastHeartbeat) > 6000)).length;
+        const focusCount = filteredSessions.filter(s => s.status === 'ongoing' && s.isFocus && (now - s.lastHeartbeat) <= 3500).length;
+        const blurCount = filteredSessions.filter(s => s.status === 'ongoing' && (!s.isFocus || (now - s.lastHeartbeat) > 3500)).length;
         const blockedCount = filteredSessions.filter(s => s.status === 'blocked').length;
 
         return (
@@ -3353,7 +3353,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                     ) : (
                       filteredSessions.map((s) => {
                         const isDisqualified = s.status === 'blocked';
-                        const isStale = (Date.now() - s.lastHeartbeat) > 6000;
+                        const isStale = (Date.now() - s.lastHeartbeat) > 3500;
                         const isOut = !s.isFocus || isStale;
 
                         const sSec = s.remainingSeconds || 0;

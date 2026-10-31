@@ -70,7 +70,14 @@ import {
   ArrowLeft,
   Languages,
   CheckCircle2,
-  IdCard
+  IdCard,
+  Clock,
+  FileText,
+  AlertTriangle,
+  Play,
+  X,
+  ShieldAlert,
+  Info
 } from 'lucide-react';
 
 // Helper pengecekan hak akses mata pelajaran per guru (mencakup pencocokan multi-kata kunci & mapel buatan guru)
@@ -138,11 +145,20 @@ export default function Home() {
   const [questions, setQuestions] = useState<Question[]>([]);
   const [results, setResults] = useState<ExamResult[]>([]);
   const [students, setStudents] = useState<Student[]>(initialStudents);
-  const [selectedStudentClass, setSelectedStudentClass] = useState<string>('VIII.1');
+  const [selectedStudentClass, setSelectedStudentClass] = useState<string>('');
   const [studentName, setStudentName] = useState('');
   const [inputToken, setInputToken] = useState('');
   const [loginError, setLoginError] = useState('');
   const [isLoading, setIsLoading] = useState(true);
+
+  // State Modal Briefing & Informasi Ujian Sebelum Masuk Soal
+  const [showBriefModal, setShowBriefModal] = useState(false);
+  const [briefingData, setBriefingData] = useState<{
+    subject: Subject;
+    student: Student | null;
+    questions: Question[];
+  } | null>(null);
+  const [agreedBriefingRules, setAgreedBriefingRules] = useState(true);
 
   // Storage Keys untuk persistensi status dibaca/dihapus di browser
   const NOTIF_STORAGE_KEY = 'cbt_notif_read_ids';
@@ -187,6 +203,15 @@ export default function Home() {
     );
   }, [classStudents, students, studentName]);
 
+  // Auto-deteksi mata pelajaran dari token yang dimasukkan siswa
+  const detectedSubject = useMemo(() => {
+    if (!inputToken.trim()) return null;
+    const clean = inputToken.trim().toUpperCase();
+    return subjects.find(s => s.token.trim().toUpperCase() === clean && s.isActive)
+      || subjects.find(s => s.token.trim().toUpperCase() === clean)
+      || null;
+  }, [inputToken, subjects]);
+
   // 1. Load data awal dari Supabase & sinkronkan dengan cache lokal
   useEffect(() => {
     async function loadData() {
@@ -230,21 +255,13 @@ export default function Home() {
             const matched = findMatchingSubject(allSubs, targetName);
             activeSub = matched || allSubs.find(s => s.isActive) || allSubs[0];
             setActiveAssignmentSubject(firstAsg ? firstAsg.subject : activeSub.title);
-            if (firstAsg?.classes?.length) {
-              setSelectedStudentClass(firstAsg.classes[0]);
-            } else if (activeSub.className) {
-              setSelectedStudentClass(activeSub.className.split(',')[0].trim());
-            }
           } else {
             activeSub = allSubs.find(s => s.isActive) || allSubs[0];
             setActiveAssignmentSubject(activeSub.title);
-            if (activeSub.className) {
-              setSelectedStudentClass(activeSub.className.split(',')[0].trim());
-            }
           }
 
           setSubject(activeSub);
-          if (activeSub.token) setInputToken(activeSub.token);
+          // Siswa wajib memilih kelas & memasukkan token sendiri (tanpa prefill)
 
           // Muat soal dan hasil ujian dari Supabase langsung untuk activeSub
           const qList = await fetchQuestionsBySubject(activeSub.id);
@@ -693,8 +710,18 @@ export default function Home() {
 
   const handleStartExam = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!selectedStudentClass.trim()) {
+      setLoginError(language === 'id' ? 'Harap pilih rombel / kelas Anda terlebih dahulu.' : 'Please select your class first.');
+      return;
+    }
+
     if (!studentName.trim()) {
-      setLoginError(language === 'id' ? 'Harap pilih atau masukkan nama lengkap siswa.' : 'Please enter student name.');
+      setLoginError(language === 'id' ? 'Harap pilih nama lengkap siswa dari daftar kelas.' : 'Please select student name.');
+      return;
+    }
+
+    if (!inputToken.trim()) {
+      setLoginError(language === 'id' ? 'Harap masukkan token ujian resmi yang diberikan oleh guru pengawas.' : 'Please enter the exam token.');
       return;
     }
 
@@ -702,6 +729,8 @@ export default function Home() {
     // 1. Auto-deteksi mata pelajaran berdasarkan token yang dimasukkan siswa
     const matchedSub = subjects.find(
       s => s.token.trim().toUpperCase() === cleanToken && s.isActive
+    ) || subjects.find(
+      s => s.token.trim().toUpperCase() === cleanToken
     );
 
     if (!matchedSub) {
@@ -714,11 +743,18 @@ export default function Home() {
     }
 
     // 2. Validasi apakah rombel kelas siswa berhak mengikuti ujian mapel ini
-    if (
-      matchedSub.className &&
-      !matchedSub.className.includes('Semua') &&
-      !matchedSub.className.includes(selectedStudentClass)
-    ) {
+    const isClassMatching = (targetClass: string, studentCls: string) => {
+      if (!targetClass || targetClass.toLowerCase().includes('semua')) return true;
+      if (!studentCls) return true;
+      const t = targetClass.toUpperCase();
+      const s = studentCls.toUpperCase();
+      if (t.includes(s)) return true;
+      const sConverted = s.replace(/^VIII\./, '8.').replace(/^VII\./, '7.').replace(/^IX\./, '9.');
+      const sRoman = s.replace(/^8\./, 'VIII.').replace(/^7\./, 'VII.').replace(/^9\./, 'IX.');
+      return t.includes(sConverted) || t.includes(sRoman);
+    };
+
+    if (!isClassMatching(matchedSub.className, selectedStudentClass)) {
       setLoginError(
         language === 'id'
           ? `Token "${inputToken}" adalah untuk ujian ${matchedSub.title} (Rombel: ${matchedSub.className}). Kelas Anda (${selectedStudentClass}) tidak terdaftar untuk ujian ini.`
@@ -764,6 +800,8 @@ export default function Home() {
               const cleaned = list.filter(r => r.studentName.toLowerCase().trim() !== normalizedName);
               localStorage.setItem(`cbt_results_${matchedSub.id}`, JSON.stringify(cleaned));
               localStorage.removeItem(`cbt_answers_${studentName}_${matchedSub.id}`);
+              localStorage.removeItem(`cbt_exam_state_${matchedSub.id}_${normalizedName}`);
+              localStorage.removeItem(`cbt_blocked_${matchedSub.id}_${normalizedName}`);
               alreadySubmittedInStorage = null;
             } else {
               alreadySubmittedInStorage = found;
@@ -818,6 +856,19 @@ export default function Home() {
     setSubject(matchedSub);
     setQuestions(randomizedQuestions);
     setLoginError('');
+
+    // Suguhkan Modal Informasi Ujian sebelum masuk ke lembar soal ujian
+    setBriefingData({
+      subject: matchedSub,
+      student: matchedStudent || null,
+      questions: randomizedQuestions
+    });
+    setAgreedBriefingRules(true);
+    setShowBriefModal(true);
+  };
+
+  const handleConfirmStartExam = () => {
+    setShowBriefModal(false);
     setViewMode('student_exam');
   };
 
@@ -1138,23 +1189,26 @@ export default function Home() {
           </div>
 
           <form onSubmit={handleStartExam} className="space-y-4 text-xs font-medium">
-            {/* Pilihan Kelas */}
+            {/* Pilihan Kelas (Wajib Kosong di Awal & Dibuka Terlebih Dahulu) */}
             <div>
               <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1.5 flex items-center justify-between">
                 <span className="flex items-center gap-1.5">
                   <School className="w-3.5 h-3.5 text-violet-600" />
                   <span>{t.studentClassLabel}</span>
                 </span>
-                <span className="text-[10px] text-slate-400">Pilih dari daftar</span>
+                <span className="text-[10px] text-slate-400">Langkah 1: Pilih Kelas</span>
               </label>
               <select
+                required
                 value={selectedStudentClass}
                 onChange={e => {
                   setSelectedStudentClass(e.target.value);
                   setStudentName('');
+                  setLoginError('');
                 }}
                 className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-violet-500 transition cursor-pointer"
               >
+                <option value="">-- Pilih Rombel / Kelas Anda Terlebih Dahulu --</option>
                 {availableClasses.map(cls => {
                   const count = students.filter(s => s.className === cls).length;
                   return (
@@ -1166,7 +1220,7 @@ export default function Home() {
               </select>
             </div>
 
-            {/* Nama Siswa dengan Dropdown Pilihan Roster Kelas */}
+            {/* Nama Siswa dengan Dropdown Pilihan Roster Kelas (Terkunci Sebelum Kelas Dipilih) */}
             <div>
               <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1.5 flex items-center justify-between">
                 <span className="flex items-center gap-1.5">
@@ -1174,16 +1228,28 @@ export default function Home() {
                   <span>{t.studentNameLabel}</span>
                 </span>
                 <span className="text-[10px] text-slate-400 font-normal">
-                  {classStudents.length} Siswa Terdaftar
+                  {selectedStudentClass ? `${classStudents.length} Siswa Terdaftar` : 'Pilih kelas dahulu'}
                 </span>
               </label>
               <select
                 required
+                disabled={!selectedStudentClass}
                 value={studentName}
-                onChange={e => setStudentName(e.target.value)}
-                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-violet-500 transition cursor-pointer"
+                onChange={e => {
+                  setStudentName(e.target.value);
+                  setLoginError('');
+                }}
+                className={`w-full px-3.5 py-2.5 rounded-xl border text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-violet-500 transition ${
+                  !selectedStudentClass
+                    ? 'bg-slate-100 dark:bg-slate-800/40 border-slate-200 dark:border-slate-800 text-slate-400 cursor-not-allowed opacity-70'
+                    : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white cursor-pointer'
+                }`}
               >
-                <option value="">-- Klik untuk Pilih Nama Siswa ({selectedStudentClass}) --</option>
+                <option value="">
+                  {selectedStudentClass
+                    ? `-- Klik untuk Pilih Nama Siswa (${selectedStudentClass}) --`
+                    : '-- Pilih Kelas Terlebih Dahulu --'}
+                </option>
                 {classStudents
                   .slice()
                   .sort((a, b) => a.name.localeCompare(b.name))
@@ -1196,7 +1262,7 @@ export default function Home() {
 
               {/* Status Verifikasi Roster Siswa */}
               {matchedStudent && (
-                <div className="mt-2 p-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 flex items-center gap-2 text-[11px] text-emerald-700 dark:text-emerald-300">
+                <div className="mt-2 p-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 flex items-center gap-2 text-[11px] text-emerald-700 dark:text-emerald-300 animate-in fade-in">
                   <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
                   <div className="flex-1">
                     <p className="font-bold">Terdaftar di Roster Resmi</p>
@@ -1208,20 +1274,39 @@ export default function Home() {
               )}
             </div>
 
-            {/* Token Ujian */}
+            {/* Token Ujian (Wajib Diisi Siswa & Auto-Deteksi Mapel) */}
             <div>
-              <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1.5 flex items-center gap-1.5">
-                <KeyRound className="w-3.5 h-3.5 text-violet-600" />
-                <span>{t.studentTokenLabel}</span>
+              <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1.5 flex items-center justify-between">
+                <span className="flex items-center gap-1.5">
+                  <KeyRound className="w-3.5 h-3.5 text-violet-600" />
+                  <span>{t.studentTokenLabel}</span>
+                </span>
+                <span className="text-[10px] text-slate-400">Wajib diisi siswa</span>
               </label>
               <input
                 type="text"
                 required
                 value={inputToken}
-                onChange={e => setInputToken(e.target.value.toUpperCase())}
-                placeholder="MASUKKAN TOKEN"
+                onChange={e => {
+                  setInputToken(e.target.value.toUpperCase());
+                  setLoginError('');
+                }}
+                placeholder="CONTOH: SMP58INF"
                 className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white uppercase tracking-widest font-mono text-center font-bold text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 transition"
               />
+
+              {/* Status Auto-Deteksi Token Mata Pelajaran */}
+              {detectedSubject && (
+                <div className="mt-2 p-2.5 rounded-xl bg-violet-50 dark:bg-violet-950/40 border border-violet-200 dark:border-violet-800 flex items-center gap-2.5 text-[11px] text-violet-700 dark:text-violet-300 animate-in fade-in">
+                  <CheckCircle2 className="w-4 h-4 text-violet-600 dark:text-violet-400 flex-shrink-0" />
+                  <div className="flex-1">
+                    <p className="font-bold">{detectedSubject.title}</p>
+                    <p className="text-[10px] text-violet-600/80 dark:text-violet-400/80">
+                      Rombel: <span className="font-semibold">{detectedSubject.className || 'Semua Rombel'}</span> • Durasi: {detectedSubject.durationMinutes} Menit • Toleransi: {detectedSubject.violationLimit || 3}x
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
 
             {loginError && (
@@ -1233,7 +1318,7 @@ export default function Home() {
             <div className="pt-2">
               <button
                 type="submit"
-                className="w-full py-3 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-bold text-xs shadow-md shadow-violet-600/20 flex items-center justify-center gap-2 transition active:scale-[0.99]"
+                className="w-full py-3 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-bold text-xs shadow-md shadow-violet-600/20 flex items-center justify-center gap-2 transition active:scale-[0.99] cursor-pointer"
               >
                 <span>{t.startExamBtn}</span>
                 <ArrowRight className="w-4 h-4" />
@@ -1246,6 +1331,155 @@ export default function Home() {
             <span>{t.antiCheatWarning}</span>
           </div>
         </div>
+
+        {/* MODAL KONFIRMASI & INFORMASI UJIAN (BRIEFING MODAL SEBELUM MASUK SOAL) */}
+        {showBriefModal && briefingData && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm animate-in fade-in">
+            <div className="max-w-xl w-full max-h-[92vh] flex flex-col bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-2xl overflow-hidden animate-in zoom-in-95">
+              {/* Header Modal */}
+              <div className="p-5 sm:p-6 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50/50 dark:bg-slate-800/30">
+                <div className="flex items-center gap-3">
+                  <div className="w-11 h-11 rounded-2xl bg-violet-100 dark:bg-violet-950/60 text-violet-600 dark:text-violet-400 flex items-center justify-center font-bold">
+                    <Info className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h3 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white">
+                      Konfirmasi & Informasi Ujian
+                    </h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      SMP Negeri 58 Palembang • Mohon baca dengan seksama
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowBriefModal(false)}
+                  className="p-2 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Konten Scrollable */}
+              <div className="p-5 sm:p-6 overflow-y-auto space-y-4 text-xs">
+                {/* Identitas Peserta & Mapel */}
+                <div className="p-4 rounded-2xl bg-violet-50/60 dark:bg-violet-950/30 border border-violet-100 dark:border-violet-900/50 space-y-2.5">
+                  <div className="flex items-center justify-between border-b border-violet-100 dark:border-violet-900/50 pb-2">
+                    <span className="text-slate-500 dark:text-slate-400 font-medium">Mata Pelajaran:</span>
+                    <span className="font-bold text-slate-900 dark:text-white text-sm">
+                      {briefingData.subject.title}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-slate-700 dark:text-slate-300">
+                    <div>
+                      <span className="text-slate-400 block text-[10px]">Nama Siswa:</span>
+                      <strong className="text-slate-900 dark:text-white">{studentName}</strong>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block text-[10px]">Rombel / Kelas:</span>
+                      <strong className="text-slate-900 dark:text-white">{selectedStudentClass}</strong>
+                    </div>
+                    {briefingData.student && (
+                      <>
+                        <div>
+                          <span className="text-slate-400 block text-[10px]">NISN:</span>
+                          <span className="font-mono font-bold text-slate-800 dark:text-slate-200">{briefingData.student.nisn}</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 block text-[10px]">Jenis Kelamin:</span>
+                          <span className="text-slate-800 dark:text-slate-200">{briefingData.student.gender === 'L' || briefingData.student.gender === 'Laki-Laki' ? 'Laki-Laki' : 'Perempuan'}</span>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                {/* Ringkasan Parameter Ujian */}
+                <div className="grid grid-cols-3 gap-2.5">
+                  <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/60 text-center">
+                    <Clock className="w-4 h-4 mx-auto mb-1 text-violet-600 dark:text-violet-400" />
+                    <span className="text-[10px] text-slate-400 block">Durasi Waktu</span>
+                    <strong className="text-xs text-slate-900 dark:text-white">
+                      {briefingData.subject.durationMinutes} Menit
+                    </strong>
+                  </div>
+                  <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/60 text-center">
+                    <FileText className="w-4 h-4 mx-auto mb-1 text-emerald-600 dark:text-emerald-400" />
+                    <span className="text-[10px] text-slate-400 block">Jumlah Soal</span>
+                    <strong className="text-xs text-slate-900 dark:text-white">
+                      {briefingData.questions.length} Butir
+                    </strong>
+                  </div>
+                  <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/60 text-center">
+                    <ShieldAlert className="w-4 h-4 mx-auto mb-1 text-rose-500" />
+                    <span className="text-[10px] text-slate-400 block">Batas Pelanggaran</span>
+                    <strong className="text-xs text-rose-600 dark:text-rose-400">
+                      {briefingData.subject.violationLimit || 3}x Batas
+                    </strong>
+                  </div>
+                </div>
+
+                {/* Petunjuk & Tata Tertib Anti-Cheat (Ketat) */}
+                <div className="p-4 rounded-2xl bg-amber-50/60 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/40 space-y-2 text-slate-700 dark:text-slate-300">
+                  <div className="flex items-center gap-2 text-amber-800 dark:text-amber-400 font-bold">
+                    <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+                    <span>Tata Tertib & Pengawasan Anti-Cheat:</span>
+                  </div>
+                  <ul className="list-disc list-inside space-y-1.5 text-[11px] leading-relaxed text-slate-600 dark:text-slate-400 pl-1">
+                    <li>
+                      Ujian wajib dikerjakan dalam mode <strong>Layar Penuh (Fullscreen)</strong>.
+                    </li>
+                    <li>
+                      <strong>Dilarang keras berpindah tab, membuka jendela lain, keluar aplikasi, atau split-screen.</strong> Setiap kehilangan fokus akan dicatat sebagai pelanggaran dan dilaporkan realtime ke pengawas.
+                    </li>
+                    <li>
+                      <strong>Dilarang menekan tombol Kembali (Back) HP.</strong> Sistem secara otomatis mengunci tombol navigasi. Menekan tombol Back akan dihitung sebagai pelanggaran.
+                    </li>
+                    <li>
+                      Batas maksimal pelanggaran sistem adalah <strong>{briefingData.subject.violationLimit || 3} kali</strong>. Jika melampaui, lembar ujian akan <strong>terkunci otomatis (diskualifikasi)</strong> dan hanya dapat dibuka oleh Guru Pengawas di ruangan.
+                    </li>
+                    <li>
+                      Jawaban tersimpan otomatis ke database secara realtime.
+                    </li>
+                  </ul>
+                </div>
+
+                {/* Persetujuan Peserta */}
+                <label className="flex items-start gap-2.5 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-800 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={agreedBriefingRules}
+                    onChange={e => setAgreedBriefingRules(e.target.checked)}
+                    className="mt-0.5 rounded text-violet-600 focus:ring-violet-500 cursor-pointer"
+                  />
+                  <span className="text-[11px] text-slate-600 dark:text-slate-400 leading-tight">
+                    Saya telah membaca, memahami, dan bersedia mematuhi seluruh tata tertib pelaksanaan ujian di atas secara jujur dan tertib.
+                  </span>
+                </label>
+              </div>
+
+              {/* Footer Aksi Modal */}
+              <div className="p-4 sm:p-5 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setShowBriefModal(false)}
+                  className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-semibold text-xs hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="button"
+                  disabled={!agreedBriefingRules}
+                  onClick={handleConfirmStartExam}
+                  className="px-6 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold text-xs shadow-md shadow-violet-600/20 flex items-center gap-2 transition active:scale-[0.99] cursor-pointer"
+                >
+                  <Play className="w-3.5 h-3.5 fill-current" />
+                  <span>Saya Mengerti & Mulai Mengerjakan Ujian</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         <footer className="text-center text-[11px] text-slate-400 dark:text-slate-500 py-3">
           SMP Negeri 58 Palembang • Sistem Ujian Berbasis Komputer

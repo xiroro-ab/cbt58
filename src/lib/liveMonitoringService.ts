@@ -163,10 +163,10 @@ export function getStoredSessions(): ExamSession[] {
     const list: ExamSession[] = JSON.parse(raw);
     const now = Date.now();
 
-    // Jika siswa tidak mengirim detak jantung (heartbeat) lebih dari 6 detik (misal aplikasi diminimalkan / di layar utama HP),
+    // Jika siswa tidak mengirim detak jantung (heartbeat) lebih dari 3.5 detik (misal aplikasi diminimalkan / di layar utama HP),
     // otomatis tandai isFocus = false agar pengawas langsung tahu siswa sedang di luar aplikasi
     const marked = list.map(s => {
-      if (s.status === 'ongoing' && (now - s.lastHeartbeat) > 6000 && s.isFocus) {
+      if (s.status === 'ongoing' && (now - s.lastHeartbeat) > 3500 && s.isFocus) {
         return { ...s, isFocus: false };
       }
       return s;

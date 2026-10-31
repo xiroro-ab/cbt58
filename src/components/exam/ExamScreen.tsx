@@ -9,7 +9,8 @@ import { useLanguage } from '@/context/LanguageContext';
 import {
   insertNotification,
   insertMessage,
-  subscribeToMessages
+  subscribeToMessages,
+  checkStudentLockStatus
 } from '@/lib/supabaseService';
 import {
   reportStudentSession,
@@ -36,7 +37,8 @@ import {
   Lock,
   Unlock,
   Check,
-  Layers
+  Layers,
+  RotateCcw
 } from 'lucide-react';
 
 interface ExamScreenProps {
@@ -141,6 +143,10 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
   // State Pengumuman Broadcast dari Pengawas
   const [broadcastNotice, setBroadcastNotice] = useState<string | null>(null);
 
+  // State Verifikasi Buka Kunci Mandiri saat Terkunci
+  const [isCheckingUnlock, setIsCheckingUnlock] = useState(false);
+  const [unlockCheckMessage, setUnlockCheckMessage] = useState<string | null>(null);
+
   const startTimeRef = useRef(Date.now());
   const violationCountRef = useRef(violationCount);
   violationCountRef.current = violationCount;
@@ -231,14 +237,14 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
     });
   }, [studentName, subject.id, studentClass, subject.className, questions.length]);
 
-  // 2. LIVE MONITORING HEARTBEAT & BROADCAST TO PROCTOR (EVERY 2.5 SECONDS)
+  // 2. LIVE MONITORING HEARTBEAT & BROADCAST TO PROCTOR (EVERY 1.5 SECONDS)
   useEffect(() => {
     if (isExamCompleted) return;
 
     sendDirectHeartbeat();
     const interval = setInterval(() => {
       sendDirectHeartbeat();
-    }, 2500);
+    }, 1500);
 
     return () => {
       clearInterval(interval);
@@ -312,6 +318,82 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
 
     return () => unsubscribe();
   }, [studentName, subject.id, onExit, requestFullscreenMode, stateKey, blockedKey]);
+
+  // 3b. FAIL-SAFE POLLING BUKA KUNCI DARI SUPABASE (SETIAP 2 DETIK SAAT TERKUNCI)
+  // Menjamin layar merah siswa otomatis terbuka seketika guru menekan tombol "Buka Kunci" / "Reset",
+  // walaupun websocket broadcast sempat tidak tersampaikan ke HP siswa.
+  useEffect(() => {
+    if (!isLocked || isExamCompleted) return;
+
+    const pollInterval = setInterval(async () => {
+      try {
+        const lockStatus = await checkStudentLockStatus(subject.id, studentName, subject.violationLimit || 3);
+        if (!lockStatus.isBlocked) {
+          setIsLocked(false);
+          setViolationCount(0);
+          setShowWarningModal(false);
+          setUnlockedNotice(true);
+          setTimeout(() => setUnlockedNotice(false), 5000);
+
+          if (typeof window !== 'undefined') {
+            try {
+              localStorage.removeItem(blockedKey);
+              localStorage.setItem(stateKey, JSON.stringify({
+                answers: answersRef.current,
+                secondsRemaining: secondsRemainingRef.current,
+                violationCount: 0,
+                isLocked: false,
+                startTime: startTimeRef.current
+              }));
+            } catch {}
+          }
+          sendDirectHeartbeat(true);
+          requestFullscreenMode();
+        }
+      } catch (err) {
+        console.warn('Gagal polling lock status di ExamScreen:', err);
+      }
+    }, 2000);
+
+    return () => clearInterval(pollInterval);
+  }, [isLocked, isExamCompleted, subject.id, studentName, subject.violationLimit, blockedKey, stateKey, sendDirectHeartbeat, requestFullscreenMode]);
+
+  // Handler Pengecekan Kunci Mandiri saat Siswa di Layar Terkunci
+  const handleManualCheckUnlock = async () => {
+    setIsCheckingUnlock(true);
+    setUnlockCheckMessage(null);
+    try {
+      const lockStatus = await checkStudentLockStatus(subject.id, studentName, subject.violationLimit || 3);
+      if (!lockStatus.isBlocked) {
+        setIsLocked(false);
+        setViolationCount(0);
+        setShowWarningModal(false);
+        setUnlockedNotice(true);
+        setTimeout(() => setUnlockedNotice(false), 5000);
+
+        if (typeof window !== 'undefined') {
+          try {
+            localStorage.removeItem(blockedKey);
+            localStorage.setItem(stateKey, JSON.stringify({
+              answers: answersRef.current,
+              secondsRemaining: secondsRemainingRef.current,
+              violationCount: 0,
+              isLocked: false,
+              startTime: startTimeRef.current
+            }));
+          } catch {}
+        }
+        sendDirectHeartbeat(true);
+        requestFullscreenMode();
+      } else {
+        setUnlockCheckMessage('Akun Anda masih berstatus terkunci di komputer pengawas. Silakan hubungi guru pengawas di ruangan.');
+      }
+    } catch {
+      setUnlockCheckMessage('Gagal menghubungi server pengawas. Silakan coba sesaat lagi.');
+    } finally {
+      setIsCheckingUnlock(false);
+    }
+  };
 
   // 4. ANTI-CHEAT ENGINE & VIOLATION HANDLER
   const handleViolation = useCallback(async (reason: string) => {
@@ -494,22 +576,27 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
       }
     };
 
-    // G. Perangkap Navigasi Tombol Back HP / Browser (History Trap Loop)
-    // Siswa menekan tombol Back 1x, 2x, 3x, dst TIDAK BISA KELUAR dan tetap memunculkan modal peringatan
+    // G. Perangkap Navigasi Tombol Back HP / Browser (History Trap Loop 20x Buffer + Continuous Re-Arm)
+    // Siswa menekan tombol Back 1x, 2x cepat, 3x, dst TIDAK BISA KELUAR dan tetap memunculkan modal peringatan
+    const guardUrl = typeof window !== 'undefined' ? window.location.pathname + window.location.search + '#cbt-guard' : '';
     try {
-      window.history.pushState({ cbtLock: true }, '', window.location.href);
-      window.history.pushState({ cbtLock: true }, '', window.location.href);
+      for (let i = 0; i < 20; i++) {
+        window.history.pushState({ cbtGuard: true, index: i, time: Date.now() }, '', guardUrl);
+      }
     } catch {}
 
     const handlePopState = (e: PopStateEvent) => {
-      // 1. Selalu dorong kembali state baru seketika agar riwayat browser tidak pernah mundur
+      // 1. Selalu dorong 10 state baru seketika agar riwayat browser tidak pernah bisa dimundurkan
       try {
-        window.history.pushState({ cbtLock: true }, '', window.location.href);
+        for (let i = 0; i < 10; i++) {
+          window.history.pushState({ cbtGuard: true, index: i, time: Date.now() }, '', guardUrl);
+        }
       } catch {}
 
-      // 2. Cegah keluar jika ujian belum selesai
+      // 2. Cegah keluar dan catat pelanggaran jika ujian belum selesai
       if (!isCompletedRef.current) {
         isFocusRef.current = false;
+        setIsFocus(false);
         sendDirectHeartbeat(false);
 
         handleViolation('Menekan tombol navigasi Kembali (Back) pada perangkat HP.');
@@ -519,9 +606,19 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
       }
     };
 
+    // Continuous re-arm interval setiap 800ms agar buffer riwayat browser selalu terisi penuh
+    const historyTicker = setInterval(() => {
+      if (!isCompletedRef.current) {
+        try {
+          window.history.pushState({ cbtGuard: true, time: Date.now() }, '', guardUrl);
+        } catch {}
+      }
+    }, 800);
+
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
       if (!isCompletedRef.current) {
         isFocusRef.current = false;
+        setIsFocus(false);
         sendDirectHeartbeat(false);
         e.preventDefault();
         e.returnValue = 'Ujian sedang berlangsung! Anda tidak diperbolehkan meninggalkan halaman ujian.';
@@ -532,6 +629,7 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
     const handlePageHide = () => {
       if (!isCompletedRef.current) {
         isFocusRef.current = false;
+        setIsFocus(false);
         sendDirectHeartbeat(false);
       }
     };
@@ -551,6 +649,7 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
     window.addEventListener('pagehide', handlePageHide);
 
     return () => {
+      clearInterval(historyTicker);
       document.removeEventListener('fullscreenchange', handleFullscreenChange);
       document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
@@ -804,6 +903,26 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
 
           <div className="p-3 bg-slate-800/80 rounded-xl text-[11px] text-slate-400 border border-slate-700/80">
             Terakhir terdeteksi: <strong className="text-rose-300">{lastViolationReason || 'Aktivitas di luar halaman ujian'}</strong>
+          </div>
+
+          {unlockCheckMessage && (
+            <div className="p-3 bg-amber-500/20 border border-amber-500/40 rounded-xl text-xs text-amber-300">
+              {unlockCheckMessage}
+            </div>
+          )}
+
+          <div className="pt-2 space-y-2">
+            <button
+              onClick={handleManualCheckUnlock}
+              disabled={isCheckingUnlock}
+              className="w-full py-3 rounded-2xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-lg shadow-rose-600/30 transition active:scale-[0.99] cursor-pointer disabled:opacity-60"
+            >
+              <RotateCcw className={`w-4 h-4 ${isCheckingUnlock ? 'animate-spin' : ''}`} />
+              <span>{isCheckingUnlock ? 'Memeriksa ke Server Pengawas...' : 'Periksa Status Buka Kunci Sekarang'}</span>
+            </button>
+            <p className="text-[11px] text-slate-400">
+              Sistem memeriksa otomatis setiap 2 detik. Begitu pengawas menekan &quot;Buka Kunci&quot;, layar ini akan langsung terbuka kembali.
+            </p>
           </div>
 
           <p className="text-[11px] text-slate-500">

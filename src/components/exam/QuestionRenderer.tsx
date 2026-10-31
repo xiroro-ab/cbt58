@@ -114,7 +114,7 @@ const MenjodohkanRenderer: React.FC<MenjodohkanRendererProps> = ({
                   )}
                 </div>
                 {paired && (
-                  <span className="text-xs px-2.5 py-1 rounded-lg bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 font-semibold truncate max-w-[140px] flex items-center gap-1 shadow-2xs">
+                  <span className="text-xs px-2.5 py-1 rounded-lg bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 font-semibold truncate max-w-[100px] xs:max-w-[140px] sm:max-w-[180px] flex items-center gap-1 shadow-2xs">
                     <span>➔</span> {paired.answerItem}
                   </span>
                 )}
@@ -294,7 +294,7 @@ export const QuestionRenderer: React.FC<QuestionRendererProps> = ({
 
       return (
         <div className="mt-4 overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 shadow-xs">
-          <table className="w-full text-left text-sm">
+          <table className="w-full text-left text-sm min-w-[380px] sm:min-w-full">
             <thead className="bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-400 uppercase text-xs">
               <tr>
                 <th className="py-3 px-4 w-12 text-center">No</th>
@@ -422,7 +422,7 @@ export const QuestionRenderer: React.FC<QuestionRendererProps> = ({
           value={val}
           onChange={e => onAnswerChange(e.target.value.trim() ? e.target.value : null)}
           placeholder="Ketik jawaban singkat di sini..."
-          className="w-full p-3.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:border-violet-500 text-sm"
+          className="w-full p-3.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:border-violet-500 text-base sm:text-sm"
         />
       </div>
     );
@@ -439,7 +439,7 @@ export const QuestionRenderer: React.FC<QuestionRendererProps> = ({
           value={val}
           onChange={e => onAnswerChange(e.target.value.trim() ? e.target.value : null)}
           placeholder="Tuliskan uraian atau penjelasan Anda..."
-          className="w-full p-3.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:border-violet-500 text-sm leading-relaxed"
+          className="w-full p-3.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:border-violet-500 text-base sm:text-sm leading-relaxed"
         />
       </div>
     );

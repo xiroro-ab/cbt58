@@ -28,7 +28,8 @@ import {
   ChevronDown,
   UserCheck,
   ShieldCheck,
-  Layers
+  Layers,
+  Menu
 } from 'lucide-react';
 
 interface NavbarProps {
@@ -51,6 +52,7 @@ interface NavbarProps {
   onSelectAssignment?: (subjectName: string) => void;
   onLogoutTeacher?: () => void;
   onSwitchTeacher?: (teacher: Teacher) => void;
+  onToggleMobileSidebar?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -72,7 +74,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   activeAssignmentSubject,
   onSelectAssignment,
   onLogoutTeacher,
-  onSwitchTeacher
+  onSwitchTeacher,
+  onToggleMobileSidebar
 }) => {
   const { theme, toggleTheme } = useTheme();
   const { language, toggleLanguage, t } = useLanguage();
@@ -128,15 +131,29 @@ export const Navbar: React.FC<NavbarProps> = ({
   ];
 
   return (
-    <header className="sticky top-0 z-20 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b border-slate-200/80 dark:border-slate-800/80 px-6 py-4 flex items-center justify-between transition-colors">
-      {/* 1. GREETING & DATE */}
-      <div>
-        <h2 className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white leading-tight">
-          {currentTeacher ? `Selamat Datang, ${currentTeacher.name}` : t.greeting}
-        </h2>
-        <p className="text-xs text-slate-400 dark:text-slate-500 font-medium mt-0.5">
-          {t.examDateInfo}
-        </p>
+    <header className="sticky top-0 z-20 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b border-slate-200/80 dark:border-slate-800/80 px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between transition-colors gap-2">
+      {/* 1. HAMBURGER (MOBILE) + GREETING & DATE */}
+      <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1">
+        {onToggleMobileSidebar && (
+          <button
+            onClick={onToggleMobileSidebar}
+            className="lg:hidden p-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:text-violet-600 transition flex-shrink-0 cursor-pointer"
+            title="Buka Menu"
+          >
+            <Menu className="w-4 h-4" />
+          </button>
+        )}
+        <div className="min-w-0 flex-1">
+          <h2
+            className="text-sm sm:text-base md:text-xl font-bold text-slate-900 dark:text-white leading-tight truncate max-w-[150px] xs:max-w-[200px] sm:max-w-xs md:max-w-md"
+            title={currentTeacher ? `Selamat Datang, ${currentTeacher.name}` : t.greeting}
+          >
+            {currentTeacher ? `Selamat Datang, ${currentTeacher.name}` : t.greeting}
+          </h2>
+          <p className="text-[10px] sm:text-xs text-slate-400 dark:text-slate-500 font-medium mt-0.5 truncate max-w-[150px] xs:max-w-[200px] sm:max-w-xs md:max-w-md">
+            {t.examDateInfo}
+          </p>
+        </div>
       </div>
 
       {/* 2. ACTIONS & USER BAR */}
@@ -684,8 +701,9 @@ export const Navbar: React.FC<NavbarProps> = ({
             onClick={onStartStudentExam}
             className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-xs font-semibold transition shadow-md shadow-violet-600/20 cursor-pointer"
           >
-            <Eye className="w-3.5 h-3.5" />
-            <span>{t.studentViewBtn}</span>
+            <Eye className="w-3.5 h-3.5 flex-shrink-0" />
+            <span className="hidden sm:inline">{t.studentViewBtn}</span>
+            <span className="sm:hidden">Siswa</span>
           </button>
         </div>
       </div>

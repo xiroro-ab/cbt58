@@ -112,6 +112,7 @@ export default function Home() {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
   const [isCertificatesModalOpen, setIsCertificatesModalOpen] = useState(false);
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [certificateTargetResult, setCertificateTargetResult] = useState<ExamResult | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -1139,9 +1140,9 @@ export default function Home() {
   // =========================================================================
   if (viewMode === 'student_login') {
     return (
-      <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 flex flex-col justify-center items-center p-4 transition-colors relative">
+      <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 flex flex-col justify-between items-center p-3 sm:p-6 transition-colors">
         {/* Top Minimalist Controls */}
-        <div className="absolute top-4 left-4 right-4 sm:top-6 sm:left-8 sm:right-8 flex items-center justify-between">
+        <div className="w-full max-w-md flex items-center justify-between py-2">
           <button
             onClick={() => {
               if (currentTeacher) {
@@ -1182,7 +1183,7 @@ export default function Home() {
         </div>
 
         {/* Card Login Siswa Formal SaaS */}
-        <div className="max-w-md w-full bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-3xl p-6 sm:p-8 space-y-6 shadow-xl shadow-slate-200/50 dark:shadow-none animate-in fade-in zoom-in-95 duration-200">
+        <div className="max-w-md w-full bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-3xl p-5 sm:p-8 space-y-6 shadow-xl shadow-slate-200/50 dark:shadow-none animate-in fade-in zoom-in-95 duration-200 my-auto">
           <div className="text-center space-y-2">
             <div className="inline-flex p-2.5 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-xs mb-1">
               <img
@@ -1308,6 +1309,10 @@ export default function Home() {
             <span>{t.antiCheatWarning}</span>
           </div>
         </div>
+
+        <footer className="text-center text-[11px] text-slate-400 dark:text-slate-500 py-3">
+          SMP Negeri 58 Palembang • Sistem Ujian Berbasis Komputer
+        </footer>
       </div>
     );
   }
@@ -1317,7 +1322,7 @@ export default function Home() {
   // =========================================================================
   return (
     <div className="flex h-screen bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 overflow-hidden font-sans transition-colors">
-      {/* SIDEBAR FORMAL */}
+      {/* SIDEBAR FORMAL DENGAN DRAWER MOBILE */}
       <Sidebar
         currentNav={currentNav}
         onSelectNav={setCurrentNav}
@@ -1330,6 +1335,8 @@ export default function Home() {
         onOpenHelp={() => setIsHelpModalOpen(true)}
         currentTeacher={currentTeacher}
         onLogout={handleTeacherLogout}
+        isMobileOpen={isMobileSidebarOpen}
+        onCloseMobile={() => setIsMobileSidebarOpen(false)}
       />
 
       {/* MAIN CONTAINER */}
@@ -1337,6 +1344,7 @@ export default function Home() {
         {/* NAVBAR HEADER DENGAN NOTIFIKASI & PESAN KENDALA AKTIF (OPSI A) */}
         <Navbar
           onStartStudentExam={() => setViewMode('student_login')}
+          onToggleMobileSidebar={() => setIsMobileSidebarOpen(prev => !prev)}
           onOpenAddQuestion={() => setIsAddModalOpen(true)}
           notifications={notifications}
           messages={messages}

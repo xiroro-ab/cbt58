@@ -18,7 +18,8 @@ import {
   Sparkles,
   LogOut,
   Printer,
-  Radio
+  Radio,
+  X
 } from 'lucide-react';
 
 export type NavItem =
@@ -44,6 +45,8 @@ interface SidebarProps {
   onOpenHelp: () => void;
   currentTeacher?: Teacher | null;
   onLogout?: () => void;
+  isMobileOpen?: boolean;
+  onCloseMobile?: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -57,14 +60,21 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onSearchChange,
   onOpenHelp,
   currentTeacher,
-  onLogout
+  onLogout,
+  isMobileOpen = false,
+  onCloseMobile
 }) => {
   const { t } = useLanguage();
 
-  return (
-    <aside className="w-64 flex-shrink-0 bg-white dark:bg-slate-900 border-r border-slate-200/80 dark:border-slate-800/80 flex flex-col h-screen sticky top-0 transition-colors">
+  const handleNavSelect = (nav: NavItem) => {
+    onSelectNav(nav);
+    if (onCloseMobile) onCloseMobile();
+  };
+
+  const renderContent = (isMobile: boolean = false) => (
+    <div className="flex flex-col h-full">
       {/* 1. BRAND LOGO */}
-      <div className="p-5 flex items-center justify-between border-b border-slate-100 dark:border-slate-800/60">
+      <div className="p-4 sm:p-5 flex items-center justify-between border-b border-slate-100 dark:border-slate-800/60">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700/80 flex items-center justify-center p-1 shadow-xs flex-shrink-0">
             <img
@@ -80,6 +90,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <p className="text-[11px] text-slate-400 dark:text-slate-500 font-medium">{t.appSubtitle}</p>
           </div>
         </div>
+        {isMobile && (
+          <button
+            onClick={onCloseMobile}
+            className="p-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 cursor-pointer"
+            title="Tutup Menu"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        )}
       </div>
 
       {/* 2. LIVE SEARCH BAR */}
@@ -113,7 +132,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </span>
           <div className="space-y-0.5">
             <button
-              onClick={() => onSelectNav('dashboard')}
+              onClick={() => handleNavSelect('dashboard')}
               className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl font-medium transition ${
                 currentNav === 'dashboard'
                   ? 'bg-violet-50 dark:bg-violet-950/40 text-violet-700 dark:text-violet-300 font-semibold shadow-xs'
@@ -127,7 +146,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </button>
 
             <button
-              onClick={() => onSelectNav('exams')}
+              onClick={() => handleNavSelect('exams')}
               className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl font-medium transition ${
                 currentNav === 'exams'
                   ? 'bg-violet-50 dark:bg-violet-950/40 text-violet-700 dark:text-violet-300 font-semibold'
@@ -144,7 +163,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </button>
 
             <button
-              onClick={() => onSelectNav('questions')}
+              onClick={() => handleNavSelect('questions')}
               className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl font-medium transition ${
                 currentNav === 'questions'
                   ? 'bg-violet-50 dark:bg-violet-950/40 text-violet-700 dark:text-violet-300 font-semibold'
@@ -161,7 +180,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </button>
 
             <button
-              onClick={() => onSelectNav('students')}
+              onClick={() => handleNavSelect('students')}
               className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl font-medium transition ${
                 currentNav === 'students'
                   ? 'bg-violet-50 dark:bg-violet-950/40 text-violet-700 dark:text-violet-300 font-semibold'
@@ -188,7 +207,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </span>
           <div className="space-y-0.5">
             <button
-              onClick={() => onSelectNav('monitoring')}
+              onClick={() => handleNavSelect('monitoring')}
               className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl font-medium transition cursor-pointer ${
                 currentNav === 'monitoring'
                   ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 font-semibold'
@@ -205,7 +224,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </button>
 
             <button
-              onClick={() => onSelectNav('results')}
+              onClick={() => handleNavSelect('results')}
               className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl font-medium transition ${
                 currentNav === 'results'
                   ? 'bg-violet-50 dark:bg-violet-950/40 text-violet-700 dark:text-violet-300 font-semibold'
@@ -222,7 +241,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </button>
 
             <button
-              onClick={() => onSelectNav('statistics')}
+              onClick={() => handleNavSelect('statistics')}
               className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl font-medium transition ${
                 currentNav === 'statistics'
                   ? 'bg-violet-50 dark:bg-violet-950/40 text-violet-700 dark:text-violet-300 font-semibold'
@@ -236,7 +255,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </button>
 
             <button
-              onClick={() => onSelectNav('documents')}
+              onClick={() => handleNavSelect('documents')}
               className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl font-medium transition ${
                 currentNav === 'documents'
                   ? 'bg-violet-50 dark:bg-violet-950/40 text-violet-700 dark:text-violet-300 font-semibold'
@@ -258,7 +277,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </span>
           <div className="space-y-0.5">
             <button
-              onClick={() => onSelectNav('settings')}
+              onClick={() => handleNavSelect('settings')}
               className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl font-medium transition ${
                 currentNav === 'settings'
                   ? 'bg-violet-50 dark:bg-violet-950/40 text-violet-700 dark:text-violet-300 font-semibold'
@@ -336,6 +355,28 @@ export const Sidebar: React.FC<SidebarProps> = ({
           )}
         </div>
       </div>
-    </aside>
+    </div>
+  );
+
+  return (
+    <>
+      {/* Desktop Persistent Sidebar */}
+      <aside className="hidden lg:flex w-64 flex-shrink-0 bg-white dark:bg-slate-900 border-r border-slate-200/80 dark:border-slate-800/80 flex-col h-screen sticky top-0 transition-colors">
+        {renderContent(false)}
+      </aside>
+
+      {/* Mobile Drawer Overlay */}
+      {isMobileOpen && (
+        <div className="fixed inset-0 z-50 lg:hidden flex animate-in fade-in duration-200">
+          <div
+            className="fixed inset-0 bg-black/60 backdrop-blur-xs transition-opacity"
+            onClick={onCloseMobile}
+          />
+          <aside className="relative w-72 max-w-[85vw] bg-white dark:bg-slate-900 h-full flex flex-col z-10 shadow-2xl animate-in slide-in-from-left duration-200">
+            {renderContent(true)}
+          </aside>
+        </div>
+      )}
+    </>
   );
 };

@@ -9,7 +9,7 @@ import { AiQuestionGeneratorModal } from './AiQuestionGeneratorModal';
 import { evaluateFullExam, calculateSingleQuestionScore } from '@/lib/scoringEngine';
 import { sendProctorCommand, subscribeToLiveSessions, removeStudentSession, broadcastAnnouncementToStudents } from '@/lib/liveMonitoringService';
 import { clearStudentAutolockInSupabase, insertMessage } from '@/lib/supabaseService';
-import { resolveStudentSingleClass } from '@/lib/rosterStudents';
+import { resolveStudentSingleClass, isClassInGrade } from '@/lib/rosterStudents';
 import {
   TrendingUp,
   Award,
@@ -467,13 +467,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
       : ['VII.1', 'VII.2', 'VII.3', 'VIII.1', 'VIII.2', 'VIII.3', 'IX.1', 'IX.2', 'IX.3'];
 
     if (resultsGradeFilter === 'ALL') return list;
-    return list.filter(cls => {
-      const u = cls.toUpperCase();
-      if (resultsGradeFilter === 'VII') return u.startsWith('VII.') || u.startsWith('7') || u.includes('VII');
-      if (resultsGradeFilter === 'VIII') return u.startsWith('VIII.') || u.startsWith('8') || u.includes('VIII');
-      if (resultsGradeFilter === 'IX') return u.startsWith('IX.') || u.startsWith('9') || u.includes('IX');
-      return true;
-    });
+    return list.filter(cls => isClassInGrade(cls, resultsGradeFilter));
   }, [studentClasses, resultsGradeFilter]);
 
   // Reset rombel filter jika jenjang berubah dan rombel sebelumnya tidak ada di jenjang baru
@@ -509,15 +503,9 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
       cleanResults = cleanResults.filter(r => r.subjectId === resultsSubjectFilter);
     }
 
-    // Filter 2: Jenjang Tingkat (VII, VIII, IX)
+    // Filter 2: Jenjang Tingkat (VII, VIII, IX) - Akurat tanpa bug substring romawi
     if (resultsGradeFilter !== 'ALL') {
-      cleanResults = cleanResults.filter(r => {
-        const u = (r.className || '').toUpperCase();
-        if (resultsGradeFilter === 'VII') return u.startsWith('VII.') || u.startsWith('7') || u.includes('VII');
-        if (resultsGradeFilter === 'VIII') return u.startsWith('VIII.') || u.startsWith('8') || u.includes('VIII');
-        if (resultsGradeFilter === 'IX') return u.startsWith('IX.') || u.startsWith('9') || u.includes('IX');
-        return true;
-      });
+      cleanResults = cleanResults.filter(r => isClassInGrade(r.className, resultsGradeFilter));
     }
 
     // Filter 3: Rombel Spesifik (misal VIII.1)
@@ -3506,8 +3494,20 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-700 dark:text-slate-200 font-medium">
                 {filteredResults.length === 0 ? (
                   <tr>
-                    <td colSpan={9} className="py-8 text-center text-slate-400">
-                      {t.noResults}
+                    <td colSpan={9} className="py-12 text-center text-slate-400">
+                      <div className="flex flex-col items-center justify-center gap-2">
+                        <GraduationCap className="w-8 h-8 text-slate-300 dark:text-slate-600" />
+                        <p className="font-semibold text-slate-600 dark:text-slate-300">
+                          {results.length > 0
+                            ? 'Tidak ada data nilai siswa untuk filter yang dipilih.'
+                            : t.noResults}
+                        </p>
+                        {results.length > 0 && (
+                          <p className="text-xs text-slate-400">
+                            Silakan ganti opsi filter atau klik tombol <b className="text-violet-600 dark:text-violet-400">Reset Filter</b> di atas.
+                          </p>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ) : (
@@ -6481,13 +6481,13 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                     const val = e.target.value;
                     if (val === 'ALL') setNewSubClass('Semua Kelas');
                     else if (val === 'VII_ALL') {
-                      const vii = studentClasses.filter(c => c.startsWith('VII'));
+                      const vii = studentClasses.filter(c => isClassInGrade(c, 'VII'));
                       setNewSubClass(vii.join(', ') || 'VII.1, VII.2, VII.3');
                     } else if (val === 'VIII_ALL') {
-                      const viii = studentClasses.filter(c => c.startsWith('VIII'));
+                      const viii = studentClasses.filter(c => isClassInGrade(c, 'VIII'));
                       setNewSubClass(viii.join(', ') || 'VIII.1, VIII.2, VIII.3');
                     } else if (val === 'IX_ALL') {
-                      const ix = studentClasses.filter(c => c.startsWith('IX'));
+                      const ix = studentClasses.filter(c => isClassInGrade(c, 'IX'));
                       setNewSubClass(ix.join(', ') || 'IX.1, IX.2, IX.3');
                     } else if (val !== 'CUSTOM') {
                       setNewSubClass(val);
@@ -6744,13 +6744,13 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                     const val = e.target.value;
                     if (val === 'ALL') setEditSubClass('Semua Kelas');
                     else if (val === 'VII_ALL') {
-                      const vii = studentClasses.filter(c => c.startsWith('VII'));
+                      const vii = studentClasses.filter(c => isClassInGrade(c, 'VII'));
                       setEditSubClass(vii.join(', ') || 'VII.1, VII.2, VII.3');
                     } else if (val === 'VIII_ALL') {
-                      const viii = studentClasses.filter(c => c.startsWith('VIII'));
+                      const viii = studentClasses.filter(c => isClassInGrade(c, 'VIII'));
                       setEditSubClass(viii.join(', ') || 'VIII.1, VIII.2, VIII.3');
                     } else if (val === 'IX_ALL') {
-                      const ix = studentClasses.filter(c => c.startsWith('IX'));
+                      const ix = studentClasses.filter(c => isClassInGrade(c, 'IX'));
                       setEditSubClass(ix.join(', ') || 'IX.1, IX.2, IX.3');
                     } else if (val !== 'CUSTOM') {
                       setEditSubClass(val);

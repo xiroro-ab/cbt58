@@ -2145,3 +2145,70 @@ export function resolveStudentSingleClass(
 
   return fallbackClass || 'Siswa';
 }
+
+/**
+ * Memeriksa secara akurat apakah nama kelas termasuk dalam jenjang (tingkat) tertentu:
+ * - 'VII' (Kelas 7)
+ * - 'VIII' (Kelas 8)
+ * - 'IX' (Kelas 9)
+ *
+ * Mencegah bug string matching: "VIII" mengandung substring "VII" dan diawali "VII",
+ * sehingga pencocokan jenjang VII wajib mengecualikan jenjang VIII.
+ */
+export function isClassInGrade(rawClass: string | undefined | null, targetGrade: string): boolean {
+  if (!rawClass) return false;
+  if (!targetGrade || targetGrade === 'ALL') return true;
+
+  const c = rawClass.trim().toUpperCase();
+
+  if (targetGrade === 'VII') {
+    // PENTING: Wajib mengecualikan VIII terlebih dahulu, karena "VIII" diawali dan memuat "VII"
+    if (c.includes('VIII') || c.startsWith('8.') || c === '8' || /\b8\b/.test(c)) {
+      return false;
+    }
+    return (
+      c.startsWith('VII.') ||
+      c.startsWith('VII ') ||
+      c === 'VII' ||
+      c.startsWith('7.') ||
+      c.startsWith('7 ') ||
+      c === '7' ||
+      /\bVII\b/.test(c) ||
+      /\b7\b/.test(c) ||
+      c.includes('KELAS VII') ||
+      c.includes('KELAS 7')
+    );
+  }
+
+  if (targetGrade === 'VIII') {
+    return (
+      c.startsWith('VIII.') ||
+      c.startsWith('VIII ') ||
+      c === 'VIII' ||
+      c.startsWith('8.') ||
+      c.startsWith('8 ') ||
+      c === '8' ||
+      /\bVIII\b/.test(c) ||
+      /\b8\b/.test(c) ||
+      c.includes('KELAS VIII') ||
+      c.includes('KELAS 8')
+    );
+  }
+
+  if (targetGrade === 'IX') {
+    return (
+      c.startsWith('IX.') ||
+      c.startsWith('IX ') ||
+      c === 'IX' ||
+      c.startsWith('9.') ||
+      c.startsWith('9 ') ||
+      c === '9' ||
+      /\bIX\b/.test(c) ||
+      /\b9\b/.test(c) ||
+      c.includes('KELAS IX') ||
+      c.includes('KELAS 9')
+    );
+  }
+
+  return false;
+}

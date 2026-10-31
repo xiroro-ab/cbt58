@@ -16,16 +16,16 @@ import {
   QrCode
 } from 'lucide-react';
 import Link from 'next/link';
-import { fetchSchoolSettingsFromSupabase } from '@/lib/supabaseService';
+import { fetchSchoolSettingsFromSupabase, defaultSchoolSettings } from '@/lib/supabaseService';
 import { SchoolSettings } from '@/types/cbt';
 
 function VerifyDetails() {
   const searchParams = useSearchParams();
   const doc = searchParams.get('doc') || 'CBT58-DOC-VERIFIED';
-  const signer = searchParams.get('signer') || 'Drs. H. Syarifuddin, M.Si';
-  const nip = searchParams.get('nip') || '197001011995031002';
-  const title = searchParams.get('title') || 'Kepala Sekolah SMP Negeri 58';
-  const school = searchParams.get('school') || 'SMP Negeri 58 Palembang';
+  const signer = searchParams.get('signer') || '';
+  const nip = searchParams.get('nip') || '';
+  const title = searchParams.get('title') || 'Kepala Sekolah';
+  const school = searchParams.get('school') || '';
   const date = searchParams.get('date') || new Date().toLocaleDateString('id-ID', {
     day: 'numeric',
     month: 'long',
@@ -33,7 +33,7 @@ function VerifyDetails() {
   });
 
   const [verifyTime, setVerifyTime] = useState<string>('');
-  const [settings, setSettings] = useState<any>(null);
+  const [settings, setSettings] = useState<SchoolSettings>(defaultSchoolSettings);
 
   useEffect(() => {
     setVerifyTime(new Date().toLocaleString('id-ID', {
@@ -42,14 +42,21 @@ function VerifyDetails() {
     }));
 
     // Coba baca dari localStorage lokal
-    try {
-      const stored = localStorage.getItem('cbt_school_settings');
-      if (stored) {
-        setSettings(JSON.parse(stored));
-      }
-    } catch {}
+    if (typeof window !== 'undefined') {
+      try {
+        const stored = localStorage.getItem('cbt_school_settings');
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          setSettings(prev => ({
+            ...defaultSchoolSettings,
+            ...prev,
+            ...parsed
+          }));
+        }
+      } catch {}
+    }
 
-    // Muat data resmi terbaru dari Database Supabase (Cloud) agar verifikasi dari HP pihak luar selalu menampilkan logo & foto valid
+    // Muat data resmi terbaru dari Database Supabase (Cloud) agar verifikasi dari HP pihak luar selalu menampilkan kop & logo valid
     fetchSchoolSettingsFromSupabase().then(dbSettings => {
       if (dbSettings) {
         setSettings(dbSettings);
@@ -59,33 +66,77 @@ function VerifyDetails() {
     });
   }, []);
 
+  const effectiveSettings: SchoolSettings = {
+    ...defaultSchoolSettings,
+    ...settings,
+    schoolName: settings?.schoolName || school || defaultSchoolSettings.schoolName,
+    logoLeft: settings?.logoLeft || defaultSchoolSettings.logoLeft,
+    logoRight: settings?.logoRight || defaultSchoolSettings.logoRight
+  };
+
+  const displaySigner = (signer && signer !== 'Drs. H. Syarifuddin, M.Si')
+    ? signer
+    : (title.toLowerCase().includes('kepala') ? effectiveSettings.principalName : (signer || effectiveSettings.principalName));
+
+  const displayNip = (nip && nip !== '197001011995031002' && nip !== '-')
+    ? nip
+    : (title.toLowerCase().includes('kepala') ? effectiveSettings.principalNip : nip);
+
   return (
     <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col items-center justify-center p-4 sm:p-6 print:bg-white print:text-black print:p-0">
       <div className="w-full max-w-xl bg-slate-800/90 backdrop-blur-md border border-slate-700/80 rounded-3xl shadow-2xl p-6 sm:p-8 space-y-6 print:border-none print:shadow-none print:bg-white print:p-4">
         
-        {/* KOP / Header Instansi dengan Dual Logo Resmi */}
-        <div className="text-center space-y-2 pb-5 border-b border-slate-700/60 print:border-slate-300">
-          <div className="flex items-center justify-center gap-3 sm:gap-4 mb-2">
-            <img
-              src={settings?.logoLeft || '/logo-dinas.png'}
-              alt="Logo Dinas"
-              className="w-12 h-12 sm:w-14 sm:h-14 object-contain shrink-0 drop-shadow-sm"
-            />
-            <div className="inline-flex items-center justify-center w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 shrink-0">
-              <ShieldCheck className="w-7 h-7 sm:w-8 sm:h-8 text-emerald-400" />
+        {/* KOP SURAT RESMI INSTANSI DENGAN DUAL LOGO (SESUAI PENGATURAN SISTEM) */}
+        <div className="pb-4 border-b-4 border-double border-slate-700/80 print:border-slate-800">
+          <div className="flex items-center justify-between gap-3 sm:gap-4">
+            {/* Logo Kiri (Dinas Pendidikan / Pemda) */}
+            <div className="w-14 h-14 sm:w-20 sm:h-20 flex items-center justify-center shrink-0">
+              <img
+                src={effectiveSettings.logoLeft || '/logo-dinas.png'}
+                alt="Logo Dinas"
+                className="max-h-14 sm:max-h-20 max-w-full object-contain drop-shadow-sm"
+              />
             </div>
-            <img
-              src={settings?.logoRight || '/logo-sekolah.png'}
-              alt="Logo Sekolah"
-              className="w-12 h-12 sm:w-14 sm:h-14 object-contain shrink-0 drop-shadow-sm"
-            />
+
+            {/* Teks Kop Surat Resmi */}
+            <div className="flex-1 text-center font-serif leading-tight">
+              <h3 className="text-[11px] sm:text-xs font-semibold tracking-wider text-slate-300 print:text-slate-800 uppercase">
+                {effectiveSettings.institution1 || 'PEMERINTAH KOTA PALEMBANG'}
+              </h3>
+              <h2 className="text-xs sm:text-sm font-bold tracking-wider text-slate-200 print:text-slate-900 uppercase">
+                {effectiveSettings.institution2 || 'DINAS PENDIDIKAN'}
+              </h2>
+              <h1 className="text-sm sm:text-lg font-extrabold tracking-tight text-white print:text-slate-950 uppercase mt-0.5">
+                {effectiveSettings.schoolName || 'SMP NEGERI 58 PALEMBANG'}
+              </h1>
+              {effectiveSettings.schoolAddress && (
+                <p className="text-[9px] sm:text-[11px] text-slate-300 print:text-slate-600 mt-1 leading-snug font-sans">
+                  {effectiveSettings.schoolAddress}
+                </p>
+              )}
+              {effectiveSettings.schoolContact && (
+                <p className="text-[9px] sm:text-[10px] text-slate-400 print:text-slate-600 leading-snug font-sans">
+                  {effectiveSettings.schoolContact}
+                </p>
+              )}
+            </div>
+
+            {/* Logo Kanan (Sekolah / Madrasah) */}
+            <div className="w-14 h-14 sm:w-20 sm:h-20 flex items-center justify-center shrink-0">
+              <img
+                src={effectiveSettings.logoRight || '/logo-sekolah.png'}
+                alt="Logo Sekolah"
+                className="max-h-14 sm:max-h-20 max-w-full object-contain drop-shadow-sm"
+              />
+            </div>
           </div>
-          <h1 className="text-base sm:text-xl font-black tracking-tight text-white print:text-black uppercase">
-            {school}
-          </h1>
-          <p className="text-[10px] sm:text-xs text-slate-400 print:text-slate-600 font-medium tracking-wider uppercase">
-            Layanan Verifikasi Dokumen & Tanda Tangan Elektronik (TTE)
-          </p>
+
+          <div className="mt-3 pt-2 border-t border-slate-700/60 print:border-slate-200 flex items-center justify-center gap-2">
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 print:text-emerald-800 print:bg-emerald-50 text-[10px] sm:text-xs font-semibold uppercase tracking-wider">
+              <ShieldCheck className="w-4 h-4 text-emerald-400" />
+              Layanan Verifikasi Dokumen & Tanda Tangan Elektronik (TTE)
+            </span>
+          </div>
         </div>
 
         {/* STATUS BANNER VERIFIKASI */}
@@ -103,7 +154,7 @@ function VerifyDetails() {
               Dokumen Terverifikasi Digital
             </h2>
             <p className="text-xs text-slate-300 print:text-slate-700 leading-relaxed">
-              Tanda Tangan Elektronik (TTE) dan Dokumen ini telah divalidasi sah oleh Server CBT SMP Negeri 58 Palembang.
+              Tanda Tangan Elektronik (TTE) dan Dokumen ini telah divalidasi sah oleh Server CBT {effectiveSettings.schoolName}.
             </p>
           </div>
         </div>
@@ -141,16 +192,16 @@ function VerifyDetails() {
                 <span>Pejabat Penandatangan:</span>
               </div>
               <div className="flex items-center gap-2.5 pt-0.5">
-                {title.toLowerCase().includes('kepala') && settings?.principalPhoto && (
+                {title.toLowerCase().includes('kepala') && effectiveSettings.principalPhoto && (
                   <img
-                    src={settings.principalPhoto}
+                    src={effectiveSettings.principalPhoto}
                     alt="Foto Resmi Kepala Sekolah"
-                    className="w-9 h-11 rounded-lg object-cover border border-emerald-500/40 shrink-0 shadow-xs"
+                    className="w-10 h-12 rounded-lg object-cover border border-emerald-500/40 shrink-0 shadow-xs"
                   />
                 )}
                 <div>
                   <p className="font-bold text-white print:text-black leading-snug">
-                    {signer}
+                    {displaySigner}
                   </p>
                   <span className="text-[10px] text-emerald-400 print:text-emerald-700 font-semibold block">
                     ✓ Identitas Terotentikasi
@@ -169,14 +220,14 @@ function VerifyDetails() {
               </p>
             </div>
 
-            {nip && nip !== '-' && (
+            {displayNip && displayNip !== '-' && (
               <div className="space-y-1 p-2.5 rounded-xl bg-slate-800/40 print:bg-white border border-slate-700/40 print:border-slate-200 sm:col-span-2">
                 <div className="flex items-center gap-1.5 text-slate-400">
                   <Hash className="w-3.5 h-3.5 text-emerald-400" />
                   <span>Nomor Induk Pegawai (NIP):</span>
                 </div>
                 <p className="font-mono font-medium text-slate-200 print:text-slate-800">
-                  {nip}
+                  {displayNip}
                 </p>
               </div>
             )}

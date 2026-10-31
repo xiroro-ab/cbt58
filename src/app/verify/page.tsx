@@ -16,8 +16,8 @@ import {
   QrCode
 } from 'lucide-react';
 import Link from 'next/link';
-import { fetchSchoolSettingsFromSupabase, defaultSchoolSettings } from '@/lib/supabaseService';
-import { SchoolSettings } from '@/types/cbt';
+import { fetchSchoolSettingsFromSupabase, fetchTeachers, defaultSchoolSettings } from '@/lib/supabaseService';
+import { SchoolSettings, Teacher } from '@/types/cbt';
 
 function VerifyDetails() {
   const searchParams = useSearchParams();
@@ -34,6 +34,7 @@ function VerifyDetails() {
 
   const [verifyTime, setVerifyTime] = useState<string>('');
   const [settings, setSettings] = useState<SchoolSettings>(defaultSchoolSettings);
+  const [teachers, setTeachers] = useState<Teacher[]>([]);
 
   useEffect(() => {
     setVerifyTime(new Date().toLocaleString('id-ID', {
@@ -64,6 +65,10 @@ function VerifyDetails() {
     }).catch(err => {
       console.warn('Gagal memuat pengaturan sekolah untuk verifikasi:', err);
     });
+
+    fetchTeachers().then(ts => {
+      if (ts) setTeachers(ts);
+    }).catch(() => {});
   }, []);
 
   const effectiveSettings: SchoolSettings = {
@@ -81,6 +86,17 @@ function VerifyDetails() {
   const displayNip = (nip && nip !== '197001011995031002' && nip !== '-')
     ? nip
     : (title.toLowerCase().includes('kepala') ? effectiveSettings.principalNip : nip);
+
+  const isPrincipal = title.toLowerCase().includes('kepala');
+
+  const matchedTeacher = !isPrincipal ? teachers.find(t => 
+    (displayNip && t.nip === displayNip) || 
+    (displaySigner && t.name.toLowerCase().trim() === displaySigner.toLowerCase().trim())
+  ) : null;
+
+  const signerPhoto = isPrincipal 
+    ? effectiveSettings.principalPhoto 
+    : (matchedTeacher?.photoUrl || matchedTeacher?.avatar || (typeof window !== 'undefined' && matchedTeacher?.id ? localStorage.getItem(`cbt_teacher_${matchedTeacher.id}_photo`) : null) || effectiveSettings.principalPhoto);
 
   return (
     <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col items-center justify-center p-4 sm:p-6 print:bg-white print:text-black print:p-0">
@@ -192,12 +208,16 @@ function VerifyDetails() {
                 <span>Pejabat Penandatangan:</span>
               </div>
               <div className="flex items-center gap-2.5 pt-0.5">
-                {title.toLowerCase().includes('kepala') && effectiveSettings.principalPhoto && (
+                {signerPhoto ? (
                   <img
-                    src={effectiveSettings.principalPhoto}
-                    alt="Foto Resmi Kepala Sekolah"
-                    className="w-10 h-12 rounded-lg object-cover border border-emerald-500/40 shrink-0 shadow-xs"
+                    src={signerPhoto}
+                    alt={`Foto Resmi ${displaySigner}`}
+                    className="w-11 h-13 rounded-xl object-cover border border-emerald-500/40 shrink-0 shadow-xs"
                   />
+                ) : (
+                  <div className="w-10 h-12 rounded-lg bg-slate-700/60 border border-slate-600 flex items-center justify-center shrink-0">
+                    <UserCheck className="w-5 h-5 text-slate-400" />
+                  </div>
                 )}
                 <div>
                   <p className="font-bold text-white print:text-black leading-snug">

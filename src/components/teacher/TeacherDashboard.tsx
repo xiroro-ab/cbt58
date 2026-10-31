@@ -103,6 +103,7 @@ interface TeacherDashboardProps {
   onOpenCertificates?: (selectedResult?: ExamResult) => void;
   schoolSettings?: SchoolSettings;
   onUpdateSchoolSettings?: (settings: SchoolSettings) => void;
+  onUpdateTeacher?: (updatedTeacher: Teacher) => void;
 }
 
 // Kata-kata umum mata pelajaran yang dikecualikan dari pemotongan kata kunci agar tidak terjadi kebocoran mapel lintas guru
@@ -199,7 +200,8 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   searchQuery = '',
   onOpenCertificates,
   schoolSettings,
-  onUpdateSchoolSettings
+  onUpdateSchoolSettings,
+  onUpdateTeacher
 }) => {
   const { language, t } = useLanguage();
   const [selectedResult, setSelectedResult] = useState<ExamResult | null>(null);
@@ -240,6 +242,59 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   const fileInputLogoLeftRef = useRef<HTMLInputElement>(null);
   const fileInputLogoRightRef = useRef<HTMLInputElement>(null);
   const fileInputPrincipalPhotoRef = useRef<HTMLInputElement>(null);
+  const fileInputTeacherPhotoRef = useRef<HTMLInputElement>(null);
+
+  const [currentTeacherPhoto, setCurrentTeacherPhoto] = useState<string>(() => {
+    if (typeof window !== 'undefined' && currentTeacher?.id) {
+      return localStorage.getItem(`cbt_teacher_${currentTeacher.id}_photo`) || currentTeacher.photoUrl || currentTeacher.avatar || '';
+    }
+    return currentTeacher?.photoUrl || currentTeacher?.avatar || '';
+  });
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && currentTeacher?.id) {
+      const stored = localStorage.getItem(`cbt_teacher_${currentTeacher.id}_photo`) || currentTeacher.photoUrl || currentTeacher.avatar || '';
+      setCurrentTeacherPhoto(stored);
+    }
+  }, [currentTeacher?.id]);
+
+  const handleTeacherPhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !currentTeacher?.id) return;
+    try {
+      const compressedDataUrl = await compressImageFile(file, 400, 500, 0.88);
+      if (compressedDataUrl) {
+        setCurrentTeacherPhoto(compressedDataUrl);
+        if (typeof window !== 'undefined') {
+          localStorage.setItem(`cbt_teacher_${currentTeacher.id}_photo`, compressedDataUrl);
+        }
+        if (onUpdateTeacher) {
+          onUpdateTeacher({
+            ...currentTeacher,
+            photoUrl: compressedDataUrl,
+            avatar: compressedDataUrl
+          });
+        }
+      }
+    } catch (err) {
+      console.error('Gagal upload foto guru:', err);
+    }
+  };
+
+  const handleDeleteTeacherPhoto = () => {
+    if (!currentTeacher?.id) return;
+    setCurrentTeacherPhoto('');
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem(`cbt_teacher_${currentTeacher.id}_photo`);
+    }
+    if (onUpdateTeacher) {
+      onUpdateTeacher({
+        ...currentTeacher,
+        photoUrl: '',
+        avatar: ''
+      });
+    }
+  };
 
   const compressImageFile = (
     file: File,
@@ -6379,6 +6434,60 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                       />
                     </div>
                   </div>
+
+                  {/* Foto Profil Guru Pengampu (Khusus Akun Login Ini) */}
+                  {currentTeacher && (
+                    <div className="pt-3 border-t border-slate-100 dark:border-slate-800">
+                      <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1.5">
+                        Foto Profil Guru Pengampu (Akun: {currentTeacher.name}):
+                      </label>
+                      <div className="flex items-center gap-4">
+                        <div className="w-16 h-20 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center shrink-0 shadow-xs overflow-hidden">
+                          {currentTeacherPhoto ? (
+                            <img
+                              src={currentTeacherPhoto}
+                              alt={`Foto ${currentTeacher.name}`}
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <UserCheck className="w-8 h-8 text-slate-300" />
+                          )}
+                        </div>
+                        <div className="space-y-1.5 flex-1">
+                          <input
+                            type="file"
+                            ref={fileInputTeacherPhotoRef}
+                            onChange={handleTeacherPhotoUpload}
+                            accept="image/*"
+                            className="hidden"
+                          />
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <button
+                              type="button"
+                              onClick={() => fileInputTeacherPhotoRef.current?.click()}
+                              className="px-3.5 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-violet-500 text-slate-800 dark:text-slate-200 font-semibold text-xs flex items-center justify-center gap-1.5 transition cursor-pointer shadow-xs"
+                            >
+                              <Upload className="w-3.5 h-3.5 text-violet-600" />
+                              <span>Upload Foto Profil Saya</span>
+                            </button>
+                            {currentTeacherPhoto && (
+                              <button
+                                type="button"
+                                onClick={handleDeleteTeacherPhoto}
+                                className="px-3 py-1.5 text-rose-500 hover:text-rose-700 text-[11px] font-semibold flex items-center justify-center gap-1 transition cursor-pointer"
+                              >
+                                <RotateCcw className="w-3 h-3" />
+                                <span>Hapus Foto</span>
+                              </button>
+                            )}
+                          </div>
+                          <p className="text-[10px] text-slate-400 leading-snug">
+                            Foto ini terisolasi khusus untuk akun Anda ({currentTeacher.name}) dan otomatis muncul di pojok kanan atas Navbar serta halaman verifikasi barcode. Guru lain yang login akan memiliki slot foto sendiri.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Switch TTE Barcode & Format */}
@@ -7832,27 +7941,64 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
               </div>
 
               {/* TANDA TANGAN FORMAL LEMBAR HASIL UJIAN WITH TTE DIGITAL */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-8 pt-6 text-center text-xs font-sans border-t border-slate-100 dark:border-slate-800 print:border-slate-300 print:break-inside-avoid">
-                <div className="space-y-12">
-                  <p className="font-semibold text-slate-800 dark:text-slate-300 print:text-black">Siswa Peserta Ujian,</p>
-                  <div className="h-14 flex items-center justify-center">
+              <div className="grid grid-cols-2 gap-8 pt-6 text-center text-xs font-sans border-t border-slate-200 dark:border-slate-800 print:border-slate-300 print:break-inside-avoid">
+                {/* Sisi Kiri: Siswa Peserta Ujian */}
+                <div className="flex flex-col items-center justify-between min-h-[175px] space-y-2">
+                  <div>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 print:text-slate-600 font-sans invisible select-none">
+                      {effectiveSchoolSettings.city}, {selectedResult.submittedAt ? selectedResult.submittedAt.split(' ')[0] : 'Palembang'}
+                    </p>
+                    <p className="font-bold text-slate-900 dark:text-white print:text-black uppercase font-sans tracking-wide text-xs">
+                      Siswa Peserta Ujian
+                    </p>
+                  </div>
+
+                  <div className="py-1 flex items-center justify-center min-h-[85px]">
                     <span className="font-serif italic text-slate-400 text-sm">(Tanda Tangan Siswa)</span>
                   </div>
+
                   <div>
-                    <strong className="underline block font-bold text-slate-900 dark:text-white print:text-black uppercase">{selectedResult.studentName}</strong>
-                    <span className="text-[11px] text-slate-600 dark:text-slate-400 print:text-slate-700 block font-mono">NISN: {dossierNisn}</span>
+                    <strong className="underline block font-bold text-slate-900 dark:text-white print:text-black text-xs sm:text-sm font-sans leading-tight">
+                      {selectedResult.studentName}
+                    </strong>
+                    <span className="text-[10px] sm:text-[11px] text-slate-600 dark:text-slate-400 print:text-slate-700 block font-mono mt-0.5">
+                      NISN: {dossierNisn}
+                    </span>
                   </div>
                 </div>
 
-                <div>
-                  <TTESignatureSeal
-                    settings={effectiveSchoolSettings}
-                    documentId={selectedResult.id}
-                    signerName={activeDossierSigner.name}
-                    signerTitle={activeDossierSigner.title}
-                    signerNip={activeDossierSigner.nip}
-                    signDate={selectedResult.submittedAt ? selectedResult.submittedAt.split(' ')[0] : undefined}
-                  />
+                {/* Sisi Kanan: Guru Pengampu / Proktor */}
+                <div className="flex flex-col items-center justify-between min-h-[175px] space-y-2">
+                  <div>
+                    <p className="text-[11px] text-slate-600 dark:text-slate-400 print:text-slate-600 font-sans">
+                      {effectiveSchoolSettings.city}, {selectedResult.submittedAt ? selectedResult.submittedAt.split(' ')[0] : new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}
+                    </p>
+                    <p className="font-bold text-slate-900 dark:text-white print:text-black uppercase font-sans tracking-wide text-xs">
+                      {activeDossierSigner.title || 'Guru Pengampu'}
+                    </p>
+                  </div>
+
+                  <div className="py-1 flex items-center justify-center min-h-[85px]">
+                    <TTESignatureSeal
+                      settings={effectiveSchoolSettings}
+                      documentId={selectedResult.id}
+                      signerName={activeDossierSigner.name}
+                      signerTitle={activeDossierSigner.title}
+                      signerNip={activeDossierSigner.nip}
+                      signDate={selectedResult.submittedAt ? selectedResult.submittedAt.split(' ')[0] : undefined}
+                      sealOnly={true}
+                      className="scale-90"
+                    />
+                  </div>
+
+                  <div>
+                    <strong className="underline block font-bold text-slate-900 dark:text-white print:text-black text-xs sm:text-sm font-sans leading-tight">
+                      {activeDossierSigner.name}
+                    </strong>
+                    <span className="text-[10px] sm:text-[11px] text-slate-600 dark:text-slate-400 print:text-slate-700 block font-mono mt-0.5">
+                      NIP: {activeDossierSigner.nip}
+                    </span>
+                  </div>
                 </div>
               </div>
 

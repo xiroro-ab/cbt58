@@ -1795,6 +1795,8 @@ export async function fetchTeachers(): Promise<Teacher[]> {
           role: t.role || 'guru_mapel',
           pin: t.pin || '123456',
           avatarColor: t.avatar_color || 'bg-violet-600',
+          photoUrl: t.photo_url || t.avatar_url || (typeof window !== 'undefined' ? localStorage.getItem(`cbt_teacher_${t.id}_photo`) || '' : ''),
+          avatar: t.photo_url || t.avatar_url || (typeof window !== 'undefined' ? localStorage.getItem(`cbt_teacher_${t.id}_photo`) || '' : ''),
           status: t.status || 'Standby',
           lastLogin: t.last_login
         }));
@@ -1834,6 +1836,26 @@ export async function updateTeacherStatusInSupabase(
     return true;
   } catch (err) {
     console.error('Exception updateTeacherStatusInSupabase:', err);
+    return false;
+  }
+}
+
+/**
+ * Memperbarui foto profil guru di Supabase & Storage
+ */
+export async function updateTeacherPhotoInSupabase(teacherId: string, photoUrl: string): Promise<boolean> {
+  try {
+    const { error } = await supabase
+      .from('teachers')
+      .update({ photo_url: photoUrl })
+      .eq('id', teacherId);
+    if (error) {
+      console.warn('updateTeacherPhotoInSupabase error:', error.message);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.warn('updateTeacherPhotoInSupabase exception:', err);
     return false;
   }
 }

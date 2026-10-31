@@ -101,6 +101,8 @@ export interface Teacher {
   role: TeacherRole;
   pin: string;
   avatarColor?: string;
+  avatar?: string;
+  photoUrl?: string;
   status?: 'Aktif Mengawas' | 'Standby' | 'Offline';
   lastLogin?: string;
 }

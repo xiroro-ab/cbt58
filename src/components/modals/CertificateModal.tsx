@@ -304,7 +304,7 @@ export const CertificateModal: React.FC<CertificateModalProps> = ({
                   </div>
 
                   <div className="text-center sm:text-right">
-                    <strong className="underline font-bold text-slate-900 block leading-tight text-xs sm:text-sm uppercase font-sans">
+                    <strong className="underline font-bold text-slate-900 block leading-tight text-xs sm:text-sm font-sans">
                       {principalName}
                     </strong>
                     <span className="text-[10px] sm:text-xs text-slate-600 font-mono block mt-0.5">

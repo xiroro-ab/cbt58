@@ -56,6 +56,29 @@ interface NavbarProps {
   onToggleMobileSidebar?: () => void;
 }
 
+// Icon Bendera Vektor SVG Murni (100% Tajam di Seluruh Perangkat: PC, Laptop Windows, Mac, Android & iOS)
+const IndonesiaFlagIcon = ({ className = 'w-4 h-3' }: { className?: string }) => (
+  <svg className={`${className} rounded-2xs shadow-2xs inline-block shrink-0 border border-slate-300 dark:border-slate-600 overflow-hidden`} viewBox="0 0 3 2">
+    <rect width="3" height="1" fill="#e11d48" />
+    <rect y="1" width="3" height="1" fill="#ffffff" />
+  </svg>
+);
+
+const UKFlagIcon = ({ className = 'w-4 h-3' }: { className?: string }) => (
+  <svg className={`${className} rounded-2xs shadow-2xs inline-block shrink-0 border border-slate-300 dark:border-slate-600 overflow-hidden`} viewBox="0 0 60 30">
+    <clipPath id="uk-flag-clip">
+      <path d="M0,0 v30 h60 v-30 z"/>
+    </clipPath>
+    <g clipPath="url(#uk-flag-clip)">
+      <path d="M0,0 v30 h60 v-30 z" fill="#012169"/>
+      <path d="M0,0 L60,30 M60,0 L0,30" stroke="#ffffff" strokeWidth="6"/>
+      <path d="M0,0 L60,30 M60,0 L0,30" stroke="#C8102E" strokeWidth="4"/>
+      <path d="M30,0 v30 M0,15 h60" stroke="#ffffff" strokeWidth="10"/>
+      <path d="M30,0 v30 M0,15 h60" stroke="#C8102E" strokeWidth="6"/>
+    </g>
+  </svg>
+);
+
 export const Navbar: React.FC<NavbarProps> = ({
   onStartStudentExam,
   onOpenAddQuestion,
@@ -123,6 +146,27 @@ export const Navbar: React.FC<NavbarProps> = ({
     tea => tea.id !== '__cbt_school_settings__' && !tea.id?.match(/^tea-\d{2}$/)
   );
 
+  const getTeacherPhoto = (tea: Teacher) => {
+    return tea.photoUrl || tea.avatar || (typeof window !== 'undefined' ? localStorage.getItem(`cbt_teacher_${tea.id}_photo`) : null);
+  };
+
+  const displayStackTeachers = React.useMemo(() => {
+    const list: Teacher[] = [];
+    if (currentTeacher) {
+      list.push(currentTeacher);
+    }
+    realTeachers.forEach(t => {
+      if (!list.some(existing => existing.id === t.id || existing.nip === t.nip)) {
+        list.push(t);
+      }
+    });
+    return list;
+  }, [currentTeacher, realTeachers]);
+
+  const maxVisibleAvatars = 3;
+  const visibleTeachers = displayStackTeachers.slice(0, maxVisibleAvatars);
+  const overflowTeacherCount = displayStackTeachers.length - maxVisibleAvatars;
+
   return (
     <header className="sticky top-0 z-20 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b border-slate-200/80 dark:border-slate-800/80 px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between transition-colors gap-2 print:hidden">
       {/* 1. HAMBURGER (MOBILE) + GREETING & DATE */}
@@ -151,14 +195,14 @@ export const Navbar: React.FC<NavbarProps> = ({
 
       {/* 2. ACTIONS & USER BAR */}
       <div className="flex items-center gap-2.5">
-        {/* Toggle Language ID / EN */}
+        {/* Toggle Language ID / EN (Dengan SVG Flag Murni yang Selalu Muncul di Windows PC & HP) */}
         <button
           onClick={toggleLanguage}
-          className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs font-bold text-slate-700 dark:text-slate-200 hover:text-violet-600 transition shadow-xs"
+          className="flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs font-bold text-slate-700 dark:text-slate-200 hover:text-violet-600 hover:border-violet-500 transition shadow-xs cursor-pointer"
           title={t.switchLanguage}
         >
-          <Languages className="w-3.5 h-3.5 text-violet-600 dark:text-violet-400" />
-          <span>{language === 'id' ? 'ID 🇮🇩' : 'EN 🇬🇧'}</span>
+          {language === 'id' ? <IndonesiaFlagIcon /> : <UKFlagIcon />}
+          <span>{language === 'id' ? 'ID' : 'EN'}</span>
         </button>
 
         {/* Toggle Dark / Light Mode Button */}
@@ -527,29 +571,62 @@ export const Navbar: React.FC<NavbarProps> = ({
           )}
         </div>
 
-        {/* Profil Akun Guru / Pengawas yang Sedang Login */}
+        {/* Profil Akun Guru / Pengawas yang Sedang Login & Avatar Stack Guru Terdaftar */}
         <button
           onClick={() => setShowTeachersModal(true)}
-          className="flex items-center gap-2 pl-2 pr-2.5 py-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
-          title="Profil Pengguna & Sesi CBT"
+          className="flex items-center gap-1.5 p-1 rounded-2xl hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
+          title="Profil Pengguna & Direktori Akun Guru Terdaftar"
         >
-          <div
-            className={`w-8 h-8 rounded-xl ${
-              currentTeacher?.avatarColor || 'bg-violet-600'
-            } text-white font-bold text-xs flex items-center justify-center shadow-xs flex-shrink-0`}
-          >
-            {currentTeacher?.name ? currentTeacher.name.charAt(0) : 'G'}
+          {/* Avatar Stack: Maksimal 3 Lingkaran Saling Timpa Ujungnya + Indikator Sisanya */}
+          <div className="flex items-center -space-x-2.5 overflow-hidden p-0.5">
+            {visibleTeachers.map((tea) => {
+              const isCurrent = tea.id === currentTeacher?.id;
+              const photo = getTeacherPhoto(tea);
+
+              return (
+                <div
+                  key={tea.id}
+                  className={`relative inline-block w-8 h-8 rounded-full ring-2 ${
+                    isCurrent
+                      ? 'ring-emerald-500 z-10'
+                      : 'ring-white dark:ring-slate-900 z-0'
+                  } shadow-xs shrink-0 overflow-hidden ${tea.avatarColor || 'bg-violet-600'}`}
+                  title={`${tea.name} (${tea.role === 'admin' ? 'Superadmin' : tea.subject || 'Guru'}) ${isCurrent ? '• Sedang Aktif' : ''}`}
+                >
+                  {photo ? (
+                    <img src={photo} alt={tea.name} className="w-full h-full object-cover" />
+                  ) : (
+                    <span className="w-full h-full flex items-center justify-center text-white font-bold text-xs uppercase">
+                      {tea.name.charAt(0)}
+                    </span>
+                  )}
+                  {isCurrent && (
+                    <span className="absolute bottom-0 right-0 w-2 h-2 rounded-full bg-emerald-500 ring-1 ring-white dark:ring-slate-900" />
+                  )}
+                </div>
+              );
+            })}
+
+            {overflowTeacherCount > 0 && (
+              <div
+                className="relative z-10 inline-flex items-center justify-center w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-700 ring-2 ring-white dark:ring-slate-900 text-[10px] font-black text-slate-700 dark:text-slate-200 shadow-xs shrink-0"
+                title={`${overflowTeacherCount} guru lainnya terdaftar`}
+              >
+                +{overflowTeacherCount}
+              </div>
+            )}
           </div>
-          <div className="hidden lg:flex flex-col text-left">
+
+          <div className="hidden lg:flex flex-col text-left pl-1">
             <span className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate max-w-[130px]">
-              {currentTeacher?.name || 'Guru CBT'}
+              {currentTeacher?.name || 'Dewan Guru'}
             </span>
             <span className="text-[10px] text-slate-400 font-semibold truncate">
               {currentTeacher?.role === 'admin'
                 ? 'Superadmin'
                 : currentTeacher?.role === 'pengawas'
                 ? 'Pengawas'
-                : 'Guru Mapel'}
+                : currentTeacher ? 'Guru Mapel' : `${realTeachers.length} Guru`}
             </span>
           </div>
         </button>
@@ -583,11 +660,15 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <div className="p-4 rounded-2xl bg-violet-50 dark:bg-violet-950/40 border border-violet-200/80 dark:border-violet-800/60 flex items-center justify-between gap-3 text-xs">
                   <div className="flex items-center gap-3">
                     <div
-                      className={`w-10 h-10 rounded-xl ${
+                      className={`w-11 h-11 rounded-2xl ${
                         currentTeacher.avatarColor || 'bg-violet-600'
-                      } text-white font-bold text-sm flex items-center justify-center shadow-xs flex-shrink-0`}
+                      } text-white font-bold text-sm flex items-center justify-center shadow-xs flex-shrink-0 overflow-hidden`}
                     >
-                      {currentTeacher.name.charAt(0)}
+                      {getTeacherPhoto(currentTeacher) ? (
+                        <img src={getTeacherPhoto(currentTeacher)!} alt={currentTeacher.name} className="w-full h-full object-cover" />
+                      ) : (
+                        currentTeacher.name.charAt(0)
+                      )}
                     </div>
                     <div>
                       <div className="flex items-center gap-1.5">
@@ -632,47 +713,56 @@ export const Navbar: React.FC<NavbarProps> = ({
                   Direktori Dewan Guru & Pengawas ({realTeachers.length})
                 </span>
                 <div className="space-y-2 max-h-[35vh] overflow-y-auto pr-1">
-                  {realTeachers.map((tea) => (
-                    <div
-                      key={tea.id}
-                      className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 flex items-center justify-between gap-3 text-xs"
-                    >
-                      <div className="flex items-center gap-2.5">
-                        <div
-                          className={`w-7 h-7 rounded-full ${
-                            tea.avatarColor || 'bg-violet-600'
-                          } text-white font-bold text-[11px] flex items-center justify-center flex-shrink-0`}
-                        >
-                          {tea.name.charAt(0)}
-                        </div>
-                        <div>
-                          <div className="flex items-center gap-1.5">
-                            <p className="font-bold text-slate-900 dark:text-white">{tea.name}</p>
-                            <span className="text-[9px] font-bold px-1.5 py-0.2 rounded-md bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300">
-                              {tea.role === 'admin'
-                                ? 'Superadmin'
-                                : tea.role === 'pengawas'
-                                ? 'Pengawas'
-                                : 'Guru'}
-                            </span>
-                          </div>
-                          <p className="text-[11px] text-slate-400">
-                            {tea.subject} • NIP: {tea.nip}
-                          </p>
-                        </div>
-                      </div>
-
-                      <span
-                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full flex-shrink-0 ${
-                          tea.status?.includes('Mengawas')
-                            ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300'
-                            : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
-                        }`}
+                  {realTeachers.map((tea) => {
+                    const teaPhoto = getTeacherPhoto(tea);
+                    return (
+                      <div
+                        key={tea.id}
+                        className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 flex items-center justify-between gap-3 text-xs"
                       >
-                        {tea.status || 'Standby'}
-                      </span>
-                    </div>
-                  ))}
+                        <div className="flex items-center gap-2.5">
+                          <div
+                            className={`w-8 h-8 rounded-full ${
+                              tea.avatarColor || 'bg-violet-600'
+                            } text-white font-bold text-[11px] flex items-center justify-center flex-shrink-0 overflow-hidden ring-1 ring-slate-200 dark:ring-slate-700`}
+                          >
+                            {teaPhoto ? (
+                              <img src={teaPhoto} alt={tea.name} className="w-full h-full object-cover" />
+                            ) : (
+                              tea.name.charAt(0)
+                            )}
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-1.5">
+                              <p className="font-bold text-slate-900 dark:text-white">{tea.name}</p>
+                              <span className="text-[9px] font-bold px-1.5 py-0.2 rounded-md bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300">
+                                {tea.role === 'admin'
+                                  ? 'Superadmin'
+                                  : tea.role === 'pengawas'
+                                  ? 'Pengawas'
+                                  : 'Guru'}
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-slate-400">
+                              {tea.subject} • NIP: {tea.nip}
+                            </p>
+                          </div>
+                        </div>
+
+                        <span
+                          className={`text-[10px] font-bold px-2 py-0.5 rounded-full flex-shrink-0 ${
+                            tea.id === currentTeacher?.id
+                              ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 font-extrabold'
+                              : tea.status?.includes('Mengawas')
+                              ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300'
+                              : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+                          }`}
+                        >
+                          {tea.id === currentTeacher?.id ? '● Sedang Aktif' : (tea.status || 'Offline')}
+                        </span>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
 

@@ -634,7 +634,7 @@ export const ClassRecapModal: React.FC<ClassRecapModalProps> = ({
                   </div>
 
                   <div>
-                    <strong className="underline font-bold text-slate-900 block leading-tight text-xs uppercase font-sans">
+                    <strong className="underline font-bold text-slate-900 block leading-tight text-xs font-sans">
                       {effectiveSettings.principalName}
                     </strong>
                     <span className="text-[10px] text-slate-600 font-mono block mt-0.5">
@@ -670,7 +670,7 @@ export const ClassRecapModal: React.FC<ClassRecapModalProps> = ({
                   </div>
 
                   <div>
-                    <strong className="underline font-bold text-slate-900 block leading-tight text-xs uppercase font-sans">
+                    <strong className="underline font-bold text-slate-900 block leading-tight text-xs font-sans">
                       {effectiveSettings.teacherName}
                     </strong>
                     <span className="text-[10px] text-slate-600 font-mono block mt-0.5">

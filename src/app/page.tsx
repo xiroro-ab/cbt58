@@ -56,6 +56,7 @@ import {
   fetchTeachers,
   insertTeacher,
   updateTeacherStatusInSupabase,
+  updateTeacherPhotoInSupabase,
   mergeTeachers,
   findMatchingSubject,
   checkSubjectIsActive,
@@ -339,6 +340,11 @@ export default function Home() {
           if (savedTeacherId) {
             savedTeacher = loadedTeachers.find(t => t.id === savedTeacherId) || null;
             if (savedTeacher) {
+              const photo = localStorage.getItem(`cbt_teacher_${savedTeacher.id}_photo`);
+              if (photo) {
+                savedTeacher.photoUrl = photo;
+                savedTeacher.avatar = photo;
+              }
               setCurrentTeacher(savedTeacher);
               setViewMode('teacher');
             }
@@ -725,11 +731,16 @@ export default function Home() {
 
   // Teacher Login & Session Handlers (Skenario 30 Guru & Multi-Mapel/Multi-Rombel)
   const handleTeacherLoginSuccess = async (teacher: Teacher) => {
-    setCurrentTeacher(teacher);
-    setViewMode('teacher');
     if (typeof window !== 'undefined') {
+      const photo = localStorage.getItem(`cbt_teacher_${teacher.id}_photo`);
+      if (photo && !teacher.photoUrl) {
+        teacher.photoUrl = photo;
+        teacher.avatar = photo;
+      }
       localStorage.setItem('cbt_logged_teacher_id', teacher.id);
     }
+    setCurrentTeacher(teacher);
+    setViewMode('teacher');
 
     const firstAsg = teacher.assignments && teacher.assignments.length > 0
       ? teacher.assignments[0]
@@ -844,6 +855,21 @@ export default function Home() {
       console.warn('Supabase insert teacher fallback:', err);
       return true;
     }
+  };
+
+  const handleUpdateTeacher = (updatedTeacher: Teacher) => {
+    setCurrentTeacher(updatedTeacher);
+    setTeachers(prev => {
+      const updated = prev.map(t => t.id === updatedTeacher.id ? updatedTeacher : t);
+      if (typeof window !== 'undefined') {
+        try {
+          localStorage.setItem('cbt_cached_teachers', JSON.stringify(updated));
+          localStorage.setItem(`cbt_teacher_${updatedTeacher.id}_photo`, updatedTeacher.photoUrl || '');
+        } catch (e) {}
+      }
+      return updated;
+    });
+    updateTeacherPhotoInSupabase(updatedTeacher.id, updatedTeacher.photoUrl || '').catch(console.warn);
   };
 
   const handleStartExam = async (e: React.FormEvent) => {
@@ -1831,6 +1857,7 @@ export default function Home() {
             onOpenCertificates={handleOpenCertificates}
             schoolSettings={schoolSettings}
             onUpdateSchoolSettings={handleUpdateSchoolSettings}
+            onUpdateTeacher={handleUpdateTeacher}
           />
         </main>
       </div>

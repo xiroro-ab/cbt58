@@ -1064,6 +1064,25 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   // State tab di menu Statistik & Analitik: 'ranking' (10 Terbaik) | 'remedial' (< KKM) | 'questions' (Butir Soal)
   const [statsActiveTab, setStatsActiveTab] = useState<'ranking' | 'remedial' | 'questions'>('ranking');
 
+  // State mode kurva naik-turun statistik: 'class' (Per Rombel) | 'distribution' (Kurva Lonceng Nilai) | 'questions' (Butir Soal)
+  const [statsChartMode, setStatsChartMode] = useState<'class' | 'distribution' | 'questions'>('class');
+
+  // State hover & drill-down interaktif statistik
+  const [statsHoveredItem, setStatsHoveredItem] = useState<{
+    type: 'class' | 'distribution' | 'questions';
+    label: string;
+    subLabel?: string;
+    primaryVal: string | number;
+    secondaryVal?: string | number;
+    extra?: string;
+  } | null>(null);
+
+  // Filter interaktif pada tabel & data statistik
+  const [statsFilterClass, setStatsFilterClass] = useState<string>('Semua Kelas');
+  const [statsSearchQuery, setStatsSearchQuery] = useState<string>('');
+  const [statsQuestionCategory, setStatsQuestionCategory] = useState<'all' | 'Mudah' | 'Sedang' | 'Sukar (HOTS)'>('all');
+  const [statsFilterGrade, setStatsFilterGrade] = useState<'all' | 'A' | 'B' | 'C' | 'D'>('all');
+
   // Data Rekapitulasi Pelaksanaan Ujian Harian (Senin s/d Sabtu - Periode Ujian ASAS / ASTS Sekolah)
   const dailyExamStats = useMemo(() => {
     const days = language === 'en'
@@ -1375,6 +1394,137 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
       };
     });
   }, [activeQuestions, results]);
+
+  // Kurva Distribusi Frekuensi Nilai Siswa (Normalitas Skor / Bell Curve Naik-Turun)
+  const scoreBellDistribution = useMemo(() => {
+    const buckets = [
+      { range: '< 50', label: '0 - 49 (Sangat Rendah)', min: 0, max: 49, color: '#ef4444' },
+      { range: '50-59', label: '50 - 59 (Rendah)', min: 50, max: 59, color: '#f97316' },
+      { range: '60-74', label: '60 - 74 (Cukup / Belum Tuntas)', min: 60, max: 74, color: '#f59e0b' },
+      { range: '75-84', label: '75 - 84 (Baik / Tuntas KKM)', min: 75, max: 84, color: '#8b5cf6' },
+      { range: '85-94', label: '85 - 94 (Sangat Baik)', min: 85, max: 94, color: '#10b981' },
+      { range: '95-100', label: '95 - 100 (Sempurna)', min: 95, max: 100, color: '#06b6d4' }
+    ];
+
+    const total = results.length;
+    return buckets.map(b => {
+      const count = results.filter(r => (r.score || 0) >= b.min && (r.score || 0) <= b.max).length;
+      const pct = total > 0 ? Math.round((count / total) * 100) : 0;
+      return {
+        ...b,
+        count,
+        pct
+      };
+    });
+  }, [results]);
+
+  // Perhitungan Data Points untuk Kurva Naik-Turun Interaktif Menu Statistik
+  const statsChartData = useMemo(() => {
+    if (statsChartMode === 'class') {
+      const list = classPerformanceStats;
+      const maxVal = 100;
+      return {
+        mode: 'class' as const,
+        title: 'Fluktuasi Capaian Rata-Rata per Rombel Kelas',
+        subtitle: 'Kurva gelombang nilai rata-rata kelas (0 - 100) vs Ketuntasan KKM (%)',
+        maxVal,
+        items: list.map(cp => ({
+          label: `Kelas ${cp.className}`,
+          shortLabel: cp.className,
+          value: cp.avgScore,
+          barValue: cp.passRate,
+          testedCount: cp.testedCount,
+          totalStudents: cp.totalStudents,
+          passedCount: cp.passedCount,
+          raw: cp
+        }))
+      };
+    } else if (statsChartMode === 'distribution') {
+      const list = scoreBellDistribution;
+      const maxCount = Math.max(1, ...list.map(b => b.count));
+      return {
+        mode: 'distribution' as const,
+        title: 'Kurva Distribusi Frekuensi Nilai Siswa (Normalitas Skor)',
+        subtitle: 'Kurva lonceng sebaran rentang perolehan skor ujian seluruh siswa',
+        maxVal: Math.max(maxCount + 2, 6),
+        items: list.map(b => ({
+          label: b.label,
+          shortLabel: b.range,
+          value: b.count,
+          barValue: b.count,
+          pct: b.pct,
+          color: b.color,
+          raw: b
+        }))
+      };
+    } else {
+      const list = questionItemAnalysis;
+      return {
+        mode: 'questions' as const,
+        title: 'Kurva Indeks Daya Serap per Nomor Butir Soal',
+        subtitle: 'Tingkat persentase jawaban benar siswa per butir soal (Puncak = Mudah, Lembah = Sukar)',
+        maxVal: 100,
+        items: list.map(q => ({
+          label: `Soal No. ${q.no}`,
+          shortLabel: `S${q.no}`,
+          value: q.difficultyIndex,
+          barValue: q.difficultyIndex,
+          category: q.category,
+          totalAnswered: q.totalAnswered,
+          correctCount: q.correctCount,
+          snippet: q.question.questionText?.substring(0, 40) + '...',
+          type: q.question.type,
+          raw: q
+        }))
+      };
+    }
+  }, [statsChartMode, classPerformanceStats, scoreBellDistribution, questionItemAnalysis]);
+
+  // Filter Siswa untuk Menu Statistik
+  const filteredRankedResults = useMemo(() => {
+    return rankedResults.filter(r => {
+      if (statsFilterClass !== 'Semua Kelas') {
+        const singleCls = resolveStudentSingleClass(r.studentName, r.className, students);
+        if (singleCls !== statsFilterClass) return false;
+      }
+      if (statsFilterGrade === 'A' && (r.score || 0) < 90) return false;
+      if (statsFilterGrade === 'B' && ((r.score || 0) < 75 || (r.score || 0) >= 90)) return false;
+      if (statsFilterGrade === 'C' && ((r.score || 0) < 60 || (r.score || 0) >= 75)) return false;
+      if (statsFilterGrade === 'D' && (r.score || 0) >= 60) return false;
+      if (statsSearchQuery.trim()) {
+        const query = statsSearchQuery.toLowerCase();
+        const matchesName = r.studentName.toLowerCase().includes(query);
+        const singleCls = resolveStudentSingleClass(r.studentName, r.className, students).toLowerCase();
+        return matchesName || singleCls.includes(query);
+      }
+      return true;
+    });
+  }, [rankedResults, statsFilterClass, statsFilterGrade, statsSearchQuery, students]);
+
+  const filteredTopStudents = useMemo(() => {
+    return filteredRankedResults.slice(0, 10);
+  }, [filteredRankedResults]);
+
+  const filteredRemedialStudents = useMemo(() => {
+    return filteredRankedResults.filter(r => (r.score || 0) < 75);
+  }, [filteredRankedResults]);
+
+  const filteredQuestionItemAnalysis = useMemo(() => {
+    return questionItemAnalysis.filter(item => {
+      if (statsQuestionCategory !== 'all' && item.category !== statsQuestionCategory) {
+        return false;
+      }
+      if (statsSearchQuery.trim()) {
+        const query = statsSearchQuery.toLowerCase();
+        return (
+          item.question.questionText.toLowerCase().includes(query) ||
+          item.question.type.toLowerCase().includes(query) ||
+          `soal ${item.no}`.includes(query)
+        );
+      }
+      return true;
+    });
+  }, [questionItemAnalysis, statsQuestionCategory, statsSearchQuery]);
 
   // State untuk Menu Dokumen & Berita Acara Ujian
   const [selectedDocType, setSelectedDocType] = useState<'bap' | 'attendance' | 'cards' | 'ledger'>('bap');
@@ -1945,18 +2095,18 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
       {currentNav === 'statistics' && (
         <div className="space-y-6">
           {/* Header Statistik */}
-          <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="p-6 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
               <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
                 <BarChart3 className="w-5 h-5 text-violet-600" />
                 <span>Statistik & Analisis Hasil Belajar Siswa</span>
               </h3>
               <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
-                Visualisasi komprehensif daya serap materi, sebaran predikat nilai, capaian rombel kelas, dan analisis butir soal empiris SMPN 58.
+                Visualisasi interaktif fluktuasi capaian belajar, sebaran skor normalitas, pemetaan rombel, dan analisis empiris butir soal SMPN 58.
               </p>
             </div>
             <div className="flex items-center gap-2">
-              <span className="px-3 py-1.5 rounded-xl bg-violet-50 dark:bg-violet-950/50 text-violet-700 dark:text-violet-300 font-bold text-xs border border-violet-200 dark:border-violet-800">
+              <span className="px-3.5 py-1.5 rounded-xl bg-violet-50 dark:bg-violet-950/50 text-violet-700 dark:text-violet-300 font-bold text-xs border border-violet-200 dark:border-violet-800">
                 Mapel: {currentBankSubject.title}
               </span>
             </div>
@@ -1964,27 +2114,50 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
 
           {/* 4 Metric Cards Statistik */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-1">
-              <span className="text-xs font-semibold text-slate-400">Rata-Rata Capaian Ujian</span>
+            <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-1 hover:border-violet-300 dark:hover:border-violet-700 transition">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-slate-400">Rata-Rata Capaian Ujian</span>
+                <span className="w-8 h-8 rounded-xl bg-violet-100 dark:bg-violet-950/60 text-violet-600 flex items-center justify-center font-bold text-xs">
+                  📊
+                </span>
+              </div>
               <h4 className="text-2xl font-bold text-slate-900 dark:text-white">{avgScore} Poin</h4>
               <p className="text-xs text-slate-500">{results.length} lembar ujian terkumpul • KKM 75</p>
             </div>
-            <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-1">
-              <span className="text-xs font-semibold text-slate-400">Ketuntasan Klasikal KKM</span>
+
+            <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-1 hover:border-emerald-300 dark:hover:border-emerald-700 transition">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-slate-400">Ketuntasan Klasikal KKM</span>
+                <span className="w-8 h-8 rounded-xl bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 flex items-center justify-center font-bold text-xs">
+                  ✓
+                </span>
+              </div>
               <h4 className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">{passRate}% Tuntas</h4>
               <p className="text-xs text-slate-500">{passedStudentsCount} tuntas • {remedialStudentsCount} remedial</p>
             </div>
-            <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-1">
-              <span className="text-xs font-semibold text-slate-400">Partisipasi Peserta</span>
-              <h4 className="text-2xl font-bold text-violet-600 dark:text-violet-400">
+
+            <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-1 hover:border-sky-300 dark:hover:border-sky-700 transition">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-slate-400">Partisipasi Peserta</span>
+                <span className="w-8 h-8 rounded-xl bg-sky-100 dark:bg-sky-950/60 text-sky-600 flex items-center justify-center font-bold text-xs">
+                  👥
+                </span>
+              </div>
+              <h4 className="text-2xl font-bold text-sky-600 dark:text-sky-400">
                 {results.length} / {students?.length || 0} Siswa
               </h4>
               <p className="text-xs text-slate-500">
                 {students && students.length > 0 ? Math.round((results.length / students.length) * 100) : 0}% siswa telah mengikuti
               </p>
             </div>
-            <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-1">
-              <span className="text-xs font-semibold text-slate-400">Audit Integritas Anti-Cheat</span>
+
+            <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-1 hover:border-rose-300 dark:hover:border-rose-700 transition">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-slate-400">Audit Integritas Anti-Cheat</span>
+                <span className="w-8 h-8 rounded-xl bg-rose-100 dark:bg-rose-950/60 text-rose-600 flex items-center justify-center font-bold text-xs">
+                  🛡️
+                </span>
+              </div>
               <h4 className="text-2xl font-bold text-slate-900 dark:text-white">
                 {results.filter(r => r.violationCount === 0).length} Siswa Tertib
               </h4>
@@ -1994,25 +2167,392 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
             </div>
           </div>
 
+          {/* ============================================================== */}
+          {/* DIAGRAM KURVA NAIK-TURUN INTERAKTIF (WAVY SPLINE AREA CHART)    */}
+          {/* ============================================================== */}
+          <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-3xl p-6 shadow-xs space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+              <div>
+                <h4 className="font-bold text-base text-slate-900 dark:text-white flex items-center gap-2">
+                  <TrendingUp className="w-4 h-4 text-violet-600" />
+                  <span>{statsChartData.title}</span>
+                </h4>
+                <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">
+                  {statsChartData.subtitle}
+                </p>
+
+                {/* Legends */}
+                <div className="flex flex-wrap items-center gap-4 mt-3 text-xs">
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-2.5 h-2.5 rounded-full bg-violet-600"></span>
+                    <span className="text-slate-700 dark:text-slate-300 font-medium">
+                      {statsChartMode === 'class' ? 'Kurva Rata-Rata Nilai' : statsChartMode === 'distribution' ? 'Kurva Distribusi Siswa' : 'Kurva Daya Serap (% Benar)'}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-2.5 h-2.5 rounded-full bg-violet-200 dark:bg-violet-900/60 border border-violet-400/40"></span>
+                    <span className="text-slate-700 dark:text-slate-300 font-medium">
+                      {statsChartMode === 'class' ? 'Ketuntasan KKM (%)' : statsChartMode === 'distribution' ? 'Jumlah Peserta' : 'Tingkat Kebenaran'}
+                    </span>
+                  </div>
+                  {(statsChartMode === 'class' || statsChartMode === 'questions') && (
+                    <div className="flex items-center gap-1.5">
+                      <span className="w-3 h-0.5 border-t-2 border-dashed border-amber-500"></span>
+                      <span className="text-amber-600 dark:text-amber-400 font-semibold text-[11px]">
+                        Standar KKM 75
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Mode Switcher Buttons */}
+              <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-2xl text-xs font-bold self-start">
+                <button
+                  type="button"
+                  onClick={() => setStatsChartMode('class')}
+                  className={`px-3 py-1.5 rounded-xl transition cursor-pointer flex items-center gap-1.5 ${
+                    statsChartMode === 'class'
+                      ? 'bg-white dark:bg-slate-900 text-violet-600 dark:text-violet-400 shadow-xs'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                  }`}
+                >
+                  <Users className="w-3.5 h-3.5" />
+                  <span>Per Rombel</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStatsChartMode('distribution')}
+                  className={`px-3 py-1.5 rounded-xl transition cursor-pointer flex items-center gap-1.5 ${
+                    statsChartMode === 'distribution'
+                      ? 'bg-white dark:bg-slate-900 text-violet-600 dark:text-violet-400 shadow-xs'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                  }`}
+                >
+                  <BarChart3 className="w-3.5 h-3.5" />
+                  <span>Sebaran Skor</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStatsChartMode('questions')}
+                  className={`px-3 py-1.5 rounded-xl transition cursor-pointer flex items-center gap-1.5 ${
+                    statsChartMode === 'questions'
+                      ? 'bg-white dark:bg-slate-900 text-violet-600 dark:text-violet-400 shadow-xs'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                  }`}
+                >
+                  <SlidersHorizontal className="w-3.5 h-3.5" />
+                  <span>Butir Soal</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Interactive Inspection Bar (Dynamic Feedback on Hover) */}
+            {statsHoveredItem ? (
+              <div className="flex items-center justify-between gap-3 p-3 rounded-2xl bg-violet-50 dark:bg-violet-950/50 border border-violet-200 dark:border-violet-800 animate-in fade-in slide-in-from-top-1 duration-150">
+                <div className="flex items-center gap-2.5">
+                  <span className="w-3 h-3 rounded-full bg-violet-600 animate-pulse"></span>
+                  <div>
+                    <span className="text-xs font-bold text-slate-900 dark:text-white">
+                      {statsHoveredItem.label}
+                    </span>
+                    {statsHoveredItem.subLabel && (
+                      <span className="text-[11px] text-slate-500 dark:text-slate-400 ml-2">
+                        ({statsHoveredItem.subLabel})
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="text-right">
+                    <span className="text-xs font-black text-violet-700 dark:text-violet-300">
+                      {statsHoveredItem.primaryVal}
+                    </span>
+                    {statsHoveredItem.secondaryVal && (
+                      <span className="text-[10px] font-medium text-slate-500 block">
+                        {statsHoveredItem.secondaryVal}
+                      </span>
+                    )}
+                  </div>
+                  {statsHoveredItem.extra && (
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-lg bg-violet-600 text-white shadow-xs">
+                      {statsHoveredItem.extra}
+                    </span>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between text-xs text-slate-400 dark:text-slate-500 px-2 py-1 gap-2">
+                <span className="flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5 text-violet-500" />
+                  <span>Sentuh atau arahkan kursor pada kurva &amp; batang untuk inspeksi detail • Klik titik untuk filter data tabel.</span>
+                </span>
+                {statsFilterClass !== 'Semua Kelas' && (
+                  <span className="font-bold text-violet-600 dark:text-violet-400 flex items-center gap-1">
+                    <span>Filter aktif: Kelas {statsFilterClass}</span>
+                    <button
+                      type="button"
+                      onClick={() => setStatsFilterClass('Semua Kelas')}
+                      className="text-[10px] underline ml-1 hover:text-violet-700 cursor-pointer"
+                    >
+                      (Reset Filter)
+                    </button>
+                  </span>
+                )}
+              </div>
+            )}
+
+            {/* SVG Wavy Spline Bezier Chart */}
+            <div className="pt-2">
+              {(() => {
+                const svgW = 680;
+                const svgH = 210;
+                const padL = 40;
+                const padR = 24;
+                const padT = 20;
+                const padB = 32;
+                const chartW = svgW - padL - padR;
+                const chartH = svgH - padT - padB;
+                const maxVal = statsChartData.maxVal || 100;
+                const items = statsChartData.items || [];
+
+                const points = items.map((item, idx) => {
+                  const x = padL + (items.length > 1 ? idx * (chartW / (items.length - 1)) : chartW / 2);
+                  const y = padT + chartH - (item.value / maxVal) * chartH;
+                  return { x, y, ...item };
+                });
+
+                const splineD = getSplinePath(points);
+                const areaD = points.length > 0
+                  ? `${splineD} L ${points[points.length - 1].x} ${padT + chartH} L ${points[0].x} ${padT + chartH} Z`
+                  : '';
+
+                const yGridTicks = [
+                  maxVal,
+                  Math.round(maxVal * 0.75),
+                  Math.round(maxVal * 0.5),
+                  Math.round(maxVal * 0.25),
+                  0
+                ];
+
+                const kkmY = maxVal === 100 ? padT + chartH - (75 / 100) * chartH : null;
+
+                return (
+                  <div className="relative">
+                    <svg viewBox={`0 0 ${svgW} ${svgH}`} className="w-full h-56 select-none overflow-visible">
+                      <defs>
+                        <linearGradient id="statsSplineGrad" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#8b5cf6" stopOpacity="0.38" />
+                          <stop offset="100%" stopColor="#8b5cf6" stopOpacity="0.0" />
+                        </linearGradient>
+                      </defs>
+
+                      {/* Gridlines & Y-Axis Labels */}
+                      {yGridTicks.map((val, tickIdx) => {
+                        const y = padT + chartH - (val / maxVal) * chartH;
+                        return (
+                          <g key={`stats-ytick-${tickIdx}-${val}`}>
+                            <text
+                              x={padL - 8}
+                              y={y + 3.5}
+                              textAnchor="end"
+                              className="text-[10px] fill-slate-400 dark:fill-slate-500 font-medium"
+                            >
+                              {val}
+                            </text>
+                            <line
+                              x1={padL}
+                              y1={y}
+                              x2={svgW - padR}
+                              y2={y}
+                              stroke="currentColor"
+                              strokeDasharray={val === 0 ? '0' : '4 4'}
+                              className="text-slate-100 dark:text-slate-800"
+                              strokeWidth={val === 0 ? '1.5' : '1'}
+                            />
+                          </g>
+                        );
+                      })}
+
+                      {/* Garis Standar KKM 75 */}
+                      {kkmY !== null && (
+                        <g>
+                          <line
+                            x1={padL}
+                            y1={kkmY}
+                            x2={svgW - padR}
+                            y2={kkmY}
+                            stroke="#eab308"
+                            strokeDasharray="5 3"
+                            strokeWidth="1.5"
+                            className="opacity-80"
+                          />
+                          <text
+                            x={svgW - padR - 4}
+                            y={kkmY - 4}
+                            textAnchor="end"
+                            className="text-[9px] fill-amber-500 font-bold"
+                          >
+                            Standar KKM 75
+                          </text>
+                        </g>
+                      )}
+
+                      {/* Background Vertical Bars */}
+                      {points.map((pt, idx) => {
+                        const barVal = pt.barValue !== undefined ? pt.barValue : pt.value;
+                        const barH = (barVal / maxVal) * chartH;
+                        const barY = padT + chartH - barH;
+                        const barW = Math.max(8, Math.min(28, (chartW / Math.max(1, items.length)) * 0.45));
+                        const isHovered = statsHoveredItem?.label === pt.label;
+
+                        return (
+                          <rect
+                            key={`stats-bar-${idx}`}
+                            x={pt.x - barW / 2}
+                            y={barY}
+                            width={barW}
+                            height={barH}
+                            rx="4"
+                            ry="4"
+                            onClick={() => {
+                              if (statsChartMode === 'class' && pt.shortLabel) {
+                                setStatsFilterClass(statsFilterClass === pt.shortLabel ? 'Semua Kelas' : pt.shortLabel);
+                              } else if (statsChartMode === 'questions') {
+                                setStatsActiveTab('questions');
+                              }
+                            }}
+                            onMouseEnter={() => setStatsHoveredItem({
+                              type: statsChartMode,
+                              label: pt.label,
+                              subLabel: statsChartMode === 'class' ? `Ketuntasan: ${pt.barValue}%` : statsChartMode === 'distribution' ? `${(pt as any).pct}% dari peserta` : `Tipe: ${(pt as any).type || ''}`,
+                              primaryVal: statsChartMode === 'class' ? `${pt.value} Poin` : statsChartMode === 'distribution' ? `${pt.value} Siswa` : `${pt.value}% Benar`,
+                              secondaryVal: statsChartMode === 'class' ? `${(pt as any).passedCount || 0} Siswa Tuntas` : undefined,
+                              extra: statsChartMode === 'class' ? 'Klik untuk filter kelas ini' : statsChartMode === 'questions' ? 'Klik untuk lihat butir soal' : undefined
+                            })}
+                            onMouseLeave={() => setStatsHoveredItem(null)}
+                            className={`cursor-pointer transition-all duration-300 ${
+                              isHovered
+                                ? 'fill-violet-400 dark:fill-violet-600'
+                                : 'fill-violet-100 dark:fill-violet-950/40 hover:fill-violet-200 dark:hover:fill-violet-900/60'
+                            }`}
+                          />
+                        );
+                      })}
+
+                      {/* Gradient Fill Under Spline Curve */}
+                      <path d={areaD} fill="url(#statsSplineGrad)" />
+
+                      {/* Spline Bezier Curve Stroke */}
+                      <path
+                        d={splineD}
+                        fill="none"
+                        stroke="#8b5cf6"
+                        strokeWidth="2.5"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        className="filter drop-shadow-xs"
+                      />
+
+                      {/* Interactive Dots on Vertices */}
+                      {points.map((pt, idx) => {
+                        const isHovered = statsHoveredItem?.label === pt.label;
+                        return (
+                          <g
+                            key={`stats-dot-${idx}`}
+                            className="cursor-pointer"
+                            onClick={() => {
+                              if (statsChartMode === 'class' && pt.shortLabel) {
+                                setStatsFilterClass(statsFilterClass === pt.shortLabel ? 'Semua Kelas' : pt.shortLabel);
+                              } else if (statsChartMode === 'questions') {
+                                setStatsActiveTab('questions');
+                              }
+                            }}
+                            onMouseEnter={() => setStatsHoveredItem({
+                              type: statsChartMode,
+                              label: pt.label,
+                              subLabel: statsChartMode === 'class' ? `Ketuntasan: ${pt.barValue}%` : statsChartMode === 'distribution' ? `${(pt as any).pct}% dari peserta` : `Tipe: ${(pt as any).type || ''}`,
+                              primaryVal: statsChartMode === 'class' ? `${pt.value} Poin` : statsChartMode === 'distribution' ? `${pt.value} Siswa` : `${pt.value}% Benar`,
+                              secondaryVal: statsChartMode === 'class' ? `${(pt as any).passedCount || 0} Siswa Tuntas` : undefined,
+                              extra: statsChartMode === 'class' ? 'Klik untuk filter kelas ini' : statsChartMode === 'questions' ? 'Klik untuk lihat butir soal' : undefined
+                            })}
+                            onMouseLeave={() => setStatsHoveredItem(null)}
+                          >
+                            {isHovered && (
+                              <circle
+                                cx={pt.x}
+                                cy={pt.y}
+                                r="9"
+                                className="fill-violet-400/30 animate-ping"
+                              />
+                            )}
+                            <circle
+                              cx={pt.x}
+                              cy={pt.y}
+                              r={isHovered ? '6' : '4'}
+                              className="fill-white dark:fill-slate-900 stroke-violet-600 transition-all duration-200"
+                              strokeWidth={isHovered ? '3' : '2'}
+                            />
+                            {/* Sumbu X Label */}
+                            <text
+                              x={pt.x}
+                              y={padT + chartH + 16}
+                              textAnchor="middle"
+                              className={`text-[10px] font-semibold transition-colors ${
+                                isHovered
+                                  ? 'fill-violet-600 dark:fill-violet-400 font-bold'
+                                  : 'fill-slate-500 dark:fill-slate-400'
+                              }`}
+                            >
+                              {pt.shortLabel}
+                            </text>
+                          </g>
+                        );
+                      })}
+                    </svg>
+                  </div>
+                );
+              })()}
+            </div>
+          </div>
+
           {/* DUA DIAGRAM ANALITIK: SEBARAN PREDIKAT NILAI & PROPORSI BUTIR SOAL */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Diagram 1: Sebaran Predikat Nilai Siswa */}
             <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-3xl p-6 shadow-xs space-y-4">
-              <div>
-                <h4 className="font-bold text-base text-slate-900 dark:text-white flex items-center gap-2">
-                  <Award className="w-4 h-4 text-violet-600" />
-                  <span>Distribusi Predikat &amp; Capaian Nilai Siswa</span>
-                </h4>
-                <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">
-                  Pengelompokan hasil belajar siswa berdasarkan standar Kriteria Ketuntasan Minimal (KKM 75)
-                </p>
+              <div className="flex items-start justify-between">
+                <div>
+                  <h4 className="font-bold text-base text-slate-900 dark:text-white flex items-center gap-2">
+                    <Award className="w-4 h-4 text-violet-600" />
+                    <span>Distribusi Predikat Nilai Siswa</span>
+                  </h4>
+                  <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">
+                    Pengelompokan hasil belajar berdasarkan standar KKM 75 • Klik predikat untuk filter tabel
+                  </p>
+                </div>
+                {statsFilterGrade !== 'all' && (
+                  <button
+                    type="button"
+                    onClick={() => setStatsFilterGrade('all')}
+                    className="text-[11px] font-bold text-violet-600 hover:underline cursor-pointer"
+                  >
+                    Reset Predikat
+                  </button>
+                )}
               </div>
 
-              {/* Progress Bars Predikat */}
+              {/* Progress Bars Predikat Interaktif */}
               <div className="space-y-3.5 pt-1">
                 {/* Sangat Baik (A) */}
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between text-xs">
+                <div
+                  onClick={() => setStatsFilterGrade(statsFilterGrade === 'A' ? 'all' : 'A')}
+                  className={`p-2.5 rounded-2xl transition cursor-pointer ${
+                    statsFilterGrade === 'A'
+                      ? 'bg-emerald-50 dark:bg-emerald-950/40 ring-2 ring-emerald-500'
+                      : 'hover:bg-slate-50 dark:hover:bg-slate-800/50'
+                  }`}
+                >
+                  <div className="flex items-center justify-between text-xs mb-1.5">
                     <span className="font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
                       <span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
                       <span>Sangat Baik (A: 90 - 100)</span>
@@ -2030,8 +2570,15 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                 </div>
 
                 {/* Baik (B) */}
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between text-xs">
+                <div
+                  onClick={() => setStatsFilterGrade(statsFilterGrade === 'B' ? 'all' : 'B')}
+                  className={`p-2.5 rounded-2xl transition cursor-pointer ${
+                    statsFilterGrade === 'B'
+                      ? 'bg-violet-50 dark:bg-violet-950/40 ring-2 ring-violet-500'
+                      : 'hover:bg-slate-50 dark:hover:bg-slate-800/50'
+                  }`}
+                >
+                  <div className="flex items-center justify-between text-xs mb-1.5">
                     <span className="font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
                       <span className="w-2.5 h-2.5 rounded-full bg-violet-600"></span>
                       <span>Baik (B: 75 - 89)</span>
@@ -2049,8 +2596,15 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                 </div>
 
                 {/* Cukup (C) */}
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between text-xs">
+                <div
+                  onClick={() => setStatsFilterGrade(statsFilterGrade === 'C' ? 'all' : 'C')}
+                  className={`p-2.5 rounded-2xl transition cursor-pointer ${
+                    statsFilterGrade === 'C'
+                      ? 'bg-amber-50 dark:bg-amber-950/40 ring-2 ring-amber-500'
+                      : 'hover:bg-slate-50 dark:hover:bg-slate-800/50'
+                  }`}
+                >
+                  <div className="flex items-center justify-between text-xs mb-1.5">
                     <span className="font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
                       <span className="w-2.5 h-2.5 rounded-full bg-amber-500"></span>
                       <span>Cukup (C: 60 - 74)</span>
@@ -2068,8 +2622,15 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                 </div>
 
                 {/* Perlu Remedial (D) */}
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between text-xs">
+                <div
+                  onClick={() => setStatsFilterGrade(statsFilterGrade === 'D' ? 'all' : 'D')}
+                  className={`p-2.5 rounded-2xl transition cursor-pointer ${
+                    statsFilterGrade === 'D'
+                      ? 'bg-rose-50 dark:bg-rose-950/40 ring-2 ring-rose-500'
+                      : 'hover:bg-slate-50 dark:hover:bg-slate-800/50'
+                  }`}
+                >
+                  <div className="flex items-center justify-between text-xs mb-1.5">
                     <span className="font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
                       <span className="w-2.5 h-2.5 rounded-full bg-rose-500"></span>
                       <span>Perlu Remedial (D: &lt; 60)</span>
@@ -2090,20 +2651,41 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
 
             {/* Diagram 2: Analisis Proporsi Tingkat Kesukaran Soal */}
             <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-3xl p-6 shadow-xs space-y-4">
-              <div>
-                <h4 className="font-bold text-base text-slate-900 dark:text-white flex items-center gap-2">
-                  <SlidersHorizontal className="w-4 h-4 text-violet-600" />
-                  <span>Proporsi Indeks Kesukaran Butir Soal</span>
-                </h4>
-                <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">
-                  Evaluasi empiris butir soal berdasarkan rasio jawaban benar seluruh siswa ({questionItemAnalysis.length} butir)
-                </p>
+              <div className="flex items-start justify-between">
+                <div>
+                  <h4 className="font-bold text-base text-slate-900 dark:text-white flex items-center gap-2">
+                    <SlidersHorizontal className="w-4 h-4 text-violet-600" />
+                    <span>Proporsi Indeks Kesukaran Butir Soal</span>
+                  </h4>
+                  <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">
+                    Evaluasi rasio jawaban benar seluruh siswa ({questionItemAnalysis.length} butir) • Klik untuk filter
+                  </p>
+                </div>
+                {statsQuestionCategory !== 'all' && (
+                  <button
+                    type="button"
+                    onClick={() => setStatsQuestionCategory('all')}
+                    className="text-[11px] font-bold text-violet-600 hover:underline cursor-pointer"
+                  >
+                    Reset Kategori
+                  </button>
+                )}
               </div>
 
               <div className="space-y-3.5 pt-1">
                 {/* Mudah */}
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between text-xs">
+                <div
+                  onClick={() => {
+                    setStatsQuestionCategory(statsQuestionCategory === 'Mudah' ? 'all' : 'Mudah');
+                    setStatsActiveTab('questions');
+                  }}
+                  className={`p-2.5 rounded-2xl transition cursor-pointer ${
+                    statsQuestionCategory === 'Mudah'
+                      ? 'bg-emerald-50 dark:bg-emerald-950/40 ring-2 ring-emerald-500'
+                      : 'hover:bg-slate-50 dark:hover:bg-slate-800/50'
+                  }`}
+                >
+                  <div className="flex items-center justify-between text-xs mb-1.5">
                     <span className="font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
                       <span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
                       <span>Kategori Mudah (&gt;= 70% Benar)</span>
@@ -2123,8 +2705,18 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                 </div>
 
                 {/* Sedang */}
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between text-xs">
+                <div
+                  onClick={() => {
+                    setStatsQuestionCategory(statsQuestionCategory === 'Sedang' ? 'all' : 'Sedang');
+                    setStatsActiveTab('questions');
+                  }}
+                  className={`p-2.5 rounded-2xl transition cursor-pointer ${
+                    statsQuestionCategory === 'Sedang'
+                      ? 'bg-amber-50 dark:bg-amber-950/40 ring-2 ring-amber-500'
+                      : 'hover:bg-slate-50 dark:hover:bg-slate-800/50'
+                  }`}
+                >
+                  <div className="flex items-center justify-between text-xs mb-1.5">
                     <span className="font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
                       <span className="w-2.5 h-2.5 rounded-full bg-amber-500"></span>
                       <span>Kategori Sedang (35% - 69% Benar)</span>
@@ -2144,8 +2736,18 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                 </div>
 
                 {/* Sukar (HOTS) */}
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between text-xs">
+                <div
+                  onClick={() => {
+                    setStatsQuestionCategory(statsQuestionCategory === 'Sukar (HOTS)' ? 'all' : 'Sukar (HOTS)');
+                    setStatsActiveTab('questions');
+                  }}
+                  className={`p-2.5 rounded-2xl transition cursor-pointer ${
+                    statsQuestionCategory === 'Sukar (HOTS)'
+                      ? 'bg-rose-50 dark:bg-rose-950/40 ring-2 ring-rose-500'
+                      : 'hover:bg-slate-50 dark:hover:bg-slate-800/50'
+                  }`}
+                >
+                  <div className="flex items-center justify-between text-xs mb-1.5">
                     <span className="font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
                       <span className="w-2.5 h-2.5 rounded-full bg-rose-500"></span>
                       <span>Kategori Sukar / HOTS (&lt; 35% Benar)</span>
@@ -2176,107 +2778,193 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                   <span>Komparasi Capaian Rata-Rata &amp; Ketuntasan per Rombel Kelas</span>
                 </h4>
                 <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">
-                  Pemetaan daya serap materi dan persentase tuntas KKM 75 per kelas di SMP Negeri 58 Palembang
+                  Klik kartu rombel untuk memfilter dan melihat daftar siswa spesifik di kelas tersebut
                 </p>
               </div>
-              <span className="text-xs font-bold px-3 py-1 rounded-xl bg-violet-50 dark:bg-violet-950/40 text-violet-600 dark:text-violet-400 border border-violet-200 dark:border-violet-800 self-start sm:self-auto">
-                {classPerformanceStats.length} Rombel Terdata
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold px-3 py-1 rounded-xl bg-violet-50 dark:bg-violet-950/40 text-violet-600 dark:text-violet-400 border border-violet-200 dark:border-violet-800">
+                  {classPerformanceStats.length} Rombel Terdata
+                </span>
+                {statsFilterClass !== 'Semua Kelas' && (
+                  <button
+                    type="button"
+                    onClick={() => setStatsFilterClass('Semua Kelas')}
+                    className="text-xs font-bold text-violet-600 underline cursor-pointer"
+                  >
+                    Tampilkan Semua
+                  </button>
+                )}
+              </div>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 pt-2">
-              {classPerformanceStats.map(cp => (
-                <div
-                  key={cp.className}
-                  className="p-4 rounded-2xl border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 space-y-3"
-                >
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="font-extrabold text-sm text-slate-900 dark:text-white">Kelas {cp.className}</p>
-                      <p className="text-[11px] text-slate-400">
-                        {cp.testedCount} dari {cp.totalStudents} Siswa Mengikuti
-                      </p>
+              {classPerformanceStats.map(cp => {
+                const isSelected = statsFilterClass === cp.className;
+                return (
+                  <div
+                    key={cp.className}
+                    onClick={() => setStatsFilterClass(isSelected ? 'Semua Kelas' : cp.className)}
+                    className={`p-4 rounded-2xl border transition-all cursor-pointer ${
+                      isSelected
+                        ? 'border-violet-500 bg-violet-50/60 dark:bg-violet-950/50 shadow-md ring-2 ring-violet-500/50'
+                        : 'border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 hover:border-violet-300 dark:hover:border-violet-700 hover:shadow-xs'
+                    } space-y-3`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <p className="font-extrabold text-sm text-slate-900 dark:text-white">Kelas {cp.className}</p>
+                          {isSelected && (
+                            <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-md bg-violet-600 text-white">
+                              Terpilih
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[11px] text-slate-400">
+                          {cp.testedCount} dari {cp.totalStudents} Siswa Mengikuti
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className={`text-xl font-black ${cp.avgScore >= 75 ? 'text-emerald-600 dark:text-emerald-400' : cp.avgScore >= 60 ? 'text-amber-500' : 'text-rose-500'}`}>
+                          {cp.avgScore}
+                        </p>
+                        <span className="text-[10px] font-semibold text-slate-400 block">Rata-Rata</span>
+                      </div>
                     </div>
-                    <div className="text-right">
-                      <p className={`text-xl font-black ${cp.avgScore >= 75 ? 'text-emerald-600 dark:text-emerald-400' : cp.avgScore >= 60 ? 'text-amber-500' : 'text-rose-500'}`}>
-                        {cp.avgScore}
-                      </p>
-                      <span className="text-[10px] font-semibold text-slate-400 block">Rata-Rata</span>
-                    </div>
-                  </div>
 
-                  {/* Progress Ketuntasan Kelas */}
-                  <div className="space-y-1">
-                    <div className="flex justify-between text-[11px]">
-                      <span className="text-slate-500">Ketuntasan KKM:</span>
-                      <span className="font-bold text-slate-700 dark:text-slate-300">
-                        {cp.passedCount} Siswa ({cp.passRate}%)
-                      </span>
-                    </div>
-                    <div className="h-2 w-full rounded-full bg-slate-200/70 dark:bg-slate-700/60 overflow-hidden">
-                      <div
-                        style={{ width: `${cp.passRate}%` }}
-                        className={`h-full rounded-full transition-all duration-500 ${
-                          cp.passRate >= 75 ? 'bg-emerald-500' : cp.passRate >= 50 ? 'bg-amber-500' : 'bg-rose-500'
-                        }`}
-                      ></div>
+                    {/* Progress Ketuntasan Kelas */}
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-[11px]">
+                        <span className="text-slate-500">Ketuntasan KKM:</span>
+                        <span className="font-bold text-slate-700 dark:text-slate-300">
+                          {cp.passedCount} Siswa ({cp.passRate}%)
+                        </span>
+                      </div>
+                      <div className="h-2 w-full rounded-full bg-slate-200/70 dark:bg-slate-700/60 overflow-hidden">
+                        <div
+                          style={{ width: `${cp.passRate}%` }}
+                          className={`h-full rounded-full transition-all duration-500 ${
+                            cp.passRate >= 75 ? 'bg-emerald-500' : cp.passRate >= 50 ? 'bg-amber-500' : 'bg-rose-500'
+                          }`}
+                        ></div>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
 
-          {/* TABEL DATA SISWA & ANALISIS SOAL (DENGAN TABS INTERAKTIF) */}
+          {/* TABEL DATA SISWA & ANALISIS SOAL (DENGAN TABS & FILTER INTERAKTIF) */}
           <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-3xl shadow-xs overflow-hidden">
-            {/* Header Tabs */}
-            <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div className="flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setStatsActiveTab('ranking')}
-                  className={`px-3.5 py-2 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
-                    statsActiveTab === 'ranking'
-                      ? 'bg-violet-600 text-white shadow-xs'
-                      : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                  }`}
-                >
-                  <Award className="w-3.5 h-3.5" />
-                  <span>10 Siswa Nilai Tertinggi</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setStatsActiveTab('remedial')}
-                  className={`px-3.5 py-2 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
-                    statsActiveTab === 'remedial'
-                      ? 'bg-rose-600 text-white shadow-xs'
-                      : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                  }`}
-                >
-                  <AlertTriangle className="w-3.5 h-3.5" />
-                  <span>Daftar Siswa Remedial (&lt; 75)</span>
-                  {remedialStudents.length > 0 && (
-                    <span className="px-1.5 py-0.2 rounded-full bg-rose-200 text-rose-900 font-extrabold text-[10px]">
-                      {remedialStudents.length}
+            {/* Header Tabs & Filters */}
+            <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex flex-col gap-4">
+              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+                {/* 3 Nav Tabs */}
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setStatsActiveTab('ranking')}
+                    className={`px-3.5 py-2 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
+                      statsActiveTab === 'ranking'
+                        ? 'bg-violet-600 text-white shadow-xs'
+                        : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                    }`}
+                  >
+                    <Award className="w-3.5 h-3.5" />
+                    <span>Top Siswa Nilai Tertinggi</span>
+                    <span className="px-1.5 py-0.2 rounded-full bg-violet-200 dark:bg-violet-950 text-violet-900 dark:text-violet-200 font-extrabold text-[10px]">
+                      {filteredTopStudents.length}
                     </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setStatsActiveTab('remedial')}
+                    className={`px-3.5 py-2 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
+                      statsActiveTab === 'remedial'
+                        ? 'bg-rose-600 text-white shadow-xs'
+                        : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                    }`}
+                  >
+                    <AlertTriangle className="w-3.5 h-3.5" />
+                    <span>Daftar Siswa Remedial (&lt; 75)</span>
+                    {filteredRemedialStudents.length > 0 && (
+                      <span className="px-1.5 py-0.2 rounded-full bg-rose-200 text-rose-900 font-extrabold text-[10px]">
+                        {filteredRemedialStudents.length}
+                      </span>
+                    )}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setStatsActiveTab('questions')}
+                    className={`px-3.5 py-2 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
+                      statsActiveTab === 'questions'
+                        ? 'bg-violet-600 text-white shadow-xs'
+                        : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                    }`}
+                  >
+                    <SlidersHorizontal className="w-3.5 h-3.5" />
+                    <span>Analisis Butir Soal ({filteredQuestionItemAnalysis.length})</span>
+                  </button>
+                </div>
+
+                {/* Filter & Search Bar */}
+                <div className="flex flex-wrap items-center gap-2">
+                  {/* Dropdown Filter Rombel Kelas */}
+                  <select
+                    value={statsFilterClass}
+                    onChange={(e) => setStatsFilterClass(e.target.value)}
+                    className="px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs font-bold text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-violet-500 cursor-pointer"
+                  >
+                    <option value="Semua Kelas">Semua Kelas</option>
+                    {studentClasses.map(cls => (
+                      <option key={cls} value={cls}>Kelas {cls}</option>
+                    ))}
+                  </select>
+
+                  {/* Input Search */}
+                  <div className="relative">
+                    <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      value={statsSearchQuery}
+                      onChange={(e) => setStatsSearchQuery(e.target.value)}
+                      placeholder={statsActiveTab === 'questions' ? 'Cari teks soal / tipe...' : 'Cari nama siswa...'}
+                      className="pl-8 pr-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500 w-44 sm:w-52"
+                    />
+                    {statsSearchQuery && (
+                      <button
+                        type="button"
+                        onClick={() => setStatsSearchQuery('')}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Reset All Filters Button */}
+                  {(statsFilterClass !== 'Semua Kelas' || statsSearchQuery || statsFilterGrade !== 'all' || statsQuestionCategory !== 'all') && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setStatsFilterClass('Semua Kelas');
+                        setStatsSearchQuery('');
+                        setStatsFilterGrade('all');
+                        setStatsQuestionCategory('all');
+                      }}
+                      className="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-rose-600 dark:text-rose-400 font-bold text-xs hover:bg-rose-50 dark:hover:bg-rose-950/40 transition cursor-pointer"
+                    >
+                      Reset Filter
+                    </button>
                   )}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setStatsActiveTab('questions')}
-                  className={`px-3.5 py-2 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
-                    statsActiveTab === 'questions'
-                      ? 'bg-violet-600 text-white shadow-xs'
-                      : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                  }`}
-                >
-                  <SlidersHorizontal className="w-3.5 h-3.5" />
-                  <span>Analisis Butir Soal ({questionItemAnalysis.length})</span>
-                </button>
+                </div>
               </div>
             </div>
 
-            {/* TAB CONTENT 1: 10 SISWA NILAI TERTINGGI */}
+            {/* TAB CONTENT 1: TOP SISWA NILAI TERTINGGI */}
             {statsActiveTab === 'ranking' && (
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse text-xs">
@@ -2292,14 +2980,14 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium">
-                    {topStudents.length === 0 ? (
+                    {filteredTopStudents.length === 0 ? (
                       <tr>
                         <td colSpan={7} className="p-8 text-center text-slate-400">
-                          Belum ada data nilai siswa terkumpul.
+                          Tidak ada siswa yang sesuai dengan filter yang dipilih.
                         </td>
                       </tr>
                     ) : (
-                      topStudents.map((res, idx) => (
+                      filteredTopStudents.map((res, idx) => (
                         <tr key={res.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition">
                           <td className="py-3 px-4 text-center font-black">
                             {idx === 0 ? '🥇 1' : idx === 1 ? '🥈 2' : idx === 2 ? '🥉 3' : `#${idx + 1}`}
@@ -2350,20 +3038,20 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                       <th className="py-3 px-4 text-center">Nilai Ujian</th>
                       <th className="py-3 px-4 text-center">Poin / Maks</th>
                       <th className="py-3 px-4 text-center">Selisih KKM (75)</th>
-                      <th className="py-3 px-4 text-center">Status</th>
+                      <th className="py-3 px-4 text-center">Tindak Lanjut</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium">
-                    {remedialStudents.length === 0 ? (
+                    {filteredRemedialStudents.length === 0 ? (
                       <tr>
                         <td colSpan={7} className="p-8 text-center text-slate-400">
                           <CheckCircle2 className="w-6 h-6 text-emerald-500 mx-auto mb-1" />
-                          <p className="font-bold text-xs">Seluruh Siswa Tuntas KKM!</p>
-                          <p className="text-[11px]">Tidak ada siswa yang memerlukan program remedial pada paket ini.</p>
+                          <p className="font-bold text-xs text-slate-700 dark:text-slate-300">Seluruh Siswa Tuntas KKM!</p>
+                          <p className="text-[11px]">Tidak ada siswa pada filter ini yang memerlukan program remedial.</p>
                         </td>
                       </tr>
                     ) : (
-                      remedialStudents.map((res, idx) => (
+                      filteredRemedialStudents.map((res, idx) => (
                         <tr key={res.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition">
                           <td className="py-3 px-4 text-center font-bold text-slate-400">{idx + 1}</td>
                           <td className="py-3 px-4 font-bold text-slate-900 dark:text-white uppercase">
@@ -2385,7 +3073,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                           </td>
                           <td className="py-3 px-4 text-center">
                             <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300">
-                              PERLU REMEDIAL
+                              {(res.score || 0) >= 60 ? 'Remedial Tugas' : 'Remedial Pembelajaran'}
                             </span>
                           </td>
                         </tr>
@@ -2412,14 +3100,14 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium">
-                    {questionItemAnalysis.length === 0 ? (
+                    {filteredQuestionItemAnalysis.length === 0 ? (
                       <tr>
                         <td colSpan={7} className="p-8 text-center text-slate-400">
-                          Belum ada butir soal pada mapel ini untuk dianalisis.
+                          Tidak ada butir soal yang sesuai dengan filter.
                         </td>
                       </tr>
                     ) : (
-                      questionItemAnalysis.map((item) => (
+                      filteredQuestionItemAnalysis.map((item) => (
                         <tr key={item.question.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition">
                           <td className="py-3 px-4 text-center font-bold text-slate-400">{item.no}</td>
                           <td className="py-3 px-4">

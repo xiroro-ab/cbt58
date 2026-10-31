@@ -56,3 +56,24 @@ select option {
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(150, 150, 150, 0.5);
 }
+
+/* Styling Khusus Cetak Kertas & Simpan PDF Resmi */
+@media print {
+  body {
+    background-color: #ffffff !important;
+    color: #000000 !important;
+  }
+
+  /* Sembunyikan sidebar, bilah navigasi, scrollbar, dan tombol aksi saat mencetak */
+  aside,
+  nav,
+  button,
+  .print\:hidden {
+    display: none !important;
+  }
+
+  @page {
+    margin: 1.2cm;
+    size: auto;
+  }
+}

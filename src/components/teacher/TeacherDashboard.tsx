@@ -6,6 +6,7 @@ import { NavItem } from '../layout/Sidebar';
 import { useLanguage } from '@/context/LanguageContext';
 import { StudentManagement } from './StudentManagement';
 import { AiQuestionGeneratorModal } from './AiQuestionGeneratorModal';
+import { extractSubjectAndGrade } from '@/lib/aiQuestionGenerator';
 import { evaluateFullExam, calculateSingleQuestionScore } from '@/lib/scoringEngine';
 import { sendProctorCommand, subscribeToLiveSessions, removeStudentSession, broadcastAnnouncementToStudents } from '@/lib/liveMonitoringService';
 import { clearStudentAutolockInSupabase, insertMessage } from '@/lib/supabaseService';
@@ -1642,6 +1643,20 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   const [selectedDocType, setSelectedDocType] = useState<'bap' | 'attendance' | 'cards' | 'ledger'>('bap');
   const [selectedDocClass, setSelectedDocClass] = useState<string>('Semua Kelas');
   const [selectedDocSubjectId, setSelectedDocSubjectId] = useState<string>('');
+
+  const selectedDocSubject = useMemo(() => {
+    const targetId = selectedDocSubjectId || currentBankSubject?.id || subject.id;
+    return (allSubjects || []).find(s => s.id === targetId) || currentBankSubject || subject;
+  }, [selectedDocSubjectId, currentBankSubject, allSubjects, subject]);
+
+  const docResults = useMemo(() => {
+    return results.filter(r => r.subjectId === selectedDocSubject.id);
+  }, [results, selectedDocSubject.id]);
+
+  const docTargetClasses = useMemo(() => {
+    if (!selectedDocSubject.className) return [];
+    return selectedDocSubject.className.split(',').map(c => c.trim().toLowerCase()).filter(Boolean);
+  }, [selectedDocSubject.className]);
 
   const availableClasses = useMemo(() => {
     const set = new Set<string>();
@@ -4243,17 +4258,17 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                   <div className="grid grid-cols-2 gap-y-2 gap-x-6 p-4 rounded-xl bg-slate-50 border border-slate-200">
                     <div>
                       <span className="text-slate-500 block text-[11px]">Mata Pelajaran:</span>
-                      <strong className="text-sm font-bold text-slate-900">{currentBankSubject.title}</strong>
+                      <strong className="text-sm font-bold text-slate-900">{selectedDocSubject.title}</strong>
                     </div>
                     <div>
                       <span className="text-slate-500 block text-[11px]">Rombongan Belajar / Kelas:</span>
                       <strong className="text-sm font-bold text-slate-900">
-                        {selectedDocClass === 'Semua Kelas' ? (currentBankSubject.className || 'Semua Kelas') : selectedDocClass}
+                        {selectedDocClass === 'Semua Kelas' ? (selectedDocSubject.className || 'Semua Kelas') : selectedDocClass}
                       </strong>
                     </div>
                     <div>
                       <span className="text-slate-500 block text-[11px]">Durasi Ujian / Token Rilis:</span>
-                      <strong className="text-sm font-bold text-slate-900">{currentBankSubject.durationMinutes} Menit • Token: {currentBankSubject.token}</strong>
+                      <strong className="text-sm font-bold text-slate-900">{selectedDocSubject.durationMinutes} Menit • Token: {selectedDocSubject.token}</strong>
                     </div>
                     <div>
                       <span className="text-slate-500 block text-[11px]">Ruang / Laboratorium:</span>
@@ -4276,16 +4291,16 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                         <span className="block text-[11px] text-emerald-700">Hadir & Mengerjakan</span>
                         <strong className="text-base font-bold text-emerald-800">
                           {selectedDocClass === 'Semua Kelas'
-                            ? results.length
-                            : results.filter(r => r.className === selectedDocClass).length} Siswa
+                            ? docResults.length
+                            : docResults.filter(r => resolveStudentSingleClass(r.studentName, r.className, students) === selectedDocClass).length} Siswa
                         </strong>
                       </div>
                       <div className="p-3 border border-slate-200 rounded-lg bg-rose-50/50">
                         <span className="block text-[11px] text-rose-700">Tidak Hadir / Izin</span>
                         <strong className="text-base font-bold text-rose-800">
                           {Math.max(0, (selectedDocClass === 'Semua Kelas'
-                            ? (students?.length || 0) - results.length
-                            : (students?.filter(s => s.className === selectedDocClass).length || 0) - results.filter(r => r.className === selectedDocClass).length))} Siswa
+                            ? (students?.length || 0) - docResults.length
+                            : (students?.filter(s => s.className === selectedDocClass).length || 0) - docResults.filter(r => resolveStudentSingleClass(r.studentName, r.className, students) === selectedDocClass).length))} Siswa
                         </strong>
                       </div>
                     </div>
@@ -4336,7 +4351,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                     DAFTAR HADIR PESERTA ASESMEN SUMATIF
                   </h3>
                   <p className="text-xs text-slate-600">
-                    Mata Pelajaran: <strong>{currentBankSubject.title}</strong> • Rombel: <strong>{selectedDocClass}</strong>
+                    Mata Pelajaran: <strong>{selectedDocSubject.title}</strong> • Rombel: <strong>{selectedDocClass}</strong>
                   </p>
                 </div>
 
@@ -4354,10 +4369,13 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                     </thead>
                     <tbody className="divide-y divide-slate-300">
                       {(students || [])
-                        .filter(s => selectedDocClass === 'Semua Kelas' || s.className === selectedDocClass)
-                        .slice(0, 35)
+                        .filter(s => {
+                          if (selectedDocClass !== 'Semua Kelas') return s.className === selectedDocClass;
+                          return docTargetClasses.length === 0 || docTargetClasses.includes(s.className.toLowerCase());
+                        })
+                        .slice(0, 45)
                         .map((std, idx) => {
-                          const hasSubmitted = results.some(r => r.studentName.toLowerCase() === std.name.toLowerCase());
+                          const hasSubmitted = docResults.some(r => r.studentName.toLowerCase().trim() === std.name.toLowerCase().trim());
                           return (
                             <tr key={std.id} className="border-b border-slate-300">
                               <td className="py-2 px-3 text-center font-bold border-r border-slate-900">{idx + 1}</td>
@@ -4366,7 +4384,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                               <td className="py-2 px-3 border-r border-slate-900 text-center">{std.className}</td>
                               <td className="py-2 px-3 border-r border-slate-900 text-center font-semibold">
                                 {hasSubmitted ? (
-                                  <span className="text-emerald-700">Hadir / Selesai</span>
+                                  <span className="text-emerald-700 font-bold">Hadir / Selesai</span>
                                 ) : (
                                   <span className="text-slate-400">Belum Submit</span>
                                 )}
@@ -4404,16 +4422,19 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                     KARTU PESERTA ASESMEN SUMATIF TAHUN 2026
                   </h3>
                   <p className="text-xs text-slate-600">
-                    SMP Negeri 58 Palembang • Rombel: <strong>{selectedDocClass}</strong>
+                    SMP Negeri 58 Palembang • Mata Pelajaran: <strong>{selectedDocSubject.title}</strong> • Rombel: <strong>{selectedDocClass}</strong>
                   </p>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
                   {(students || [])
-                    .filter(s => selectedDocClass === 'Semua Kelas' || s.className === selectedDocClass)
-                    .slice(0, 12)
+                    .filter(s => {
+                      if (selectedDocClass !== 'Semua Kelas') return s.className === selectedDocClass;
+                      return docTargetClasses.length === 0 || docTargetClasses.includes(s.className.toLowerCase());
+                    })
+                    .slice(0, 24)
                     .map((std, idx) => (
-                      <div key={std.id} className="p-4 border-2 border-slate-900 rounded-xl space-y-3 bg-white text-xs">
+                      <div key={std.id} className="p-4 border-2 border-slate-900 rounded-xl space-y-3 bg-white text-xs print:break-inside-avoid">
                         <div className="flex items-center justify-between border-b border-slate-900 pb-2">
                           <div className="flex items-center gap-2">
                             <div className="w-7 h-7 rounded-full bg-slate-900 text-white font-bold flex items-center justify-center text-[10px]">
@@ -4444,7 +4465,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                             </div>
                             <div>
                               <span className="text-[10px] text-slate-500 block">Token Sesi Ujian:</span>
-                              <span className="font-mono font-bold text-violet-700 bg-violet-50 px-1 rounded">{currentBankSubject.token}</span>
+                              <span className="font-mono font-bold text-violet-700 bg-violet-50 px-1 rounded">{selectedDocSubject.token}</span>
                             </div>
                           </div>
                         </div>
@@ -4467,7 +4488,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                     LEGER HASIL ASESMEN SUMATIF RESMI
                   </h3>
                   <p className="text-xs text-slate-600">
-                    Mata Pelajaran: <strong>{currentBankSubject.title}</strong> • Standar KKM: <strong>75</strong> • Rombel: <strong>{selectedDocClass}</strong>
+                    Mata Pelajaran: <strong>{selectedDocSubject.title}</strong> • Standar KKM: <strong>75</strong> • Rombel: <strong>{selectedDocClass}</strong>
                   </p>
                 </div>
 
@@ -4485,8 +4506,8 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-300">
-                      {results
-                        .filter(r => selectedDocClass === 'Semua Kelas' || r.className === selectedDocClass)
+                      {docResults
+                        .filter(r => selectedDocClass === 'Semua Kelas' || resolveStudentSingleClass(r.studentName, r.className, students) === selectedDocClass)
                         .map((res, idx) => {
                           const pred = res.score >= 90 ? 'A' : res.score >= 75 ? 'B' : res.score >= 60 ? 'C' : 'D';
                           const isPass = res.score >= 75;
@@ -4508,10 +4529,10 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                             </tr>
                           );
                         })}
-                      {results.filter(r => selectedDocClass === 'Semua Kelas' || r.className === selectedDocClass).length === 0 && (
+                      {docResults.filter(r => selectedDocClass === 'Semua Kelas' || resolveStudentSingleClass(r.studentName, r.className, students) === selectedDocClass).length === 0 && (
                         <tr>
                           <td colSpan={7} className="py-8 text-center text-slate-400">
-                            Belum ada lembar nilai untuk rombel ini.
+                            Belum ada lembar nilai untuk rombel ini pada mata pelajaran {selectedDocSubject.title}.
                           </td>
                         </tr>
                       )}
@@ -6021,401 +6042,464 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
       {/* ============================================================== */}
       {/* 8. MODAL DETAIL NILAI SISWA (DOSSIER & PENILAIAN MANUAL ESAI)    */}
       {/* ============================================================== */}
-      {selectedResult && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
-          {/* FLOATING SUCCESS TOAST KOREKSI NILAI URAIAN */}
-          {dossierSuccessToast && (
-            <div className="fixed top-6 left-1/2 -translate-x-1/2 z-[60] px-5 py-3 rounded-2xl bg-emerald-600 text-white font-extrabold text-xs shadow-2xl flex items-center gap-2.5 animate-in slide-in-from-top-4 border border-emerald-400/30">
-              <CheckCircle2 className="w-5 h-5 text-white flex-shrink-0" />
-              <span>{dossierSuccessToast}</span>
-            </div>
-          )}
+      {selectedResult && (() => {
+        const cleanDossierClass = resolveStudentSingleClass(selectedResult.studentName, selectedResult.className, students);
+        const dossierStudentObj = (students || []).find(
+          s => s.name.toLowerCase().trim() === selectedResult.studentName.toLowerCase().trim()
+        );
+        const dossierNisn = dossierStudentObj?.nisn || '-';
+        const rawDossierSubjectTitle = selectedResult.subjectTitle || dossierSubject.title || 'Mata Pelajaran Ujian';
+        const cleanDossierSubjectName = extractSubjectAndGrade(rawDossierSubjectTitle, cleanDossierClass).cleanSubject || rawDossierSubjectTitle;
 
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-3xl w-full max-h-[90vh] overflow-y-auto p-5 sm:p-7 space-y-5 shadow-2xl animate-in zoom-in-95">
-            {/* DOSSIER HEADER */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-800 pb-4">
-              <div className="space-y-1">
-                <div className="flex items-center gap-2">
-                  <span className="px-2.5 py-0.5 rounded-full bg-violet-50 dark:bg-violet-950/60 text-violet-700 dark:text-violet-300 font-bold text-[10px] border border-violet-200/60 dark:border-violet-800/60">
-                    Lembar Rekapan Ujian Siswa
-                  </span>
-                  {selectedResult.violationCount > 0 && (
-                    <span className="px-2.5 py-0.5 rounded-full bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 font-bold text-[10px] border border-rose-200 dark:border-rose-900">
-                      {selectedResult.violationCount}x Pelanggaran
+        return (
+          <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 print:static print:z-auto print:bg-white print:p-0 print:block">
+            {/* FLOATING SUCCESS TOAST KOREKSI NILAI URAIAN */}
+            {dossierSuccessToast && (
+              <div className="fixed top-6 left-1/2 -translate-x-1/2 z-[60] px-5 py-3 rounded-2xl bg-emerald-600 text-white font-extrabold text-xs shadow-2xl flex items-center gap-2.5 animate-in slide-in-from-top-4 border border-emerald-400/30 print:hidden">
+                <CheckCircle2 className="w-5 h-5 text-white flex-shrink-0" />
+                <span>{dossierSuccessToast}</span>
+              </div>
+            )}
+
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-3xl w-full max-h-[90vh] overflow-y-auto p-5 sm:p-7 space-y-5 shadow-2xl animate-in zoom-in-95 print:border-none print:shadow-none print:max-w-none print:max-h-none print:overflow-visible print:p-0 print:bg-white print:text-black">
+              {/* KOP SURAT RESMI KHUSUS CETAK DOSSIER */}
+              <div className="hidden print:block border-b-4 border-double border-slate-900 pb-3 mb-4 text-center">
+                <div className="flex items-center justify-between gap-4">
+                  <div className="w-14 h-14 flex-shrink-0 flex items-center justify-center border-2 border-slate-900 rounded-full font-sans font-bold text-xs">
+                    SMPN 58
+                  </div>
+                  <div className="flex-1 space-y-0.5">
+                    <h4 className="text-xs font-semibold uppercase tracking-wider font-sans">
+                      Pemerintah Kota Palembang • Dinas Pendidikan
+                    </h4>
+                    <h2 className="text-lg font-black tracking-wide font-sans text-slate-900">
+                      SMP NEGERI 58 PALEMBANG
+                    </h2>
+                    <p className="text-[10px] font-sans text-slate-700">
+                      LEMBAR JAWABAN & HASIL ASESMEN SUMATIF SISWA (CBT)
+                    </p>
+                    <p className="text-[9px] font-sans text-slate-600">
+                      Jl. Pangeran Ratu, Jakabaring, Kec. Seberang Ulu I, Kota Palembang, Sumatera Selatan 30257
+                    </p>
+                  </div>
+                  <div className="w-14 h-14 flex-shrink-0 flex items-center justify-center border-2 border-slate-900 rounded-lg font-sans font-black text-xs">
+                    CBT v2
+                  </div>
+                </div>
+              </div>
+
+              {/* DOSSIER HEADER */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-800 print:border-slate-300 pb-4">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2 print:hidden">
+                    <span className="px-2.5 py-0.5 rounded-full bg-violet-50 dark:bg-violet-950/60 text-violet-700 dark:text-violet-300 font-bold text-[10px] border border-violet-200/60 dark:border-violet-800/60">
+                      Lembar Rekapan Ujian Siswa
                     </span>
+                    {selectedResult.violationCount > 0 && (
+                      <span className="px-2.5 py-0.5 rounded-full bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 font-bold text-[10px] border border-rose-200 dark:border-rose-900">
+                        {selectedResult.violationCount}x Pelanggaran
+                      </span>
+                    )}
+                  </div>
+                  <h3 className="font-extrabold text-slate-900 dark:text-white print:text-black text-lg sm:text-xl">
+                    {selectedResult.studentName}
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 print:text-slate-700">
+                    NISN: <strong className="text-slate-800 dark:text-slate-200 print:text-black font-mono">{dossierNisn}</strong> • Kelas: <strong className="text-slate-800 dark:text-slate-200 print:text-black">{cleanDossierClass}</strong> • Mapel: <strong className="text-slate-800 dark:text-slate-200 print:text-black">{cleanDossierSubjectName}</strong> • Waktu Kumpul: <strong className="text-slate-800 dark:text-slate-200 print:text-black">{selectedResult.submittedAt}</strong>
+                  </p>
+                  {rawDossierSubjectTitle !== cleanDossierSubjectName && (
+                    <p className="text-[11px] text-slate-400 print:text-slate-600">
+                      Paket Ujian: {rawDossierSubjectTitle}
+                    </p>
                   )}
                 </div>
-                <h3 className="font-extrabold text-slate-900 dark:text-white text-lg sm:text-xl">
-                  {selectedResult.studentName}
-                </h3>
-                <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Kelas: <strong className="text-slate-700 dark:text-slate-300">{selectedResult.className}</strong> • Mapel: <strong className="text-slate-700 dark:text-slate-300">{formatSubjectTitle(selectedResult.subjectTitle || dossierSubject.title)}</strong> • Waktu Kumpul: <strong className="text-slate-700 dark:text-slate-300">{selectedResult.submittedAt}</strong>
-                </p>
+
+                {/* KOTAK SKOR AKHIR */}
+                <div className="flex items-center sm:flex-col sm:items-end justify-between bg-violet-50 dark:bg-violet-950/50 print:bg-slate-100 border border-violet-200/80 dark:border-violet-800/80 print:border-slate-300 p-3.5 rounded-2xl min-w-[140px]">
+                  <span className="text-[11px] font-bold text-violet-600 dark:text-violet-300 print:text-slate-900 uppercase tracking-wider">
+                    Skor Akhir
+                  </span>
+                  <p className="text-3xl font-black text-violet-700 dark:text-violet-300 print:text-slate-900">
+                    {liveDossierEval ? liveDossierEval.finalScore : selectedResult.score}%
+                  </p>
+                  <span className="text-[10px] text-slate-500 print:text-slate-700 font-medium">
+                    Poin: {liveDossierEval ? liveDossierEval.totalEarned : selectedResult.totalEarned} / {liveDossierEval ? liveDossierEval.totalMax : selectedResult.totalMax}
+                  </span>
+                </div>
               </div>
 
-              {/* KOTAK SKOR AKHIR */}
-              <div className="flex items-center sm:flex-col sm:items-end justify-between bg-violet-50 dark:bg-violet-950/50 border border-violet-200/80 dark:border-violet-800/80 p-3.5 rounded-2xl min-w-[140px]">
-                <span className="text-[11px] font-bold text-violet-600 dark:text-violet-300 uppercase tracking-wider">
-                  Skor Akhir
-                </span>
-                <p className="text-3xl font-black text-violet-700 dark:text-violet-300">
-                  {liveDossierEval ? liveDossierEval.finalScore : selectedResult.score}%
-                </p>
-                <span className="text-[10px] text-slate-500 font-medium">
-                  Poin: {liveDossierEval ? liveDossierEval.totalEarned : selectedResult.totalEarned} / {liveDossierEval ? liveDossierEval.totalMax : selectedResult.totalMax}
-                </span>
-              </div>
-            </div>
+              {/* NOTIFIKASI MAX POINTS WARNING */}
+              {essayMaxNotice && (
+                <div className="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 rounded-xl text-xs font-semibold flex items-center justify-between animate-in fade-in print:hidden">
+                  <span>{essayMaxNotice}</span>
+                  <button onClick={() => setEssayMaxNotice(null)} className="text-rose-500 font-bold ml-2">✕</button>
+                </div>
+              )}
 
-            {/* NOTIFIKASI MAX POINTS WARNING */}
-            {essayMaxNotice && (
-              <div className="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 rounded-xl text-xs font-semibold flex items-center justify-between animate-in fade-in">
-                <span>{essayMaxNotice}</span>
-                <button onClick={() => setEssayMaxNotice(null)} className="text-rose-500 font-bold ml-2">✕</button>
-              </div>
-            )}
+              {/* NOTIFIKASI SUKSES SIMPAN NILAI */}
+              {essaySavedNotice && (
+                <div className="p-3 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 rounded-xl text-xs font-semibold flex items-center gap-2 animate-in fade-in print:hidden">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                  <span>Nilai uraian berhasil disimpan! Skor akhir siswa telah diperbarui ke sistem dan database.</span>
+                </div>
+              )}
 
-            {/* NOTIFIKASI SUKSES SIMPAN NILAI */}
-            {essaySavedNotice && (
-              <div className="p-3 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 rounded-xl text-xs font-semibold flex items-center gap-2 animate-in fade-in">
-                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                <span>Nilai uraian berhasil disimpan! Skor akhir siswa telah diperbarui ke sistem dan database.</span>
-              </div>
-            )}
+              {/* DAFTAR BUTIR SOAL & JAWABAN SISWA */}
+              <div className="space-y-4 pt-1">
+                <div className="flex items-center justify-between pb-1 print:border-b print:border-slate-300 print:pb-2">
+                  <h4 className="font-bold text-xs uppercase tracking-wider text-slate-500 print:text-slate-900">
+                    Rincian Jawaban Siswa ({dossierQuestions.length} Butir Soal)
+                  </h4>
+                  <span className="text-[11px] text-slate-400 print:text-slate-600">
+                    Periksa kunci & evaluasi lembar jawaban
+                  </span>
+                </div>
 
-            {/* DAFTAR BUTIR SOAL & JAWABAN SISWA */}
-            <div className="space-y-4 pt-1">
-              <div className="flex items-center justify-between pb-1">
-                <h4 className="font-bold text-xs uppercase tracking-wider text-slate-500">
-                  Rincian Jawaban Siswa ({dossierQuestions.length} Butir Soal)
-                </h4>
-                <span className="text-[11px] text-slate-400">
-                  Periksa kunci & masukkan nilai esai secara manual
-                </span>
-              </div>
+                {dossierQuestions.map((q, qIdx) => {
+                  const maxPoints = (dossierSubject.scoringRules as any)?.[q.type] || 1;
+                  const studentAnswerItem = (selectedResult.answers || []).find(a => a.questionId === q.id);
+                  const rawStudentAns = studentAnswerItem ? studentAnswerItem.answer : null;
+                  const isEssay = q.type === 'Esai';
 
-              {dossierQuestions.map((q, qIdx) => {
-                const maxPoints = (dossierSubject.scoringRules as any)?.[q.type] || 1;
-                const studentAnswerItem = (selectedResult.answers || []).find(a => a.questionId === q.id);
-                const rawStudentAns = studentAnswerItem ? studentAnswerItem.answer : null;
-                const isEssay = q.type === 'Esai';
+                  let earned = 0;
+                  if (isEssay) {
+                    earned = Math.min(manualEssayScores[q.id] || 0, maxPoints);
+                  } else {
+                    earned = calculateSingleQuestionScore(q, rawStudentAns, maxPoints);
+                  }
 
-                let earned = 0;
-                if (isEssay) {
-                  earned = Math.min(manualEssayScores[q.id] || 0, maxPoints);
-                } else {
-                  earned = calculateSingleQuestionScore(q, rawStudentAns, maxPoints);
-                }
+                  const isFull = earned === maxPoints;
+                  const isPartial = earned > 0 && earned < maxPoints;
 
-                const isFull = earned === maxPoints;
-                const isPartial = earned > 0 && earned < maxPoints;
-
-                return (
-                  <div
-                    key={q.id || qIdx}
-                    className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700/80 text-xs space-y-2.5"
-                  >
-                    <div className="flex items-center justify-between flex-wrap gap-2">
-                      <div className="flex items-center gap-2">
-                        <span className="font-extrabold text-violet-600 dark:text-violet-400 text-sm">
-                          Soal #{qIdx + 1}
-                        </span>
-                        <span className="px-2 py-0.5 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-semibold text-[10px]">
-                          {q.type}
-                        </span>
-                        <span className="px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 font-bold text-[10px] border border-slate-200 dark:border-slate-700">
-                          Bobot Maksimal: {maxPoints} Poin
-                        </span>
-                      </div>
-
-                      {/* BADGE POIN DIDAPAT */}
-                      <div>
-                        {isEssay ? (
-                          <span className="px-2.5 py-0.5 rounded-full bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 font-bold text-[11px] border border-amber-200 dark:border-amber-800">
-                            Diperoleh: {earned} / {maxPoints} Poin
+                  return (
+                    <div
+                      key={q.id || qIdx}
+                      className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/40 print:bg-white border border-slate-200 dark:border-slate-700/80 print:border-slate-300 text-xs space-y-2.5 print:break-inside-avoid print:shadow-none"
+                    >
+                      <div className="flex items-center justify-between flex-wrap gap-2">
+                        <div className="flex items-center gap-2">
+                          <span className="font-extrabold text-violet-600 dark:text-violet-400 print:text-slate-900 text-sm">
+                            Soal #{qIdx + 1}
                           </span>
-                        ) : (
-                          <span
-                            className={`px-2.5 py-0.5 rounded-full font-bold text-[11px] border ${
-                              isFull
-                                ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
-                                : isPartial
-                                ? 'bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800'
-                                : 'bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-900'
-                            }`}
-                          >
-                            Poin: {earned} / {maxPoints}
+                          <span className="px-2 py-0.5 rounded-full bg-slate-200 dark:bg-slate-700 print:bg-slate-100 text-slate-700 dark:text-slate-300 print:text-slate-800 font-semibold text-[10px]">
+                            {q.type}
                           </span>
-                        )}
+                          <span className="px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 print:bg-slate-50 text-slate-500 print:text-slate-700 font-bold text-[10px] border border-slate-200 dark:border-slate-700 print:border-slate-300">
+                            Bobot Maksimal: {maxPoints} Poin
+                          </span>
+                        </div>
+
+                        {/* BADGE POIN DIDAPAT */}
+                        <div>
+                          {isEssay ? (
+                            <span className="px-2.5 py-0.5 rounded-full bg-amber-50 dark:bg-amber-950/60 print:bg-slate-100 text-amber-700 dark:text-amber-300 print:text-slate-900 font-bold text-[11px] border border-amber-200 dark:border-amber-800 print:border-slate-300">
+                              Diperoleh: {earned} / {maxPoints} Poin
+                            </span>
+                          ) : (
+                            <span
+                              className={`px-2.5 py-0.5 rounded-full font-bold text-[11px] border ${
+                                isFull
+                                  ? 'bg-emerald-50 dark:bg-emerald-950/60 print:bg-emerald-50 text-emerald-700 dark:text-emerald-300 print:text-emerald-800 border-emerald-200 dark:border-emerald-800 print:border-emerald-300'
+                                  : isPartial
+                                  ? 'bg-amber-50 dark:bg-amber-950/60 print:bg-amber-50 text-amber-700 dark:text-amber-300 print:text-amber-800 border-amber-200 dark:border-amber-800 print:border-amber-300'
+                                  : 'bg-rose-50 dark:bg-rose-950/60 print:bg-rose-50 text-rose-700 dark:text-rose-300 print:text-rose-800 border-rose-200 dark:border-rose-900 print:border-rose-300'
+                              }`}
+                            >
+                              Poin: {earned} / {maxPoints}
+                            </span>
+                          )}
+                        </div>
                       </div>
-                    </div>
 
-                    {/* TEKS SOAL */}
-                    <p className="text-slate-800 dark:text-slate-200 font-medium leading-relaxed whitespace-pre-wrap">
-                      {q.questionText}
-                    </p>
+                      {/* TEKS SOAL */}
+                      <p className="text-slate-800 dark:text-slate-200 print:text-black font-medium leading-relaxed whitespace-pre-wrap">
+                        {q.questionText}
+                      </p>
 
-                    {/* MEDIA URL / GAMBAR SOAL JIKA ADA */}
-                    {q.mediaUrl && (
-                      <div className="pt-1">
-                        <img
-                          src={q.mediaUrl}
-                          alt="Media Soal"
-                          className="max-h-48 rounded-xl border border-slate-200 dark:border-slate-700 object-contain block bg-white dark:bg-slate-950 p-1"
-                        />
-                      </div>
-                    )}
+                      {/* MEDIA URL / GAMBAR SOAL JIKA ADA */}
+                      {q.mediaUrl && (
+                        <div className="pt-1">
+                          <img
+                            src={q.mediaUrl}
+                            alt="Media Soal"
+                            className="max-h-48 rounded-xl border border-slate-200 dark:border-slate-700 print:border-slate-300 object-contain block bg-white dark:bg-slate-950 print:bg-white p-1"
+                          />
+                        </div>
+                      )}
 
-                    {/* REVIEW JAWABAN SISWA VS KUNCI GURU */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-                      {/* JAWABAN SISWA */}
-                      <div className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-1.5">
-                        <span className="text-[10px] font-bold uppercase text-slate-400 block tracking-wider">
-                          Jawaban Siswa:
-                        </span>
-                        <div className="text-slate-800 dark:text-slate-100 font-semibold break-words">
-                          {(() => {
-                            if (rawStudentAns === null || rawStudentAns === undefined || rawStudentAns === '') {
-                              return <span className="text-rose-500 italic font-normal">(Tidak dijawab)</span>;
-                            }
-                            if (Array.isArray(rawStudentAns)) {
-                              if (rawStudentAns.length === 0) return <span className="text-rose-500 italic font-normal">(Tidak dijawab)</span>;
-                              if (typeof rawStudentAns[0] === 'object' && rawStudentAns[0] !== null) {
+                      {/* REVIEW JAWABAN SISWA VS KUNCI GURU */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                        {/* JAWABAN SISWA */}
+                        <div className="p-3 rounded-xl bg-white dark:bg-slate-900 print:bg-slate-50 border border-slate-200 dark:border-slate-800 print:border-slate-300 space-y-1.5">
+                          <span className="text-[10px] font-bold uppercase text-slate-400 print:text-slate-600 block tracking-wider">
+                            Jawaban Siswa:
+                          </span>
+                          <div className="text-slate-800 dark:text-slate-100 print:text-black font-semibold break-words">
+                            {(() => {
+                              if (rawStudentAns === null || rawStudentAns === undefined || rawStudentAns === '') {
+                                return <span className="text-rose-500 italic font-normal">(Tidak dijawab)</span>;
+                              }
+                              if (Array.isArray(rawStudentAns)) {
+                                if (rawStudentAns.length === 0) return <span className="text-rose-500 italic font-normal">(Tidak dijawab)</span>;
+                                if (typeof rawStudentAns[0] === 'object' && rawStudentAns[0] !== null) {
+                                  return (
+                                    <div className="flex flex-wrap gap-1.5">
+                                      {rawStudentAns.map((item: any, idx: number) => {
+                                        const left = item.questionItem || item.qText || item.q || `Item ${idx + 1}`;
+                                        const right = item.answerItem || item.aText || item.a || '-';
+                                        return (
+                                          <span key={idx} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-violet-50 dark:bg-violet-950/50 print:bg-white text-violet-700 dark:text-violet-300 print:text-black border border-violet-200 dark:border-violet-800 print:border-slate-300 text-xs font-bold">
+                                            <span>{left}</span>
+                                            <span className="text-slate-400">➔</span>
+                                            <span className="text-slate-900 dark:text-white print:text-black">{right}</span>
+                                          </span>
+                                        );
+                                      })}
+                                    </div>
+                                  );
+                                }
                                 return (
                                   <div className="flex flex-wrap gap-1.5">
-                                    {rawStudentAns.map((item: any, idx: number) => {
-                                      const left = item.questionItem || item.qText || item.q || `Item ${idx + 1}`;
-                                      const right = item.answerItem || item.aText || item.a || '-';
-                                      return (
-                                        <span key={idx} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-violet-50 dark:bg-violet-950/50 text-violet-700 dark:text-violet-300 border border-violet-200 dark:border-violet-800 text-xs font-bold">
-                                          <span>{left}</span>
-                                          <span className="text-slate-400">➔</span>
-                                          <span className="text-slate-900 dark:text-white">{right}</span>
-                                        </span>
-                                      );
-                                    })}
+                                    {rawStudentAns.map((item: any, idx: number) => (
+                                      <span key={idx} className="px-2.5 py-0.5 rounded-lg bg-slate-100 dark:bg-slate-800 print:bg-white text-slate-800 dark:text-slate-200 print:text-black font-bold border border-slate-200 dark:border-slate-700 print:border-slate-300 text-xs">
+                                        {typeof item === 'object' ? JSON.stringify(item) : String(item)}
+                                      </span>
+                                    ))}
                                   </div>
                                 );
                               }
-                              return (
-                                <div className="flex flex-wrap gap-1.5">
-                                  {rawStudentAns.map((item: any, idx: number) => (
-                                    <span key={idx} className="px-2.5 py-0.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 font-bold border border-slate-200 dark:border-slate-700 text-xs">
-                                      {typeof item === 'object' ? JSON.stringify(item) : String(item)}
+                              const objAns = rawStudentAns as any;
+                              if (typeof objAns === 'object' && objAns !== null) {
+                                if (objAns.questionItem || objAns.answerItem) {
+                                  return (
+                                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-violet-50 dark:bg-violet-950/50 print:bg-white text-violet-700 dark:text-violet-300 print:text-black border border-violet-200 dark:border-violet-800 print:border-slate-300 text-xs font-bold">
+                                      <span>{objAns.questionItem}</span>
+                                      <span className="text-slate-400">➔</span>
+                                      <span className="text-slate-900 dark:text-white print:text-black">{objAns.answerItem}</span>
                                     </span>
-                                  ))}
-                                </div>
-                              );
-                            }
-                            const objAns = rawStudentAns as any;
-                            if (typeof objAns === 'object' && objAns !== null) {
-                              if (objAns.questionItem || objAns.answerItem) {
+                                  );
+                                }
+                                return <span>{JSON.stringify(objAns)}</span>;
+                              }
+                              return <span>{String(rawStudentAns)}</span>;
+                            })()}
+                          </div>
+                        </div>
+
+                        {/* KUNCI REFERENSI GURU */}
+                        <div className="p-3 rounded-xl bg-emerald-50/60 dark:bg-emerald-950/30 print:bg-slate-50 border border-emerald-200/80 dark:border-emerald-800/60 print:border-slate-300 space-y-1.5">
+                          <span className="text-[10px] font-bold uppercase text-emerald-600 dark:text-emerald-400 print:text-slate-600 block tracking-wider">
+                            {isEssay ? 'Kunci / Rubrik Referensi Guru:' : 'Kunci Jawaban Benar:'}
+                          </span>
+                          <div className="text-emerald-950 dark:text-emerald-200 print:text-black font-semibold break-words">
+                            {(() => {
+                              if (q.answer === null || q.answer === undefined || q.answer === '') {
+                                return <span className="italic text-slate-400 font-normal">(Belum ditentukan kunci)</span>;
+                              }
+                              if (Array.isArray(q.answer)) {
                                 return (
-                                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-violet-50 dark:bg-violet-950/50 text-violet-700 dark:text-violet-300 border border-violet-200 dark:border-violet-800 text-xs font-bold">
-                                    <span>{objAns.questionItem}</span>
-                                    <span className="text-slate-400">➔</span>
-                                    <span className="text-slate-900 dark:text-white">{objAns.answerItem}</span>
-                                  </span>
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {q.answer.map((item: any, idx: number) => (
+                                      <span key={idx} className="px-2.5 py-0.5 rounded-lg bg-emerald-100 dark:bg-emerald-950 print:bg-white text-emerald-800 dark:text-emerald-200 print:text-black font-bold border border-emerald-300 dark:border-emerald-800 print:border-slate-300 text-xs">
+                                        {typeof item === 'object' ? JSON.stringify(item) : String(item)}
+                                      </span>
+                                    ))}
+                                  </div>
                                 );
                               }
-                              return <span>{JSON.stringify(objAns)}</span>;
-                            }
-                            return <span>{String(rawStudentAns)}</span>;
-                          })()}
+                              if (typeof q.answer === 'object' && q.answer !== null) {
+                                return <span>{JSON.stringify(q.answer)}</span>;
+                              }
+                              return <span>{String(q.answer)}</span>;
+                            })()}
+                          </div>
                         </div>
                       </div>
 
-                      {/* KUNCI REFERENSI GURU */}
-                      <div className="p-3 rounded-xl bg-emerald-50/60 dark:bg-emerald-950/30 border border-emerald-200/80 dark:border-emerald-800/60 space-y-1.5">
-                        <span className="text-[10px] font-bold uppercase text-emerald-600 dark:text-emerald-400 block tracking-wider">
-                          {isEssay ? 'Kunci / Rubrik Referensi Guru:' : 'Kunci Jawaban Benar:'}
-                        </span>
-                        <div className="text-emerald-950 dark:text-emerald-200 font-semibold break-words">
-                          {(() => {
-                            if (q.answer === null || q.answer === undefined || q.answer === '') {
-                              return <span className="italic text-slate-400 font-normal">(Belum ditentukan kunci)</span>;
-                            }
-                            if (Array.isArray(q.answer)) {
-                              return (
-                                <div className="flex flex-wrap gap-1.5">
-                                  {q.answer.map((item: any, idx: number) => (
-                                    <span key={idx} className="px-2.5 py-0.5 rounded-lg bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-200 font-bold border border-emerald-300 dark:border-emerald-800 text-xs">
-                                      {typeof item === 'object' ? JSON.stringify(item) : String(item)}
-                                    </span>
-                                  ))}
-                                </div>
-                              );
-                            }
-                            if (typeof q.answer === 'object' && q.answer !== null) {
-                              return <span>{JSON.stringify(q.answer)}</span>;
-                            }
-                            return <span>{String(q.answer)}</span>;
-                          })()}
+                      {/* KHUSUS SOAL ESAI: INPUT PENILAIAN MANUAL GURU */}
+                      {isEssay && (
+                        <div className="p-3.5 rounded-xl bg-amber-50/80 dark:bg-amber-950/40 print:bg-slate-50 border border-amber-200 dark:border-amber-800/80 print:border-slate-300 mt-2 space-y-2">
+                          <div className="flex items-center gap-2 text-amber-800 dark:text-amber-300 print:text-black font-bold text-xs">
+                            <Edit3 className="w-4 h-4 text-amber-600 print:hidden" />
+                            <span>Penilaian Manual Uraian / Esai:</span>
+                          </div>
+                          <p className="text-[11px] text-amber-700 dark:text-amber-400 print:hidden">
+                            Kunci jawaban di atas hanya sebagai referensi panduan. Masukkan nilai yang diperoleh siswa (tidak boleh lebih dari {maxPoints} Poin).
+                          </p>
+                          <div className="hidden print:block font-bold text-xs text-slate-900">
+                            Nilai Uraian Diberikan: {manualEssayScores[q.id] ?? earned} / {maxPoints} Poin
+                          </div>
+                          <div className="flex items-center gap-3 pt-1 print:hidden">
+                            <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                              Nilai Esai:
+                            </label>
+                            <input
+                              type="number"
+                              min={0}
+                              max={maxPoints}
+                              step="0.5"
+                              value={manualEssayScores[q.id] ?? ''}
+                              placeholder={`0 - ${maxPoints}`}
+                              onChange={(e) => {
+                                const raw = e.target.value;
+                                if (raw === '') {
+                                  const next = { ...manualEssayScores };
+                                  delete next[q.id];
+                                  setManualEssayScores(next);
+                                  return;
+                                }
+                                let val = parseFloat(raw);
+                                if (isNaN(val)) val = 0;
+                                if (val > maxPoints) {
+                                  val = maxPoints;
+                                  setEssayMaxNotice(`Nilai esai pada soal #${qIdx + 1} tidak boleh melebihi bobot maksimal (${maxPoints} Poin). Nilai otomatis disesuaikan menjadi ${maxPoints}.`);
+                                } else {
+                                  setEssayMaxNotice(null);
+                                }
+                                if (val < 0) val = 0;
+                                setManualEssayScores(prev => ({ ...prev, [q.id]: val }));
+                              }}
+                              className="w-28 p-2 rounded-xl bg-white dark:bg-slate-900 border border-amber-300 dark:border-amber-700 text-sm font-black text-center text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+                            />
+                            <span className="text-xs font-semibold text-slate-500">
+                              / Maksimal {maxPoints} Poin
+                            </span>
+                          </div>
                         </div>
-                      </div>
+                      )}
                     </div>
+                  );
+                })}
+              </div>
 
-                    {/* KHUSUS SOAL ESAI: INPUT PENILAIAN MANUAL GURU */}
-                    {isEssay && (
-                      <div className="p-3.5 rounded-xl bg-amber-50/80 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/80 mt-2 space-y-2">
-                        <div className="flex items-center gap-2 text-amber-800 dark:text-amber-300 font-bold text-xs">
-                          <Edit3 className="w-4 h-4 text-amber-600" />
-                          <span>Penilaian Manual Uraian (Wajib Guru Input Bobot yang Didapat Siswa):</span>
-                        </div>
-                        <p className="text-[11px] text-amber-700 dark:text-amber-400">
-                          Kunci jawaban di atas hanya sebagai referensi panduan. Masukkan nilai yang diperoleh siswa (tidak boleh lebih dari {maxPoints} Poin).
-                        </p>
-                        <div className="flex items-center gap-3 pt-1">
-                          <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                            Nilai Esai:
-                          </label>
-                          <input
-                            type="number"
-                            min={0}
-                            max={maxPoints}
-                            step="0.5"
-                            value={manualEssayScores[q.id] ?? ''}
-                            placeholder={`0 - ${maxPoints}`}
-                            onChange={(e) => {
-                              const raw = e.target.value;
-                              if (raw === '') {
-                                const next = { ...manualEssayScores };
-                                delete next[q.id];
-                                setManualEssayScores(next);
-                                return;
-                              }
-                              let val = parseFloat(raw);
-                              if (isNaN(val)) val = 0;
-                              if (val > maxPoints) {
-                                val = maxPoints;
-                                setEssayMaxNotice(`Nilai esai pada soal #${qIdx + 1} tidak boleh melebihi bobot maksimal (${maxPoints} Poin). Nilai otomatis disesuaikan menjadi ${maxPoints}.`);
-                              } else {
-                                setEssayMaxNotice(null);
-                              }
-                              if (val < 0) val = 0;
-                              setManualEssayScores(prev => ({ ...prev, [q.id]: val }));
-                            }}
-                            className="w-28 p-2 rounded-xl bg-white dark:bg-slate-900 border border-amber-300 dark:border-amber-700 text-sm font-black text-center text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
-                          />
-                          <span className="text-xs font-semibold text-slate-500">
-                            / Maksimal {maxPoints} Poin
-                          </span>
-                        </div>
-                      </div>
-                    )}
+              {/* TANDA TANGAN FORMAL LEMBAR HASIL UJIAN (PRINT ONLY) */}
+              <div className="hidden print:grid grid-cols-2 gap-8 pt-8 text-center text-xs font-sans print:break-inside-avoid">
+                <div className="space-y-16">
+                  <p>Siswa Peserta Ujian,</p>
+                  <div>
+                    <strong className="underline block font-bold text-slate-900 uppercase">{selectedResult.studentName}</strong>
+                    <span className="text-[11px] text-slate-600 block">NISN: {dossierNisn}</span>
                   </div>
-                );
-              })}
-            </div>
-
-            {/* DOSSIER FOOTER ACTIONS */}
-            <div className="pt-4 border-t border-slate-100 dark:border-slate-800">
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-                {/* GRUP KIRI: SIMPAN NILAI & RESET */}
-                <div className="flex items-center gap-2 flex-wrap">
-                  <button
-                    onClick={() => {
-                      if (!selectedResult || !liveDossierEval) return;
-                      const updated: ExamResult = {
-                        ...selectedResult,
-                        score: liveDossierEval.finalScore,
-                        totalEarned: liveDossierEval.totalEarned,
-                        totalMax: liveDossierEval.totalMax,
-                        essayScores: manualEssayScores,
-                        details: liveDossierEval.details
-                      };
-                      setSelectedResult(updated);
-                      if (onUpdateResult) {
-                        onUpdateResult(updated);
-                      }
-                      setEssaySavedNotice(true);
-                      setDossierSuccessToast(`Nilai uraian siswa "${selectedResult.studentName}" berhasil disimpan! Skor akhir baru: ${liveDossierEval.finalScore}%`);
-                      setTimeout(() => {
-                        setEssaySavedNotice(false);
-                        setDossierSuccessToast(null);
-                      }, 3500);
-                    }}
-                    className={`flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-white text-xs font-bold shadow-md transition cursor-pointer ${
-                      essaySavedNotice
-                        ? 'bg-emerald-700 shadow-emerald-700/30'
-                        : 'bg-emerald-600 hover:bg-emerald-500 shadow-emerald-600/20'
-                    }`}
-                  >
-                    {essaySavedNotice ? (
-                      <>
-                        <Check className="w-4 h-4 text-white" />
-                        <span>Nilai Tersimpan!</span>
-                      </>
-                    ) : (
-                      <>
-                        <Save className="w-4 h-4" />
-                        <span>Simpan Nilai Uraian</span>
-                      </>
-                    )}
-                  </button>
-
-                  <button
-                    onClick={() => {
-                      if (!selectedResult) return;
-                      showThemedConfirm({
-                        title: 'Reset Lembar Ujian Siswa',
-                        message: `Apakah Anda yakin ingin mereset ujian siswa "${selectedResult.studentName}"? Seluruh lembar jawaban dan nilai akan dihapus, sehingga siswa dapat login dan mengerjakan ulang ujian ini.`,
-                        variant: 'danger',
-                        confirmLabel: 'Ya, Reset & Izinkan Ujian Ulang',
-                        cancelLabel: 'Batal',
-                        onConfirm: async () => {
-                          if (onDeleteResult) {
-                            await onDeleteResult(selectedResult.id, selectedResult.subjectId, selectedResult.studentName);
-                          }
-                          await clearStudentAutolockInSupabase(selectedResult.subjectId, selectedResult.studentName);
-                          sendProctorCommand({
-                            action: 'RESET_EXAM',
-                            studentName: selectedResult.studentName,
-                            subjectId: selectedResult.subjectId
-                          });
-                          removeStudentSession(selectedResult.studentName, selectedResult.subjectId);
-                          setSelectedResult(null);
-                        }
-                      });
-                    }}
-                    className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-600 hover:text-white text-rose-600 dark:text-rose-400 text-xs font-bold border border-rose-200 dark:border-rose-900 transition cursor-pointer"
-                    title="Hapus nilai agar siswa dapat ujian kembali"
-                  >
-                    <RotateCcw className="w-3.5 h-3.5" />
-                    <span>Reset Ujian (Ujian Ulang)</span>
-                  </button>
                 </div>
 
-                {/* GRUP KANAN: CETAK & TUTUP */}
-                <div className="flex items-center gap-2 flex-wrap justify-end">
-                  <button
-                    onClick={() => onOpenCertificates?.(selectedResult)}
-                    className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-xs font-semibold cursor-pointer shadow-xs transition"
-                  >
-                    <Award className="w-3.5 h-3.5" />
-                    <span>Cetak Sertifikat</span>
-                  </button>
+                <div className="space-y-16">
+                  <p>Palembang, {selectedResult.submittedAt ? selectedResult.submittedAt.split(' ')[0] : '30 Oktober 2026'}<br />Guru Pengampu / Proktor,</p>
+                  <div>
+                    <strong className="underline block font-bold text-slate-900">{currentTeacher?.name || 'Guru Pengampu'}</strong>
+                    <span className="text-[11px] text-slate-600 block">NIP: {currentTeacher?.nip || '198704202012011004'}</span>
+                  </div>
+                </div>
+              </div>
 
-                  <button
-                    onClick={() => window.print()}
-                    className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-semibold cursor-pointer transition border border-slate-200 dark:border-slate-700"
-                  >
-                    <Printer className="w-3.5 h-3.5" />
-                    <span>Cetak Dossier</span>
-                  </button>
+              {/* DOSSIER FOOTER ACTIONS */}
+              <div className="pt-4 border-t border-slate-100 dark:border-slate-800 print:hidden">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                  {/* GRUP KIRI: SIMPAN NILAI & RESET */}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <button
+                      onClick={() => {
+                        if (!selectedResult || !liveDossierEval) return;
+                        const updated: ExamResult = {
+                          ...selectedResult,
+                          score: liveDossierEval.finalScore,
+                          totalEarned: liveDossierEval.totalEarned,
+                          totalMax: liveDossierEval.totalMax,
+                          essayScores: manualEssayScores,
+                          details: liveDossierEval.details
+                        };
+                        setSelectedResult(updated);
+                        if (onUpdateResult) {
+                          onUpdateResult(updated);
+                        }
+                        setEssaySavedNotice(true);
+                        setDossierSuccessToast(`Nilai uraian siswa "${selectedResult.studentName}" berhasil disimpan! Skor akhir baru: ${liveDossierEval.finalScore}%`);
+                        setTimeout(() => {
+                          setEssaySavedNotice(false);
+                          setDossierSuccessToast(null);
+                        }, 3500);
+                      }}
+                      className={`flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-white text-xs font-bold shadow-md transition cursor-pointer ${
+                        essaySavedNotice
+                          ? 'bg-emerald-700 shadow-emerald-700/30'
+                          : 'bg-emerald-600 hover:bg-emerald-500 shadow-emerald-600/20'
+                      }`}
+                    >
+                      {essaySavedNotice ? (
+                        <>
+                          <Check className="w-4 h-4 text-white" />
+                          <span>Nilai Tersimpan!</span>
+                        </>
+                      ) : (
+                        <>
+                          <Save className="w-4 h-4" />
+                          <span>Simpan Nilai Uraian</span>
+                        </>
+                      )}
+                    </button>
 
-                  <button
-                    onClick={() => setSelectedResult(null)}
-                    className="px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold cursor-pointer border border-slate-200 dark:border-slate-700"
-                  >
-                    {t.close}
-                  </button>
+                    <button
+                      onClick={() => {
+                        if (!selectedResult) return;
+                        showThemedConfirm({
+                          title: 'Reset Lembar Ujian Siswa',
+                          message: `Apakah Anda yakin ingin mereset ujian siswa "${selectedResult.studentName}"? Seluruh lembar jawaban dan nilai akan dihapus, sehingga siswa dapat login dan mengerjakan ulang ujian ini.`,
+                          variant: 'danger',
+                          confirmLabel: 'Ya, Reset & Izinkan Ujian Ulang',
+                          cancelLabel: 'Batal',
+                          onConfirm: async () => {
+                            if (onDeleteResult) {
+                              await onDeleteResult(selectedResult.id, selectedResult.subjectId, selectedResult.studentName);
+                            }
+                            await clearStudentAutolockInSupabase(selectedResult.subjectId, selectedResult.studentName);
+                            sendProctorCommand({
+                              action: 'RESET_EXAM',
+                              studentName: selectedResult.studentName,
+                              subjectId: selectedResult.subjectId
+                            });
+                            removeStudentSession(selectedResult.studentName, selectedResult.subjectId);
+                            setSelectedResult(null);
+                          }
+                        });
+                      }}
+                      className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-600 hover:text-white text-rose-600 dark:text-rose-400 text-xs font-bold border border-rose-200 dark:border-rose-900 transition cursor-pointer"
+                      title="Hapus nilai agar siswa dapat ujian kembali"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5" />
+                      <span>Reset Ujian (Ujian Ulang)</span>
+                    </button>
+                  </div>
+
+                  {/* GRUP KANAN: CETAK & TUTUP */}
+                  <div className="flex items-center gap-2 flex-wrap justify-end">
+                    <button
+                      onClick={() => onOpenCertificates?.(selectedResult)}
+                      className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-xs font-semibold cursor-pointer shadow-xs transition"
+                    >
+                      <Award className="w-3.5 h-3.5" />
+                      <span>Cetak Sertifikat</span>
+                    </button>
+
+                    <button
+                      onClick={() => window.print()}
+                      className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-semibold cursor-pointer transition border border-slate-200 dark:border-slate-700"
+                    >
+                      <Printer className="w-3.5 h-3.5" />
+                      <span>Cetak Dossier</span>
+                    </button>
+
+                    <button
+                      onClick={() => setSelectedResult(null)}
+                      className="px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold cursor-pointer border border-slate-200 dark:border-slate-700"
+                    >
+                      {t.close}
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* ============================================================== */}
       {/* 9. MODAL BUAT JADWAL UJIAN BARU                                 */}

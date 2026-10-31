@@ -1,8 +1,9 @@
 'use client';
 
-import React, { useState } from 'react';
-import { ExamResult } from '@/types/cbt';
+import React, { useState, useEffect } from 'react';
+import { ExamResult, Subject, Student } from '@/types/cbt';
 import { resolveStudentSingleClass } from '@/lib/rosterStudents';
+import { extractSubjectAndGrade } from '@/lib/aiQuestionGenerator';
 import { useLanguage } from '@/context/LanguageContext';
 import { Award, Printer, X, CheckCircle, ShieldCheck } from 'lucide-react';
 
@@ -11,18 +12,31 @@ interface CertificateModalProps {
   onClose: () => void;
   results: ExamResult[];
   selectedStudentResult?: ExamResult | null;
+  allSubjects?: Subject[];
+  students?: Student[];
 }
 
 export const CertificateModal: React.FC<CertificateModalProps> = ({
   isOpen,
   onClose,
   results,
-  selectedStudentResult
+  selectedStudentResult,
+  allSubjects = [],
+  students = []
 }) => {
   const { language, t } = useLanguage();
   const [activeStudentId, setActiveStudentId] = useState<string>(
     selectedStudentResult ? selectedStudentResult.id : results[0]?.id || ''
   );
+
+  // Sinkronkan activeStudentId setiap kali siswa yang diklik berganti atau modal dibuka
+  useEffect(() => {
+    if (selectedStudentResult?.id) {
+      setActiveStudentId(selectedStudentResult.id);
+    } else if (results.length > 0 && !results.some(r => r.id === activeStudentId)) {
+      setActiveStudentId(results[0].id);
+    }
+  }, [selectedStudentResult, isOpen]);
 
   if (!isOpen) return null;
 
@@ -40,6 +54,17 @@ export const CertificateModal: React.FC<CertificateModalProps> = ({
   };
 
   const pred = currentResult ? getPredicate(currentResult.score) : { label: 'BAIK', color: 'text-indigo-600' };
+
+  // Resolusi Identitas Siswa & Mata Pelajaran Akurat
+  const matchedSubject = (allSubjects || []).find(s => s.id === currentResult?.subjectId);
+  const rawSubjectTitle = currentResult?.subjectTitle || matchedSubject?.title || 'Mata Pelajaran Ujian';
+  const cleanSubject = extractSubjectAndGrade(rawSubjectTitle, currentResult?.className).cleanSubject || rawSubjectTitle;
+
+  const matchedStudent = (students || []).find(
+    s => s.name.toLowerCase().trim() === currentResult?.studentName?.toLowerCase().trim()
+  );
+  const nisn = matchedStudent?.nisn || '-';
+  const cleanClass = resolveStudentSingleClass(currentResult?.studentName, currentResult?.className, students);
 
   return (
     <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 print:p-0 print:bg-white">
@@ -65,19 +90,23 @@ export const CertificateModal: React.FC<CertificateModalProps> = ({
               <select
                 value={activeStudentId}
                 onChange={e => setActiveStudentId(e.target.value)}
-                className="text-xs p-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200"
+                className="text-xs p-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 [color-scheme:light] dark:[color-scheme:dark] [&>option]:bg-white [&>option]:text-slate-900 [&>option]:dark:bg-slate-900 [&>option]:dark:text-slate-100 font-semibold cursor-pointer max-w-xs"
               >
-                {results.map(r => (
-                  <option key={r.id} value={r.id}>
-                    {r.studentName} ({r.score}%)
-                  </option>
-                ))}
+                {results.map(r => {
+                  const sub = (allSubjects || []).find(s => s.id === r.subjectId)?.title || r.subjectTitle;
+                  const cls = resolveStudentSingleClass(r.studentName, r.className, students);
+                  return (
+                    <option key={r.id} value={r.id}>
+                      {r.studentName} ({cls} • {r.score}%{sub ? ` • ${sub}` : ''})
+                    </option>
+                  );
+                })}
               </select>
             )}
 
             <button
               onClick={handlePrint}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-semibold text-xs shadow-md shadow-violet-600/20 transition"
+              className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-semibold text-xs shadow-md shadow-violet-600/20 transition cursor-pointer"
             >
               <Printer className="w-4 h-4" />
               <span>{language === 'id' ? 'Cetak / PDF' : 'Print / PDF'}</span>
@@ -85,7 +114,7 @@ export const CertificateModal: React.FC<CertificateModalProps> = ({
 
             <button
               onClick={onClose}
-              className="p-2 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+              className="p-2 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
             >
               <X className="w-5 h-5" />
             </button>
@@ -109,7 +138,7 @@ export const CertificateModal: React.FC<CertificateModalProps> = ({
                   SMP NEGERI 58 PALEMBANG
                 </h2>
                 <p className="text-[11px] text-slate-500">
-                  Jl. Mayor Ruslan, Palembang, Sumatera Selatan • Telepon: (0711) 351234
+                  Jl. Pangeran Ratu, Jakabaring, Kec. Seberang Ulu I, Kota Palembang, Sumatera Selatan • Telepon: (0711) 351234
                 </p>
               </div>
 
@@ -136,12 +165,16 @@ export const CertificateModal: React.FC<CertificateModalProps> = ({
                     {currentResult.studentName}
                   </h3>
                 </div>
-                <p className="text-xs text-slate-500">
-                  Kelas: <strong>{resolveStudentSingleClass(currentResult.studentName, currentResult.className)}</strong>
+                <p className="text-xs text-slate-600 pt-1">
+                  NISN: <strong className="font-mono text-slate-900 font-bold">{nisn}</strong> • Rombel: <strong className="text-slate-900 font-bold">{cleanClass}</strong>
                 </p>
                 <p className="text-sm text-slate-700 leading-relaxed pt-2">
-                  Telah mengikuti dan menyelesaikan Ujian Penilaian Berbasis Komputer mata pelajaran{' '}
-                  <strong>Ilmu Pengetahuan Alam (IPA)</strong> dengan perolehan hasil sebagai berikut:
+                  Telah mengikuti dan menyelesaikan Ujian Penilaian Berbasis Komputer (CBT) mata pelajaran{' '}
+                  <strong className="text-slate-900 font-bold underline">{cleanSubject}</strong>
+                  {rawSubjectTitle && rawSubjectTitle.toLowerCase() !== cleanSubject.toLowerCase() && (
+                    <span className="text-xs text-slate-500 block mt-0.5 font-sans">({rawSubjectTitle})</span>
+                  )}{' '}
+                  dengan perolehan hasil sebagai berikut:
                 </p>
               </div>
 
@@ -171,10 +204,10 @@ export const CertificateModal: React.FC<CertificateModalProps> = ({
                   <p className="text-slate-500">Palembang, {new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
                   <p className="font-semibold text-slate-800">Kepala Sekolah SMPN 58,</p>
                   <div className="h-14 flex items-center justify-end">
-                    <span className="font-serif italic text-slate-400 text-lg">Hj. Dra. Kepala Sekolah, M.Pd</span>
+                    <span className="font-serif italic text-slate-400 text-lg">Hj. Rohana, S.Pd., M.Si.</span>
                   </div>
-                  <p className="font-bold text-slate-900 underline">Dra. Hj. Nuraini, M.Pd.</p>
-                  <p className="text-[10px] text-slate-500 font-mono">NIP. 19680512 199303 2 004</p>
+                  <p className="font-bold text-slate-900 underline">Hj. Rohana, S.Pd., M.Si.</p>
+                  <p className="text-[10px] text-slate-500 font-mono">NIP. 19680512 199412 2 001</p>
                 </div>
               </div>
             </div>

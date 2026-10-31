@@ -1737,6 +1737,8 @@ export default function Home() {
         onClose={() => setIsCertificatesModalOpen(false)}
         results={results}
         selectedStudentResult={certificateTargetResult}
+        allSubjects={subjects}
+        students={students}
       />
     </div>
   );

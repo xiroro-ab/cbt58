@@ -7,7 +7,7 @@ import { useLanguage } from '@/context/LanguageContext';
 import { StudentManagement } from './StudentManagement';
 import { evaluateFullExam, calculateSingleQuestionScore } from '@/lib/scoringEngine';
 import { sendProctorCommand, subscribeToLiveSessions, removeStudentSession, broadcastAnnouncementToStudents } from '@/lib/liveMonitoringService';
-import { clearStudentAutolockInSupabase } from '@/lib/supabaseService';
+import { clearStudentAutolockInSupabase, insertMessage } from '@/lib/supabaseService';
 import {
   TrendingUp,
   Award,
@@ -262,11 +262,26 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   const handleSendLiveAnnouncement = (e: React.FormEvent) => {
     e.preventDefault();
     if (!liveAnnouncementInput.trim()) return;
+    const text = liveAnnouncementInput.trim();
+    const targetSubId = monitoringFilterSubId !== 'ALL' ? monitoringFilterSubId : subject.id;
+    const sender = currentTeacher?.name || 'Guru Pengawas';
+
     broadcastAnnouncementToStudents({
-      text: liveAnnouncementInput.trim(),
-      senderName: currentTeacher?.name || 'Guru Pengawas',
-      subjectId: monitoringFilterSubId !== 'ALL' ? monitoringFilterSubId : subject.id
+      text,
+      senderName: sender,
+      subjectId: targetSubId
     });
+
+    insertMessage({
+      subjectId: targetSubId,
+      senderName: sender,
+      senderRole: 'teacher',
+      targetType: 'broadcast',
+      title: 'Pengumuman Pengawas Ruang',
+      body: text,
+      status: 'acknowledged'
+    }).catch(() => {});
+
     setLiveAnnouncementInput('');
     setMonitoringActionToast('Pengumuman berhasil disiarkan ke seluruh layar siswa!');
   };

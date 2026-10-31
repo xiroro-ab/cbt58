@@ -1129,7 +1129,7 @@ export async function fetchMessages(subjectId?: string): Promise<ExamMessage[]> 
   try {
     let query = supabase.from('exam_messages').select('*').order('created_at', { ascending: false }).limit(30);
     if (subjectId) {
-      query = query.eq('subject_id', subjectId);
+      query = query.or(`subject_id.eq.${subjectId},target_type.eq.broadcast`);
     }
     const { data, error } = await query;
     if (error || !data) {

@@ -18,7 +18,8 @@ import {
   removeStudentSession,
   subscribeToStudentCommands,
   subscribeToAnnouncements,
-  getLatestStoredAnnouncement
+  getLatestStoredAnnouncement,
+  BroadcastAnnouncement
 } from '@/lib/liveMonitoringService';
 import {
   Clock,
@@ -159,12 +160,52 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
   const [reportSuccessNotice, setReportSuccessNotice] = useState(false);
   const [isSubmittingReport, setIsSubmittingReport] = useState(false);
 
-  // State Pengumuman Broadcast dari Pengawas
-  const [broadcastNotice, setBroadcastNotice] = useState<string | null>(() => {
-    const stored = getLatestStoredAnnouncement();
-    return stored?.text || null;
+  // State Pengumuman Broadcast dari Pengawas (Model Pop-up Bersih & Icon Pojok Atas)
+  const [activeAnnouncement, setActiveAnnouncement] = useState<BroadcastAnnouncement | null>(() => {
+    return getLatestStoredAnnouncement();
   });
-  const [showBroadcastPopup, setShowBroadcastPopup] = useState(false);
+  const [showBroadcastPopup, setShowBroadcastPopup] = useState<boolean>(false);
+  const [dismissedAnnouncementId, setDismissedAnnouncementId] = useState<string | null>(() => {
+    if (typeof window === 'undefined') return null;
+    try {
+      return sessionStorage.getItem(`cbt_dismissed_ann_${subject.id}`) || null;
+    } catch {
+      return null;
+    }
+  });
+  const dismissedAnnouncementIdRef = useRef<string | null>(dismissedAnnouncementId);
+  dismissedAnnouncementIdRef.current = dismissedAnnouncementId;
+
+  // Handler pengumuman masuk: Jika baru, wajib keluar pop up & menggantikan pengumuman lama
+  const handleIncomingAnnouncement = useCallback((ann: BroadcastAnnouncement) => {
+    if (!ann || !ann.text) return;
+
+    setActiveAnnouncement(prev => {
+      const isNew = !prev || prev.id !== ann.id || prev.text !== ann.text;
+      if (isNew) {
+        // Tampilkan pop-up jika pengumuman ini belum pernah ditutup siswa
+        if (dismissedAnnouncementIdRef.current !== ann.id) {
+          setShowBroadcastPopup(true);
+        }
+        return ann; // Gantikan pengumuman lama dengan pengumuman baru
+      }
+      return prev;
+    });
+  }, []);
+
+  // Handler ketika siswa menutup pop-up (klik tombol Close / tanda X)
+  const handleCloseBroadcastPopup = () => {
+    setShowBroadcastPopup(false);
+    if (activeAnnouncement) {
+      setDismissedAnnouncementId(activeAnnouncement.id);
+      dismissedAnnouncementIdRef.current = activeAnnouncement.id;
+      if (typeof window !== 'undefined') {
+        try {
+          sessionStorage.setItem(`cbt_dismissed_ann_${subject.id}`, activeAnnouncement.id);
+        } catch {}
+      }
+    }
+  };
 
   // State Verifikasi Buka Kunci Mandiri saat Terkunci
   const [isCheckingUnlock, setIsCheckingUnlock] = useState(false);
@@ -785,46 +826,57 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
     // A. Dengarkan Supabase Realtime Broadcast + Browser BroadcastChannel
     const unsubAnnouncements = subscribeToAnnouncements(ann => {
       if (ann && ann.text) {
-        setBroadcastNotice(ann.text);
-        setShowBroadcastPopup(true);
+        handleIncomingAnnouncement(ann);
       }
     });
 
     // B. Dengarkan Postgres Database Changes
     const unsubMessages = subscribeToMessages(msg => {
       if (msg.targetType === 'broadcast' && msg.body) {
-        setBroadcastNotice(msg.body);
-        setShowBroadcastPopup(true);
+        handleIncomingAnnouncement({
+          id: msg.id,
+          text: msg.body,
+          senderName: msg.senderName || 'Guru Pengawas',
+          subjectId: msg.subjectId,
+          timestamp: Date.now()
+        });
       }
     });
 
     // C. Muat pesan broadcast yang sudah ada dari Supabase saat awal masuk
-    if (subject.id) {
+    const checkCloudBroadcasts = () => {
+      if (!subject.id) return;
       fetchMessages(subject.id).then(msgs => {
         const broadcasts = msgs.filter(m => m.targetType === 'broadcast');
         if (broadcasts.length > 0 && broadcasts[0].body) {
-          setBroadcastNotice(prev => prev || broadcasts[0].body);
+          handleIncomingAnnouncement({
+            id: broadcasts[0].id,
+            text: broadcasts[0].body,
+            senderName: broadcasts[0].senderName || 'Guru Pengawas',
+            subjectId: broadcasts[0].subjectId,
+            timestamp: Date.now()
+          });
         }
       }).catch(() => {});
-    }
+    };
 
-    // D. Polling berkala (fail-safe tiap 4 detik)
+    checkCloudBroadcasts();
+
+    // D. Polling berkala (fail-safe tiap 3 detik jika websocket sempat disconnect)
     const pollInterval = setInterval(() => {
       const stored = getLatestStoredAnnouncement();
       if (stored?.text) {
-        setBroadcastNotice(prev => {
-          if (!prev) return stored.text;
-          return prev;
-        });
+        handleIncomingAnnouncement(stored);
       }
-    }, 4000);
+      checkCloudBroadcasts();
+    }, 3000);
 
     return () => {
       unsubAnnouncements();
       unsubMessages();
       clearInterval(pollInterval);
     };
-  }, [isExamCompleted, subject.id]);
+  }, [isExamCompleted, subject.id, handleIncomingAnnouncement]);
 
   const currentQuestion = questions && questions.length > 0 ? questions[currentIndex] : undefined;
   const currentAnswerData = answers && answers.length > 0
@@ -1168,15 +1220,17 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
             </button>
           )}
 
-          {/* Tombol Pengumuman Pengawas jika ada siaran aktif */}
-          {broadcastNotice && (
+          {/* Icon Pengumuman Pengawas di Pojok Atas */}
+          {activeAnnouncement && (
             <button
+              type="button"
               onClick={() => setShowBroadcastPopup(true)}
-              className="p-1.5 sm:px-2.5 sm:py-1.5 rounded-xl border border-amber-300 dark:border-amber-700 bg-amber-500/15 text-amber-700 dark:text-amber-300 hover:bg-amber-500/25 text-xs font-bold transition cursor-pointer flex items-center gap-1 animate-pulse"
-              title="Lihat pesan pengumuman pengawas ruangan"
+              className="p-1.5 sm:px-2.5 sm:py-1.5 rounded-xl border border-amber-400 bg-amber-500/15 hover:bg-amber-500/25 text-amber-800 dark:text-amber-300 font-bold text-xs transition cursor-pointer flex items-center gap-1.5 shadow-xs animate-pulse"
+              title="Klik untuk membuka pesan pengumuman pengawas ruangan"
             >
-              <Megaphone className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 flex-shrink-0" />
+              <Megaphone className="w-4 h-4 text-amber-600 dark:text-amber-400 flex-shrink-0 animate-bounce" />
               <span className="hidden md:inline">Pengumuman</span>
+              <span className="w-2 h-2 rounded-full bg-amber-500"></span>
             </button>
           )}
 
@@ -1222,41 +1276,6 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
           </button>
         </div>
       </header>
-
-      {/* PENGUMUMAN BROADCAST DARI PENGAWAS */}
-      {broadcastNotice && (
-        <div className="bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500 text-slate-950 px-3 sm:px-4 py-2.5 text-xs font-bold shadow-md border-b border-amber-600/30">
-          <div className="max-w-6xl mx-auto flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2.5 flex-1 min-w-0">
-              <span className="p-1 bg-slate-950 text-amber-400 rounded-lg flex-shrink-0">
-                <Megaphone className="w-4 h-4 animate-bounce" />
-              </span>
-              <div className="flex-1 min-w-0">
-                <span className="font-extrabold uppercase tracking-wide mr-1.5 bg-slate-950/15 px-1.5 py-0.5 rounded text-[10px]">
-                  Pengumuman Pengawas:
-                </span>
-                <span className="font-semibold text-slate-950 break-words">{broadcastNotice}</span>
-              </div>
-            </div>
-            <div className="flex items-center gap-1.5 flex-shrink-0">
-              <button
-                onClick={() => setShowBroadcastPopup(true)}
-                className="px-2.5 py-1 bg-slate-950/15 hover:bg-slate-950/25 rounded-lg text-[11px] font-bold text-slate-950 transition cursor-pointer whitespace-nowrap"
-                title="Buka Pengumuman Lengkap"
-              >
-                Lihat Lengkap
-              </button>
-              <button
-                onClick={() => setBroadcastNotice(null)}
-                className="p-1 hover:bg-slate-950/20 rounded-lg text-slate-950 cursor-pointer"
-                title="Tutup Banner (Tetap bisa dibuka via tombol Pengumuman di atas)"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* 2. MAIN WORKSPACE */}
       <div className="flex-1 max-w-6xl w-full mx-auto p-3 sm:p-6 grid grid-cols-1 lg:grid-cols-4 gap-4 sm:gap-6">
@@ -1719,31 +1738,50 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
         </div>
       )}
 
-      {/* MODAL POPUP PENGUMUMAN KILAT DARI PENGAWAS */}
-      {showBroadcastPopup && broadcastNotice && (
+      {/* MODAL POPUP PENGUMUMAN DARI PENGAWAS */}
+      {showBroadcastPopup && activeAnnouncement && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs animate-in fade-in">
-          <div className="max-w-md w-full bg-white dark:bg-slate-900 border-2 border-amber-500 rounded-3xl p-6 shadow-2xl text-center space-y-4 animate-in zoom-in-95">
-            <div className="w-12 h-12 mx-auto rounded-2xl bg-amber-100 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 flex items-center justify-center font-bold">
-              <Megaphone className="w-6 h-6 animate-bounce" />
+          <div className="max-w-md w-full bg-white dark:bg-slate-900 border-2 border-amber-500 rounded-3xl p-6 shadow-2xl space-y-4 animate-in zoom-in-95">
+            {/* Header Modal dengan Tombol Silang (X) */}
+            <div className="flex items-start justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-11 h-11 rounded-2xl bg-amber-100 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 flex items-center justify-center font-bold flex-shrink-0">
+                  <Megaphone className="w-5 h-5 animate-bounce" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                    Pengumuman Pengawas
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    {activeAnnouncement.senderName || 'Guru Pengawas Ruang'} • SMPN 58
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={handleCloseBroadcastPopup}
+                className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition cursor-pointer"
+                title="Tutup Pengumuman (Tanda Silang)"
+              >
+                <X className="w-5 h-5" />
+              </button>
             </div>
-            <div className="space-y-1">
-              <h3 className="text-base font-bold text-slate-900 dark:text-white">
-                Pengumuman dari Pengawas Ruangan
-              </h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                SMP Negeri 58 Palembang • Mohon perhatikan seksama
-              </p>
+
+            {/* Isi Pesan Pengumuman */}
+            <div className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/60 text-xs sm:text-sm text-slate-900 dark:text-amber-100 font-medium leading-relaxed whitespace-pre-wrap max-h-64 overflow-y-auto">
+              {activeAnnouncement.text}
             </div>
-            <div className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/60 text-xs text-amber-950 dark:text-amber-200 text-left font-medium leading-relaxed whitespace-pre-wrap max-h-60 overflow-y-auto">
-              {broadcastNotice}
+
+            {/* Tombol Tutup / Close di Bawah */}
+            <div className="pt-1">
+              <button
+                type="button"
+                onClick={handleCloseBroadcastPopup}
+                className="w-full py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs shadow-md transition cursor-pointer active:scale-95"
+              >
+                Tutup & Lanjutkan Ujian
+              </button>
             </div>
-            <button
-              type="button"
-              onClick={() => setShowBroadcastPopup(false)}
-              className="w-full py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs shadow-md transition cursor-pointer"
-            >
-              Saya Mengerti & Lanjutkan Ujian
-            </button>
           </div>
         </div>
       )}

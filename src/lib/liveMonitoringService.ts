@@ -539,16 +539,22 @@ export function broadcastAnnouncementToStudents(announcement: {
   }
 
   // 3. Siarkan via Supabase Realtime Broadcast (sub-detik lintas HP siswa & laptop guru)
-  const supa = initSupabaseChannel();
-  if (supa) {
-    try {
-      supa.send({
-        type: 'broadcast',
-        event: 'exam_announcement',
-        payload
-      });
-    } catch {}
-  }
+  const sendRealtime = () => {
+    const supa = initSupabaseChannel();
+    if (supa) {
+      try {
+        supa.send({
+          type: 'broadcast',
+          event: 'exam_announcement',
+          payload
+        });
+      } catch {}
+    }
+  };
+
+  sendRealtime();
+  setTimeout(sendRealtime, 600);
+  setTimeout(sendRealtime, 1500);
 
   // 4. Picu listener lokal seketika
   announcementListeners.forEach(fn => {

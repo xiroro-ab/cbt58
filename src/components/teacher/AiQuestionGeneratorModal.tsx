@@ -5,7 +5,6 @@ import { Subject, Question } from '@/types/cbt';
 import {
   STANDARDS_OPTIONS,
   StandardBadge,
-  GEMINI_MODELS,
   QuestionCounts,
   getRecommendedTopics,
   buildAiQuestionPrompt,
@@ -110,9 +109,7 @@ export function AiQuestionGeneratorModal({
   });
 
   // 4. MODEL GEMINI & KUNCI API KESUKAAN GURU
-  const [selectedModel, setSelectedModel] = useState<string>('gemini-1.5-flash');
-  const [isCustomModel, setIsCustomModel] = useState(false);
-  const [customModelName, setCustomModelName] = useState('');
+  const [modelName, setModelName] = useState<string>('gemini-1.5-flash');
   const [apiKey, setApiKey] = useState('');
   const [showApiKeyInput, setShowApiKeyInput] = useState(false);
   const [isApiKeySaved, setIsApiKeySaved] = useState(false);
@@ -160,15 +157,15 @@ export function AiQuestionGeneratorModal({
         setApiKey(savedKey);
         setIsApiKeySaved(true);
       }
-      const savedModel = localStorage.getItem('cbt_gemini_model') || 'gemini-1.5-flash';
-      const isPredefined = GEMINI_MODELS.some(m => m.id === savedModel);
-      if (isPredefined) {
-        setSelectedModel(savedModel);
-        setIsCustomModel(false);
-      } else if (savedModel) {
-        setSelectedModel('custom');
-        setIsCustomModel(true);
-        setCustomModelName(savedModel);
+      const savedModel = localStorage.getItem('cbt_gemini_model') || '';
+      if (savedModel) {
+        // Reset jika sebelumnya tersimpan model usang 'gemini-2.0-flash'
+        if (savedModel === 'gemini-2.0-flash') {
+          setModelName('gemini-1.5-flash');
+          localStorage.setItem('cbt_gemini_model', 'gemini-1.5-flash');
+        } else {
+          setModelName(savedModel);
+        }
       }
     }
   }, []);
@@ -235,14 +232,13 @@ export function AiQuestionGeneratorModal({
       }
 
       // Simpan Model
-      const finalModelName = isCustomModel ? customModelName.trim() : selectedModel;
-      if (finalModelName) {
-        localStorage.setItem('cbt_gemini_model', finalModelName);
+      if (modelName.trim()) {
+        localStorage.setItem('cbt_gemini_model', modelName.trim());
       }
     }
   };
 
-  const activeModelId = isCustomModel ? customModelName.trim() || 'gemini-1.5-flash' : selectedModel;
+  const activeModelId = modelName.trim() || 'gemini-1.5-flash';
 
   // Salin prompt untuk dipakai di gemini.google.com
   const handleCopyPrompt = () => {
@@ -875,58 +871,39 @@ export function AiQuestionGeneratorModal({
                 {/* Bagian Penginputan Model & API Key Manual (Hanya muncul saat diklik) */}
                 {showApiKeyInput && (
                   <div className="mt-3 pt-3 border-t border-slate-200 dark:border-slate-700/80 space-y-3.5 animate-fade-in">
-                    {/* 1. Penginputan / Pemilihan Versi Model Gemini */}
+                    {/* 1. Penginputan Versi Model Gemini Manual */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div>
                         <label className="text-[11px] font-semibold text-slate-700 dark:text-slate-300 block mb-1">
-                          Pilih Versi Model Gemini AI:
+                          Nama Model Gemini AI (Input Manual):
                         </label>
-                        <select
-                          value={isCustomModel ? 'custom' : selectedModel}
+                        <input
+                          type="text"
+                          value={modelName}
                           onChange={e => {
-                            if (e.target.value === 'custom') {
-                              setIsCustomModel(true);
-                            } else {
-                              setIsCustomModel(false);
-                              setSelectedModel(e.target.value);
-                              if (typeof window !== 'undefined') {
-                                localStorage.setItem('cbt_gemini_model', e.target.value);
-                              }
+                            const val = e.target.value;
+                            setModelName(val);
+                            if (typeof window !== 'undefined') {
+                              localStorage.setItem('cbt_gemini_model', val.trim());
                             }
                           }}
-                          className="w-full text-xs font-semibold px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500 cursor-pointer"
-                        >
-                          {GEMINI_MODELS.map(m => (
-                            <option key={m.id} value={m.id}>
-                              {m.name} — {m.tag}
-                            </option>
-                          ))}
-                          <option value="custom">Model Kustom Lainnya (Ketik Manual)...</option>
-                        </select>
-
-                        {isCustomModel && (
-                          <div className="mt-2">
-                            <input
-                              type="text"
-                              value={customModelName}
-                              onChange={e => setCustomModelName(e.target.value)}
-                              placeholder="Masukkan nama model (contoh: gemini-1.5-flash-8b)"
-                              className="w-full text-xs px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-violet-400 text-slate-900 dark:text-white font-mono"
-                            />
-                          </div>
-                        )}
+                          placeholder="Masukkan nama model (contoh: gemini-1.5-flash, gemini-2.5-flash, gemini-3.0-flash)"
+                          className="w-full text-xs font-mono px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500"
+                        />
+                        <p className="text-[10px] text-slate-400 mt-1">
+                          Ketik kode model yang aktif dari Google AI Studio (misal: <code className="text-violet-600 dark:text-violet-400 font-bold">gemini-1.5-flash</code> atau model terbaru).
+                        </p>
                       </div>
 
                       <div className="text-[11px] text-slate-500 dark:text-slate-400 flex flex-col justify-center">
                         <p>
-                          <strong>Model yang Dipilih:</strong>{' '}
+                          <strong>Model Aktif Digunakan:</strong>{' '}
                           <span className="font-mono text-violet-600 dark:text-violet-400 font-bold">
                             {activeModelId}
                           </span>
                         </p>
                         <p className="text-[10px] text-slate-400 mt-1">
-                          {GEMINI_MODELS.find(m => m.id === selectedModel)?.description ||
-                            'Model Gemini kustom sesuai preferensi guru.'}
+                          Model AI ini yang akan otomatis dipanggil saat proses pembuatan butir soal CBT.
                         </p>
                       </div>
                     </div>

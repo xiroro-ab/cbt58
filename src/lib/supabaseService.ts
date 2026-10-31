@@ -1576,7 +1576,9 @@ export async function fetchStudents(): Promise<Student[]> {
  */
 export async function insertStudent(s: Student): Promise<boolean> {
   try {
+    const fallbackId = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : undefined;
     const { error } = await supabase.from('students').insert({
+      ...(s.id ? { id: s.id } : (fallbackId ? { id: fallbackId } : {})),
       nisn: s.nisn,
       name: s.name,
       gender: s.gender,
@@ -1598,12 +1600,16 @@ export async function insertStudent(s: Student): Promise<boolean> {
  */
 export async function bulkInsertStudents(studentsList: Student[]): Promise<boolean> {
   try {
-    const rows = studentsList.map(s => ({
-      nisn: s.nisn,
-      name: s.name,
-      gender: s.gender,
-      class_name: s.className
-    }));
+    const rows = studentsList.map(s => {
+      const fallbackId = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : undefined;
+      return {
+        ...(s.id ? { id: s.id } : (fallbackId ? { id: fallbackId } : {})),
+        nisn: s.nisn,
+        name: s.name,
+        gender: s.gender,
+        class_name: s.className
+      };
+    });
 
     const { error } = await supabase.from('students').upsert(rows, { onConflict: 'nisn' });
     if (error) {

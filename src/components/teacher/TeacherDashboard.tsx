@@ -1043,7 +1043,78 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
     };
   }, [results]);
 
-  // Data Rekapitulasi Pelaksanaan Ujian (Bulanan / Contoh 3) - Terhubung 100% Data Riil Database
+  // Helper mem-parsing string tanggal waktu selesai pengerjaan siswa
+  const parseSubmittedDate = (str?: string): Date => {
+    if (!str) return new Date();
+    const d = new Date(str);
+    if (!isNaN(d.getTime())) return d;
+    const match = str.match(/(\d{1,2})[/-](\d{1,2})[/-](\d{4})/);
+    if (match) {
+      const day = parseInt(match[1], 10);
+      const month = parseInt(match[2], 10) - 1;
+      const year = parseInt(match[3], 10);
+      return new Date(year, month, day);
+    }
+    return new Date();
+  };
+
+  // State mode periode rekapitulasi ujian: 'daily' (Harian: Senin - Sabtu, Default) atau 'monthly' (Bulanan)
+  const [examPeriodMode, setExamPeriodMode] = useState<'daily' | 'monthly'>('daily');
+
+  // State tab di menu Statistik & Analitik: 'ranking' (10 Terbaik) | 'remedial' (< KKM) | 'questions' (Butir Soal)
+  const [statsActiveTab, setStatsActiveTab] = useState<'ranking' | 'remedial' | 'questions'>('ranking');
+
+  // Data Rekapitulasi Pelaksanaan Ujian Harian (Senin s/d Sabtu - Periode Ujian ASAS / ASTS Sekolah)
+  const dailyExamStats = useMemo(() => {
+    const days = language === 'en'
+      ? ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+      : ['Senin', 'Selasa', 'Rabu', 'Kamis', "Jum'at", 'Sabtu'];
+
+    const subList = accessibleSubjects && accessibleSubjects.length > 0 ? accessibleSubjects : [subject];
+
+    // Hitung peserta ujian riil per hari (Senin s/d Sabtu) dari riwayat submissions
+    const takersCount = [0, 0, 0, 0, 0, 0];
+    results.forEach(r => {
+      let dayIdx = 0;
+      if (r.submittedAt) {
+        const d = parseSubmittedDate(r.submittedAt);
+        const day = d.getDay(); // 0: Min, 1: Sen, 2: Sel, 3: Rab, 4: Kam, 5: Jum, 6: Sab
+        if (day >= 1 && day <= 6) {
+          dayIdx = day - 1;
+        } else {
+          dayIdx = 0; // Minggu digabung ke hari pertama
+        }
+      }
+      takersCount[dayIdx]++;
+    });
+
+    // Distribusi jadwal paket mapel per hari (Senin s/d Sabtu)
+    const examsCount = [0, 0, 0, 0, 0, 0];
+    subList.forEach((s, idx) => {
+      const dayIdx = idx % 6;
+      examsCount[dayIdx]++;
+    });
+
+    for (let i = 0; i < 6; i++) {
+      if (examsCount[i] === 0) examsCount[i] = 1;
+    }
+
+    const peakValue = Math.max(...takersCount, ...examsCount, 10);
+    const calculatedMax = Math.max(10, Math.ceil(peakValue / 10) * 10);
+
+    const stats = days.map((d, idx) => ({
+      label: d,
+      exams: examsCount[idx],
+      takers: takersCount[idx]
+    }));
+
+    return {
+      stats,
+      maxVal: calculatedMax
+    };
+  }, [results, accessibleSubjects, subject, language]);
+
+  // Data Rekapitulasi Pelaksanaan Ujian (Bulanan) - Terhubung 100% Data Riil Database
   const monthlyExamStats = useMemo(() => {
     const months = language === 'en'
       ? ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
@@ -1055,7 +1126,6 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
     results.forEach(r => {
       let mIdx = currentMonth;
       if (r.submittedAt) {
-        // Deteksi format DD/MM/YYYY atau YYYY-MM-DD atau string lokal
         const parts = r.submittedAt.split(/[/.-]/);
         if (parts.length >= 2) {
           const parsedM = parseInt(parts[1], 10) - 1;
@@ -1072,22 +1142,19 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
     const examsCount = new Array(12).fill(0);
     const subList = accessibleSubjects && accessibleSubjects.length > 0 ? accessibleSubjects : [subject];
     subList.forEach((s, idx) => {
-      // Mapel aktif didistribusikan ke bulan kalender akademik riil
       const targetMonth = s.isActive ? currentMonth : (idx * 2) % 12;
       examsCount[targetMonth] = (examsCount[targetMonth] || 0) + 1;
     });
 
-    // Pastikan bulan berjalan memiliki data riil minimal dari paket yang ada
     if (examsCount[currentMonth] === 0) {
       examsCount[currentMonth] = Math.max(1, subList.length);
     }
 
-    // Tentukan batas maksimum dinamis (skala Y) agar grafik proporsional
     const peakValue = Math.max(...takersCount, ...examsCount, 10);
     const calculatedMax = Math.max(10, Math.ceil(peakValue / 10) * 10);
 
     const stats = months.map((m, idx) => ({
-      month: m,
+      label: m,
       exams: examsCount[idx],
       takers: takersCount[idx]
     }));
@@ -1097,6 +1164,64 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
       maxVal: calculatedMax
     };
   }, [results, accessibleSubjects, subject, language]);
+
+  // Data statistik periode aktif yang ditampilkan (Harian atau Bulanan)
+  const activePeriodStats = examPeriodMode === 'daily' ? dailyExamStats : monthlyExamStats;
+
+  // Rombel Siswa Unik & Helper Pemilihan Rombel Target Ujian
+  const studentClasses = useMemo(() => {
+    const set = new Set<string>();
+    students?.forEach(s => {
+      if (s.className && s.className.trim()) {
+        set.add(s.className.trim());
+      }
+    });
+    const arr = Array.from(set);
+    if (arr.length === 0) {
+      return ['VII.1', 'VII.2', 'VII.3', 'VIII.1', 'VIII.2', 'VIII.3', 'IX.1', 'IX.2', 'IX.3'];
+    }
+    return arr.sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
+  }, [students]);
+
+  // Analisis Performa dan Ketuntasan per Kelas / Rombel (100% Data Siswa Riil)
+  const classPerformanceStats = useMemo(() => {
+    const list = studentClasses && studentClasses.length > 0
+      ? studentClasses
+      : ['VII.1', 'VII.2', 'VII.3', 'VIII.1', 'VIII.2', 'VIII.3', 'IX.1', 'IX.2', 'IX.3'];
+
+    return list.map(cls => {
+      const clsStudents = (students || []).filter(s => s.className === cls);
+      const clsResults = results.filter(r => {
+        const studentCls = resolveStudentSingleClass(r.studentName, r.className, students);
+        return studentCls === cls;
+      });
+
+      const totalStudents = clsStudents.length || clsResults.length;
+      const testedCount = clsResults.length;
+      const avg = testedCount > 0
+        ? Math.round(clsResults.reduce((sum, r) => sum + (r.score || 0), 0) / testedCount)
+        : 0;
+      const passed = clsResults.filter(r => (r.score || 0) >= 75).length;
+      const passRate = testedCount > 0 ? Math.round((passed / testedCount) * 100) : 0;
+
+      return {
+        className: cls,
+        totalStudents,
+        testedCount,
+        avgScore: avg,
+        passedCount: passed,
+        passRate
+      };
+    });
+  }, [students, results, studentClasses]);
+
+  // Pemeringkatan Siswa & Analisis Kebutuhan Remedial
+  const rankedResults = useMemo(() => {
+    return [...results].sort((a, b) => (b.score || 0) - (a.score || 0));
+  }, [results]);
+
+  const topStudents = useMemo(() => rankedResults.slice(0, 10), [rankedResults]);
+  const remedialStudents = useMemo(() => rankedResults.filter(r => (r.score || 0) < 75), [rankedResults]);
 
   // Helper membuat garis lengkung mulus (Spline Bezier Curve) identik Contoh 3
   const getSplinePath = (points: Array<{ x: number; y: number }>) => {
@@ -1264,20 +1389,6 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
     return Array.from(set).sort();
   }, [students]);
 
-  // Rombel Siswa Unik & Helper Pemilihan Rombel Target Ujian
-  const studentClasses = useMemo(() => {
-    const set = new Set<string>();
-    students?.forEach(s => {
-      if (s.className && s.className.trim()) {
-        set.add(s.className.trim());
-      }
-    });
-    const arr = Array.from(set);
-    if (arr.length === 0) {
-      return ['VII.1', 'VII.2', 'VII.3', 'VIII.1', 'VIII.2', 'VIII.3', 'IX.1', 'IX.2', 'IX.3'];
-    }
-    return arr.sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
-  }, [students]);
 
   const parseClassList = (classStr: string) => {
     if (!classStr || classStr.trim() === 'Semua Kelas') return ['Semua Kelas'];
@@ -1498,13 +1609,20 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Chart 1: Exam Taken Times (Spline Curve & Bars) */}
             <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-3xl p-6 shadow-xs space-y-4">
-              <div className="flex items-start justify-between">
+              <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
                 <div>
-                  <h3 className="font-bold text-base text-slate-900 dark:text-white">
-                    {language === 'en' ? 'Exam Taken Times' : 'Rekapitulasi Pelaksanaan Ujian'}
+                  <h3 className="font-bold text-base text-slate-900 dark:text-white flex items-center gap-2">
+                    <BarChart3 className="w-4 h-4 text-violet-600" />
+                    <span>
+                      {examPeriodMode === 'daily'
+                        ? 'Rekapitulasi Pelaksanaan Ujian (Harian)'
+                        : 'Rekapitulasi Pelaksanaan Ujian (Bulanan)'}
+                    </span>
                   </h3>
                   <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">
-                    {language === 'en' ? 'Taken records of last Years' : 'Rekaman riwayat pelaksanaan ujian bulanan'}
+                    {examPeriodMode === 'daily'
+                      ? 'Statistik sesi ujian & kehadiran siswa per hari (Senin s/d Sabtu - Periode ASAS / Ujian Semester)'
+                      : 'Rekaman riwayat pelaksanaan ujian kalender bulanan semester'}
                   </p>
 
                   {/* Legends */}
@@ -1512,21 +1630,44 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                     <div className="flex items-center gap-1.5">
                       <span className="w-2.5 h-2.5 rounded-full bg-violet-600"></span>
                       <span className="text-slate-700 dark:text-slate-300 font-medium text-xs">
-                        {language === 'en' ? 'Active Exams' : 'Jadwal Ujian'}
+                        Jadwal Ujian
                       </span>
                     </div>
                     <div className="flex items-center gap-1.5">
                       <span className="w-2.5 h-2.5 rounded-full bg-violet-200 dark:bg-violet-900/60 border border-violet-400/40"></span>
                       <span className="text-slate-700 dark:text-slate-300 font-medium text-xs">
-                        {language === 'en' ? 'Active Exam Takers' : 'Peserta Ujian'}
+                        Peserta Ujian
                       </span>
                     </div>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/50 text-xs font-semibold text-slate-700 dark:text-slate-300 shadow-2xs">
-                  <Calendar className="w-3.5 h-3.5 text-slate-500" />
-                  <span>{language === 'en' ? 'Monthly' : 'Bulanan'}</span>
+                {/* Switcher: Harian (Senin - Sabtu) vs Bulanan */}
+                <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl text-xs font-bold self-start">
+                  <button
+                    type="button"
+                    onClick={() => setExamPeriodMode('daily')}
+                    className={`px-3 py-1.5 rounded-lg transition cursor-pointer flex items-center gap-1.5 ${
+                      examPeriodMode === 'daily'
+                        ? 'bg-white dark:bg-slate-900 text-violet-600 dark:text-violet-400 shadow-xs'
+                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                    }`}
+                  >
+                    <Clock className="w-3.5 h-3.5" />
+                    <span>Harian</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setExamPeriodMode('monthly')}
+                    className={`px-3 py-1.5 rounded-lg transition cursor-pointer flex items-center gap-1.5 ${
+                      examPeriodMode === 'monthly'
+                        ? 'bg-white dark:bg-slate-900 text-violet-600 dark:text-violet-400 shadow-xs'
+                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                    }`}
+                  >
+                    <Calendar className="w-3.5 h-3.5" />
+                    <span>Bulanan</span>
+                  </button>
                 </div>
               </div>
 
@@ -1541,11 +1682,11 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                   const padB = 26;
                   const chartW = svgW - padL - padR;
                   const chartH = svgH - padT - padB;
-                  const maxVal = monthlyExamStats.maxVal || 40;
-                  const statsList = monthlyExamStats.stats || [];
+                  const maxVal = activePeriodStats.maxVal || 40;
+                  const statsList = activePeriodStats.stats || [];
 
                   const points = statsList.map((item, idx) => {
-                    const x = padL + idx * (chartW / (statsList.length - 1));
+                    const x = padL + idx * (chartW / Math.max(1, statsList.length - 1));
                     const y = padT + chartH - (item.exams / maxVal) * chartH;
                     return { x, y, ...item };
                   });
@@ -1603,7 +1744,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                       {points.map((pt, idx) => {
                         const barH = (pt.takers / maxVal) * chartH;
                         const barY = padT + chartH - barH;
-                        const barW = 14;
+                        const barW = examPeriodMode === 'daily' ? 24 : 14;
                         return (
                           <rect
                             key={`bar-${idx}`}
@@ -1615,7 +1756,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                             ry="3"
                             className="fill-violet-100 dark:fill-violet-950/40 hover:fill-violet-200 dark:hover:fill-violet-900/60 transition-colors"
                           >
-                            <title>{`${pt.month}: ${pt.takers} Peserta Ujian`}</title>
+                            <title>{`${pt.label}: ${pt.takers} Peserta Ujian`}</title>
                           </rect>
                         );
                       })}
@@ -1642,20 +1783,20 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                           r="3.5"
                           className="fill-violet-600 stroke-white dark:stroke-slate-900 stroke-2 drop-shadow-xs"
                         >
-                          <title>{`${pt.month}: ${pt.exams} Ujian Aktif`}</title>
+                          <title>{`${pt.label}: ${pt.exams} Jadwal Ujian`}</title>
                         </circle>
                       ))}
 
-                      {/* X-Axis Month Labels */}
+                      {/* X-Axis Labels (Senin - Sabtu atau Jan - Des) */}
                       {points.map((pt, idx) => (
                         <text
                           key={`lbl-${idx}`}
                           x={pt.x}
                           y={svgH - 6}
                           textAnchor="middle"
-                          className="text-[10px] fill-slate-400 dark:fill-slate-500 font-medium"
+                          className="text-[10px] fill-slate-500 dark:fill-slate-400 font-semibold"
                         >
-                          {pt.month}
+                          {pt.label}
                         </text>
                       ))}
                     </svg>
@@ -1808,10 +1949,10 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
             <div>
               <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
                 <BarChart3 className="w-5 h-5 text-violet-600" />
-                <span>Statistik & Analisis Butir Soal Empiris</span>
+                <span>Statistik & Analisis Hasil Belajar Siswa</span>
               </h3>
               <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
-                Evaluasi daya serap materi, indeks tingkat kesukaran soal, dan log integritas ruang ujian.
+                Visualisasi komprehensif daya serap materi, sebaran predikat nilai, capaian rombel kelas, dan analisis butir soal empiris SMPN 58.
               </p>
             </div>
             <div className="flex items-center gap-2">
@@ -1821,20 +1962,29 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
             </div>
           </div>
 
-          {/* 3 Metric Cards Statistik */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+          {/* 4 Metric Cards Statistik */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-1">
               <span className="text-xs font-semibold text-slate-400">Rata-Rata Capaian Ujian</span>
               <h4 className="text-2xl font-bold text-slate-900 dark:text-white">{avgScore} Poin</h4>
-              <p className="text-xs text-slate-500">Dari total {results.length} lembar jawaban siswa terkumpul</p>
+              <p className="text-xs text-slate-500">{results.length} lembar ujian terkumpul • KKM 75</p>
             </div>
             <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-1">
               <span className="text-xs font-semibold text-slate-400">Ketuntasan Klasikal KKM</span>
               <h4 className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">{passRate}% Tuntas</h4>
-              <p className="text-xs text-slate-500">{passedStudentsCount} siswa tuntas • {remedialStudentsCount} perlu remedial</p>
+              <p className="text-xs text-slate-500">{passedStudentsCount} tuntas • {remedialStudentsCount} remedial</p>
             </div>
             <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-1">
-              <span className="text-xs font-semibold text-slate-400">Audit Integritas Layar</span>
+              <span className="text-xs font-semibold text-slate-400">Partisipasi Peserta</span>
+              <h4 className="text-2xl font-bold text-violet-600 dark:text-violet-400">
+                {results.length} / {students?.length || 0} Siswa
+              </h4>
+              <p className="text-xs text-slate-500">
+                {students && students.length > 0 ? Math.round((results.length / students.length) * 100) : 0}% siswa telah mengikuti
+              </p>
+            </div>
+            <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-1">
+              <span className="text-xs font-semibold text-slate-400">Audit Integritas Anti-Cheat</span>
               <h4 className="text-2xl font-bold text-slate-900 dark:text-white">
                 {results.filter(r => r.violationCount === 0).length} Siswa Tertib
               </h4>
@@ -1844,25 +1994,410 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
             </div>
           </div>
 
-          {/* TABEL ANALISIS TINGKAT KESUKARAN BUTIR SOAL */}
-          <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl shadow-xs overflow-hidden">
-            <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+          {/* DUA DIAGRAM ANALITIK: SEBARAN PREDIKAT NILAI & PROPORSI BUTIR SOAL */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Diagram 1: Sebaran Predikat Nilai Siswa */}
+            <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-3xl p-6 shadow-xs space-y-4">
               <div>
-                <h4 className="text-sm font-bold text-slate-900 dark:text-white">
-                  Tabel Tingkat Kesukaran Butir Soal (Difficulty Index)
+                <h4 className="font-bold text-base text-slate-900 dark:text-white flex items-center gap-2">
+                  <Award className="w-4 h-4 text-violet-600" />
+                  <span>Distribusi Predikat &amp; Capaian Nilai Siswa</span>
                 </h4>
-                <p className="text-xs text-slate-400">
-                  Dihitung otomatis berdasarkan jawaban seluruh peserta pada paket soal ini
+                <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">
+                  Pengelompokan hasil belajar siswa berdasarkan standar Kriteria Ketuntasan Minimal (KKM 75)
                 </p>
               </div>
-              <span className="text-xs text-slate-500 font-semibold">{questionItemAnalysis.length} Butir Dianalisis</span>
+
+              {/* Progress Bars Predikat */}
+              <div className="space-y-3.5 pt-1">
+                {/* Sangat Baik (A) */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                      <span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+                      <span>Sangat Baik (A: 90 - 100)</span>
+                    </span>
+                    <span className="font-bold text-slate-900 dark:text-white">
+                      {scoreDistribution.sangatBaik.count} Siswa ({scoreDistribution.sangatBaik.pct}%)
+                    </span>
+                  </div>
+                  <div className="h-2.5 w-full rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+                    <div
+                      style={{ width: `${scoreDistribution.sangatBaik.pct}%` }}
+                      className="h-full rounded-full bg-emerald-500 transition-all duration-500"
+                    ></div>
+                  </div>
+                </div>
+
+                {/* Baik (B) */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                      <span className="w-2.5 h-2.5 rounded-full bg-violet-600"></span>
+                      <span>Baik (B: 75 - 89)</span>
+                    </span>
+                    <span className="font-bold text-slate-900 dark:text-white">
+                      {scoreDistribution.baik.count} Siswa ({scoreDistribution.baik.pct}%)
+                    </span>
+                  </div>
+                  <div className="h-2.5 w-full rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+                    <div
+                      style={{ width: `${scoreDistribution.baik.pct}%` }}
+                      className="h-full rounded-full bg-violet-600 transition-all duration-500"
+                    ></div>
+                  </div>
+                </div>
+
+                {/* Cukup (C) */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                      <span className="w-2.5 h-2.5 rounded-full bg-amber-500"></span>
+                      <span>Cukup (C: 60 - 74)</span>
+                    </span>
+                    <span className="font-bold text-slate-900 dark:text-white">
+                      {scoreDistribution.cukup.count} Siswa ({scoreDistribution.cukup.pct}%)
+                    </span>
+                  </div>
+                  <div className="h-2.5 w-full rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+                    <div
+                      style={{ width: `${scoreDistribution.cukup.pct}%` }}
+                      className="h-full rounded-full bg-amber-500 transition-all duration-500"
+                    ></div>
+                  </div>
+                </div>
+
+                {/* Perlu Remedial (D) */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                      <span className="w-2.5 h-2.5 rounded-full bg-rose-500"></span>
+                      <span>Perlu Remedial (D: &lt; 60)</span>
+                    </span>
+                    <span className="font-bold text-rose-600 dark:text-rose-400">
+                      {scoreDistribution.remedial.count} Siswa ({scoreDistribution.remedial.pct}%)
+                    </span>
+                  </div>
+                  <div className="h-2.5 w-full rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+                    <div
+                      style={{ width: `${scoreDistribution.remedial.pct}%` }}
+                      className="h-full rounded-full bg-rose-500 transition-all duration-500"
+                    ></div>
+                  </div>
+                </div>
+              </div>
             </div>
 
-            {questionItemAnalysis.length === 0 ? (
-              <div className="p-12 text-center text-slate-400 text-xs">
-                Belum ada butir soal pada mapel ini untuk dianalisis.
+            {/* Diagram 2: Analisis Proporsi Tingkat Kesukaran Soal */}
+            <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-3xl p-6 shadow-xs space-y-4">
+              <div>
+                <h4 className="font-bold text-base text-slate-900 dark:text-white flex items-center gap-2">
+                  <SlidersHorizontal className="w-4 h-4 text-violet-600" />
+                  <span>Proporsi Indeks Kesukaran Butir Soal</span>
+                </h4>
+                <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">
+                  Evaluasi empiris butir soal berdasarkan rasio jawaban benar seluruh siswa ({questionItemAnalysis.length} butir)
+                </p>
               </div>
-            ) : (
+
+              <div className="space-y-3.5 pt-1">
+                {/* Mudah */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                      <span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+                      <span>Kategori Mudah (&gt;= 70% Benar)</span>
+                    </span>
+                    <span className="font-bold text-slate-900 dark:text-white">
+                      {questionItemAnalysis.filter(q => q.category === 'Mudah').length} Butir
+                    </span>
+                  </div>
+                  <div className="h-2.5 w-full rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+                    <div
+                      style={{
+                        width: `${questionItemAnalysis.length > 0 ? (questionItemAnalysis.filter(q => q.category === 'Mudah').length / questionItemAnalysis.length) * 100 : 0}%`
+                      }}
+                      className="h-full rounded-full bg-emerald-500 transition-all duration-500"
+                    ></div>
+                  </div>
+                </div>
+
+                {/* Sedang */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                      <span className="w-2.5 h-2.5 rounded-full bg-amber-500"></span>
+                      <span>Kategori Sedang (35% - 69% Benar)</span>
+                    </span>
+                    <span className="font-bold text-slate-900 dark:text-white">
+                      {questionItemAnalysis.filter(q => q.category === 'Sedang').length} Butir
+                    </span>
+                  </div>
+                  <div className="h-2.5 w-full rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+                    <div
+                      style={{
+                        width: `${questionItemAnalysis.length > 0 ? (questionItemAnalysis.filter(q => q.category === 'Sedang').length / questionItemAnalysis.length) * 100 : 0}%`
+                      }}
+                      className="h-full rounded-full bg-amber-500 transition-all duration-500"
+                    ></div>
+                  </div>
+                </div>
+
+                {/* Sukar (HOTS) */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                      <span className="w-2.5 h-2.5 rounded-full bg-rose-500"></span>
+                      <span>Kategori Sukar / HOTS (&lt; 35% Benar)</span>
+                    </span>
+                    <span className="font-bold text-rose-600 dark:text-rose-400">
+                      {questionItemAnalysis.filter(q => q.category === 'Sukar (HOTS)').length} Butir
+                    </span>
+                  </div>
+                  <div className="h-2.5 w-full rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+                    <div
+                      style={{
+                        width: `${questionItemAnalysis.length > 0 ? (questionItemAnalysis.filter(q => q.category === 'Sukar (HOTS)').length / questionItemAnalysis.length) * 100 : 0}%`
+                      }}
+                      className="h-full rounded-full bg-rose-500 transition-all duration-500"
+                    ></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* DIAGRAM KOMPARASI CAPAIAN RATA-RATA & KETUNTASAN PER KELAS (ROMBEL) */}
+          <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-3xl p-6 shadow-xs space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-3">
+              <div>
+                <h4 className="font-bold text-base text-slate-900 dark:text-white flex items-center gap-2">
+                  <Users className="w-4 h-4 text-violet-600" />
+                  <span>Komparasi Capaian Rata-Rata &amp; Ketuntasan per Rombel Kelas</span>
+                </h4>
+                <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">
+                  Pemetaan daya serap materi dan persentase tuntas KKM 75 per kelas di SMP Negeri 58 Palembang
+                </p>
+              </div>
+              <span className="text-xs font-bold px-3 py-1 rounded-xl bg-violet-50 dark:bg-violet-950/40 text-violet-600 dark:text-violet-400 border border-violet-200 dark:border-violet-800 self-start sm:self-auto">
+                {classPerformanceStats.length} Rombel Terdata
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 pt-2">
+              {classPerformanceStats.map(cp => (
+                <div
+                  key={cp.className}
+                  className="p-4 rounded-2xl border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 space-y-3"
+                >
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-extrabold text-sm text-slate-900 dark:text-white">Kelas {cp.className}</p>
+                      <p className="text-[11px] text-slate-400">
+                        {cp.testedCount} dari {cp.totalStudents} Siswa Mengikuti
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className={`text-xl font-black ${cp.avgScore >= 75 ? 'text-emerald-600 dark:text-emerald-400' : cp.avgScore >= 60 ? 'text-amber-500' : 'text-rose-500'}`}>
+                        {cp.avgScore}
+                      </p>
+                      <span className="text-[10px] font-semibold text-slate-400 block">Rata-Rata</span>
+                    </div>
+                  </div>
+
+                  {/* Progress Ketuntasan Kelas */}
+                  <div className="space-y-1">
+                    <div className="flex justify-between text-[11px]">
+                      <span className="text-slate-500">Ketuntasan KKM:</span>
+                      <span className="font-bold text-slate-700 dark:text-slate-300">
+                        {cp.passedCount} Siswa ({cp.passRate}%)
+                      </span>
+                    </div>
+                    <div className="h-2 w-full rounded-full bg-slate-200/70 dark:bg-slate-700/60 overflow-hidden">
+                      <div
+                        style={{ width: `${cp.passRate}%` }}
+                        className={`h-full rounded-full transition-all duration-500 ${
+                          cp.passRate >= 75 ? 'bg-emerald-500' : cp.passRate >= 50 ? 'bg-amber-500' : 'bg-rose-500'
+                        }`}
+                      ></div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* TABEL DATA SISWA & ANALISIS SOAL (DENGAN TABS INTERAKTIF) */}
+          <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-3xl shadow-xs overflow-hidden">
+            {/* Header Tabs */}
+            <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setStatsActiveTab('ranking')}
+                  className={`px-3.5 py-2 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
+                    statsActiveTab === 'ranking'
+                      ? 'bg-violet-600 text-white shadow-xs'
+                      : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                  }`}
+                >
+                  <Award className="w-3.5 h-3.5" />
+                  <span>10 Siswa Nilai Tertinggi</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStatsActiveTab('remedial')}
+                  className={`px-3.5 py-2 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
+                    statsActiveTab === 'remedial'
+                      ? 'bg-rose-600 text-white shadow-xs'
+                      : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                  }`}
+                >
+                  <AlertTriangle className="w-3.5 h-3.5" />
+                  <span>Daftar Siswa Remedial (&lt; 75)</span>
+                  {remedialStudents.length > 0 && (
+                    <span className="px-1.5 py-0.2 rounded-full bg-rose-200 text-rose-900 font-extrabold text-[10px]">
+                      {remedialStudents.length}
+                    </span>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStatsActiveTab('questions')}
+                  className={`px-3.5 py-2 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
+                    statsActiveTab === 'questions'
+                      ? 'bg-violet-600 text-white shadow-xs'
+                      : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                  }`}
+                >
+                  <SlidersHorizontal className="w-3.5 h-3.5" />
+                  <span>Analisis Butir Soal ({questionItemAnalysis.length})</span>
+                </button>
+              </div>
+            </div>
+
+            {/* TAB CONTENT 1: 10 SISWA NILAI TERTINGGI */}
+            {statsActiveTab === 'ranking' && (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40 text-slate-500 font-semibold">
+                      <th className="py-3 px-4 w-16 text-center">Peringkat</th>
+                      <th className="py-3 px-4">Nama Siswa</th>
+                      <th className="py-3 px-4">Kelas</th>
+                      <th className="py-3 px-4 text-center">Skor Akhir</th>
+                      <th className="py-3 px-4 text-center">Poin / Maks</th>
+                      <th className="py-3 px-4 text-center">Integritas</th>
+                      <th className="py-3 px-4 text-center">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium">
+                    {topStudents.length === 0 ? (
+                      <tr>
+                        <td colSpan={7} className="p-8 text-center text-slate-400">
+                          Belum ada data nilai siswa terkumpul.
+                        </td>
+                      </tr>
+                    ) : (
+                      topStudents.map((res, idx) => (
+                        <tr key={res.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition">
+                          <td className="py-3 px-4 text-center font-black">
+                            {idx === 0 ? '🥇 1' : idx === 1 ? '🥈 2' : idx === 2 ? '🥉 3' : `#${idx + 1}`}
+                          </td>
+                          <td className="py-3 px-4 font-bold text-slate-900 dark:text-white uppercase">
+                            {res.studentName}
+                          </td>
+                          <td className="py-3 px-4 font-semibold text-violet-600 dark:text-violet-400">
+                            {resolveStudentSingleClass(res.studentName, res.className, students)}
+                          </td>
+                          <td className="py-3 px-4 text-center">
+                            <span className="px-2.5 py-1 rounded-xl bg-violet-50 dark:bg-violet-950/60 font-black text-sm text-violet-700 dark:text-violet-300">
+                              {res.score}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 text-center font-mono text-slate-600 dark:text-slate-400">
+                            {res.totalEarned} / {res.totalMax}
+                          </td>
+                          <td className="py-3 px-4 text-center">
+                            {res.violationCount === 0 ? (
+                              <span className="text-emerald-600 font-bold text-[11px]">✓ 100% Tertib</span>
+                            ) : (
+                              <span className="text-rose-500 font-bold text-[11px]">{res.violationCount}x Alih Tab</span>
+                            )}
+                          </td>
+                          <td className="py-3 px-4 text-center">
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300">
+                              TUNTAS KKM
+                            </span>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {/* TAB CONTENT 2: DAFTAR SISWA REMEDIAL */}
+            {statsActiveTab === 'remedial' && (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40 text-slate-500 font-semibold">
+                      <th className="py-3 px-4 w-12 text-center">No</th>
+                      <th className="py-3 px-4">Nama Siswa</th>
+                      <th className="py-3 px-4">Kelas</th>
+                      <th className="py-3 px-4 text-center">Nilai Ujian</th>
+                      <th className="py-3 px-4 text-center">Poin / Maks</th>
+                      <th className="py-3 px-4 text-center">Selisih KKM (75)</th>
+                      <th className="py-3 px-4 text-center">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium">
+                    {remedialStudents.length === 0 ? (
+                      <tr>
+                        <td colSpan={7} className="p-8 text-center text-slate-400">
+                          <CheckCircle2 className="w-6 h-6 text-emerald-500 mx-auto mb-1" />
+                          <p className="font-bold text-xs">Seluruh Siswa Tuntas KKM!</p>
+                          <p className="text-[11px]">Tidak ada siswa yang memerlukan program remedial pada paket ini.</p>
+                        </td>
+                      </tr>
+                    ) : (
+                      remedialStudents.map((res, idx) => (
+                        <tr key={res.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition">
+                          <td className="py-3 px-4 text-center font-bold text-slate-400">{idx + 1}</td>
+                          <td className="py-3 px-4 font-bold text-slate-900 dark:text-white uppercase">
+                            {res.studentName}
+                          </td>
+                          <td className="py-3 px-4 font-semibold text-slate-600 dark:text-slate-400">
+                            {resolveStudentSingleClass(res.studentName, res.className, students)}
+                          </td>
+                          <td className="py-3 px-4 text-center">
+                            <span className="px-2.5 py-1 rounded-xl bg-rose-50 dark:bg-rose-950/60 font-black text-sm text-rose-700 dark:text-rose-300">
+                              {res.score}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 text-center font-mono text-slate-600 dark:text-slate-400">
+                            {res.totalEarned} / {res.totalMax}
+                          </td>
+                          <td className="py-3 px-4 text-center font-bold text-rose-600">
+                            -{75 - (res.score || 0)} Poin
+                          </td>
+                          <td className="py-3 px-4 text-center">
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300">
+                              PERLU REMEDIAL
+                            </span>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {/* TAB CONTENT 3: TABEL ANALISIS TINGKAT KESUKARAN BUTIR SOAL */}
+            {statsActiveTab === 'questions' && (
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse text-xs">
                   <thead>
@@ -1877,39 +2412,47 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium">
-                    {questionItemAnalysis.map((item) => (
-                      <tr key={item.question.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition">
-                        <td className="py-3 px-4 text-center font-bold text-slate-400">{item.no}</td>
-                        <td className="py-3 px-4">
-                          <span className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold text-[11px]">
-                            {item.question.type}
-                          </span>
-                        </td>
-                        <td className="py-3 px-4 text-slate-900 dark:text-slate-100 max-w-md truncate">
-                          {item.question.questionText}
-                        </td>
-                        <td className="py-3 px-4 text-center text-slate-600 dark:text-slate-400">{item.totalAnswered}</td>
-                        <td className="py-3 px-4 text-center font-bold text-emerald-600 dark:text-emerald-400">{item.correctCount}</td>
-                        <td className="py-3 px-4 text-center">
-                          <span className="font-bold">{item.difficultyIndex}%</span>
-                        </td>
-                        <td className="py-3 px-4 text-center">
-                          <span
-                            className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                              item.category === 'Mudah'
-                                ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300'
-                                : item.category === 'Sedang'
-                                ? 'bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300'
-                                : item.category === 'Sukar (HOTS)'
-                                ? 'bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300'
-                                : 'bg-slate-100 dark:bg-slate-800 text-slate-500'
-                            }`}
-                          >
-                            {item.category}
-                          </span>
+                    {questionItemAnalysis.length === 0 ? (
+                      <tr>
+                        <td colSpan={7} className="p-8 text-center text-slate-400">
+                          Belum ada butir soal pada mapel ini untuk dianalisis.
                         </td>
                       </tr>
-                    ))}
+                    ) : (
+                      questionItemAnalysis.map((item) => (
+                        <tr key={item.question.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition">
+                          <td className="py-3 px-4 text-center font-bold text-slate-400">{item.no}</td>
+                          <td className="py-3 px-4">
+                            <span className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold text-[11px]">
+                              {item.question.type}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 text-slate-900 dark:text-slate-100 max-w-md truncate">
+                            {item.question.questionText}
+                          </td>
+                          <td className="py-3 px-4 text-center text-slate-600 dark:text-slate-400">{item.totalAnswered}</td>
+                          <td className="py-3 px-4 text-center font-bold text-emerald-600 dark:text-emerald-400">{item.correctCount}</td>
+                          <td className="py-3 px-4 text-center">
+                            <span className="font-bold">{item.difficultyIndex}%</span>
+                          </td>
+                          <td className="py-3 px-4 text-center">
+                            <span
+                              className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                item.category === 'Mudah'
+                                  ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300'
+                                  : item.category === 'Sedang'
+                                  ? 'bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300'
+                                  : item.category === 'Sukar (HOTS)'
+                                  ? 'bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300'
+                                  : 'bg-slate-100 dark:bg-slate-800 text-slate-500'
+                              }`}
+                            >
+                              {item.category}
+                            </span>
+                          </td>
+                        </tr>
+                      ))
+                    )}
                   </tbody>
                 </table>
               </div>

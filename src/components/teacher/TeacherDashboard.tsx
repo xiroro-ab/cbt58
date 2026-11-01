@@ -11,6 +11,7 @@ import { evaluateFullExam, calculateSingleQuestionScore } from '@/lib/scoringEng
 import { sendProctorCommand, subscribeToLiveSessions, removeStudentSession, broadcastAnnouncementToStudents } from '@/lib/liveMonitoringService';
 import { clearStudentAutolockInSupabase, insertMessage, fetchQuestionsBySubject, updateTeacherPhotoInSupabase } from '@/lib/supabaseService';
 import { resolveStudentSingleClass, isClassInGrade } from '@/lib/rosterStudents';
+import { initialTeachers } from '@/lib/rosterTeachers';
 import { TTESignatureSeal } from '@/components/common/TTESignatureSeal';
 import { ClassRecapModal } from '../modals/ClassRecapModal';
 import {
@@ -79,6 +80,7 @@ interface TeacherDashboardProps {
   results: ExamResult[];
   students?: Student[];
   currentTeacher?: Teacher | null;
+  teachers?: Teacher[];
   allSubjects?: Subject[];
   onSelectNav?: (nav: NavItem) => void;
   onSelectSubject?: (sub: Subject) => void;
@@ -177,6 +179,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   results,
   students = [],
   currentTeacher,
+  teachers = initialTeachers,
   allSubjects,
   onSelectNav,
   onSelectSubject,
@@ -2072,6 +2075,99 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
     if (!selectedDocSubject.className) return [];
     return selectedDocSubject.className.split(',').map(c => c.trim().toLowerCase()).filter(Boolean);
   }, [selectedDocSubject.className]);
+
+  // State Konfigurasi Rinci Berita Acara Pelaksanaan (BAP)
+  const [bapSession, setBapSession] = useState<string>('Sesi 1 (07.30 - 09.00 WIB)');
+  const [bapRoom, setBapRoom] = useState<string>('Laboratorium Komputer CBT 1');
+  const [bapServerId, setBapServerId] = useState<string>('SRV-58-CBT01');
+  const [bapAcademicYear, setBapAcademicYear] = useState<string>('2026/2027');
+  const [bapSemester, setBapSemester] = useState<string>('Semester Ganjil');
+  const [bapExamTitle, setBapExamTitle] = useState<string>('ASESMEN SUMATIF BERBASIS KOMPUTER');
+  const [bapNotes, setBapNotes] = useState<string>(
+    'Pelaksanaan ujian berlangsung tertib, aman, dan kondusif dengan proteksi anti-curang aktif. Seluruh butir soal berhasil diakses oleh peserta tanpa hambatan teknis server.'
+  );
+  const [bapSupervisorName, setBapSupervisorName] = useState<string>('');
+  const [bapSupervisorNip, setBapSupervisorNip] = useState<string>('');
+  const [bapProctorName, setBapProctorName] = useState<string>('');
+  const [bapProctorNip, setBapProctorNip] = useState<string>('');
+  const [isBapConfigOpen, setIsBapConfigOpen] = useState<boolean>(false);
+
+  // Perhitungan Siswa Real untuk Berita Acara Pelaksanaan (BAP)
+  const bapTargetStudents = useMemo(() => {
+    if (!students || students.length === 0) return [];
+    if (selectedDocClass !== 'Semua Kelas') {
+      return students.filter(s => s.className?.trim() === selectedDocClass.trim());
+    }
+    if (docTargetClasses.length > 0) {
+      return students.filter(s => {
+        const c = (s.className || '').trim().toLowerCase();
+        return docTargetClasses.includes(c);
+      });
+    }
+    return students;
+  }, [students, selectedDocClass, docTargetClasses]);
+
+  const bapPresentStudents = useMemo(() => {
+    if (!bapTargetStudents || bapTargetStudents.length === 0) return [];
+    return bapTargetStudents.filter(std => {
+      return docResults.some(r => {
+        const matchId = r.studentId && r.studentId === std.id;
+        const matchName = r.studentName && r.studentName.trim().toLowerCase() === std.name.trim().toLowerCase();
+        return matchId || matchName;
+      });
+    });
+  }, [bapTargetStudents, docResults]);
+
+  const bapAbsentStudents = useMemo(() => {
+    if (!bapTargetStudents || bapTargetStudents.length === 0) return [];
+    return bapTargetStudents.filter(std => {
+      return !bapPresentStudents.some(p => p.id === std.id);
+    });
+  }, [bapTargetStudents, bapPresentStudents]);
+
+  // Resolusi Pejabat Penandatangan Real BAP
+  const effectiveBapSupervisorName = useMemo(() => {
+    return bapSupervisorName.trim() || currentTeacher?.name || effectiveSchoolSettings.teacherName || 'Pengawas Ruang Ujian';
+  }, [bapSupervisorName, currentTeacher, effectiveSchoolSettings.teacherName]);
+
+  const effectiveBapSupervisorNip = useMemo(() => {
+    return bapSupervisorNip.trim() || currentTeacher?.nip || effectiveSchoolSettings.teacherNip || '-';
+  }, [bapSupervisorNip, currentTeacher, effectiveSchoolSettings.teacherNip]);
+
+  const defaultBapProctor = useMemo(() => {
+    return (teachers || []).find(t => t.name.toLowerCase().includes('aris') || t.role === 'admin') || teachers?.[0];
+  }, [teachers]);
+
+  const effectiveBapProctorName = useMemo(() => {
+    return bapProctorName.trim() || defaultBapProctor?.name || 'Aris Bermansyah, S.Kom';
+  }, [bapProctorName, defaultBapProctor]);
+
+  const effectiveBapProctorNip = useMemo(() => {
+    return bapProctorNip.trim() || defaultBapProctor?.nip || '199611142024211010';
+  }, [bapProctorNip, defaultBapProctor]);
+
+  const effectiveExamDate = useMemo(() => {
+    if (selectedDocSubject.examDate) {
+      try {
+        const parts = selectedDocSubject.examDate.split('-');
+        if (parts.length === 3) {
+          const d = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+          if (!isNaN(d.getTime())) return d;
+        }
+      } catch (e) {
+        // fallback
+      }
+    }
+    return new Date();
+  }, [selectedDocSubject.examDate]);
+
+  const bapDayName = useMemo(() => {
+    return effectiveExamDate.toLocaleDateString('id-ID', { weekday: 'long' });
+  }, [effectiveExamDate]);
+
+  const bapDateFormatted = useMemo(() => {
+    return effectiveExamDate.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
+  }, [effectiveExamDate]);
 
   const availableClasses = useMemo(() => {
     const set = new Set<string>();
@@ -4733,6 +4829,159 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
             ))}
           </div>
 
+          {/* Panel Konfigurasi Rincian BAP Interaktif (Hanya Muncul saat Tab BAP Aktif, Tersembunyi saat Cetak) */}
+          {selectedDocType === 'bap' && (
+            <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-3 print:hidden">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-lg bg-violet-100 dark:bg-violet-900/50 text-violet-600 dark:text-violet-400 flex items-center justify-center">
+                    <SlidersHorizontal className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">
+                      Pengaturan Rincian Berita Acara (BAP)
+                    </h4>
+                    <p className="text-[11px] text-slate-500">
+                      Sesuaikan sesi ujian, ruang lab, nama pengawas, proktor, dan catatan kejadian khusus.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsBapConfigOpen(!isBapConfigOpen)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-violet-50 dark:bg-violet-950/50 hover:bg-violet-100 dark:hover:bg-violet-900/60 text-violet-700 dark:text-violet-300 border border-violet-200 dark:border-violet-800/80 text-xs font-semibold transition cursor-pointer"
+                >
+                  <SlidersHorizontal className="w-3.5 h-3.5" />
+                  <span>{isBapConfigOpen ? 'Tutup Pengaturan BAP' : 'Edit Sesi, Ruang & Catatan BAP'}</span>
+                </button>
+              </div>
+
+              {isBapConfigOpen && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 pt-3 border-t border-slate-100 dark:border-slate-800 text-xs">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                      Sesi Ujian & Waktu:
+                    </label>
+                    <input
+                      type="text"
+                      value={bapSession}
+                      onChange={e => setBapSession(e.target.value)}
+                      className="w-full px-2.5 py-1.5 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-medium text-slate-900 dark:text-white"
+                      placeholder="Contoh: Sesi 1 (07.30 - 09.00 WIB)"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                      Ruang / Laboratorium:
+                    </label>
+                    <input
+                      type="text"
+                      value={bapRoom}
+                      onChange={e => setBapRoom(e.target.value)}
+                      className="w-full px-2.5 py-1.5 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-medium text-slate-900 dark:text-white"
+                      placeholder="Contoh: Laboratorium Komputer CBT 1"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                      ID Server / Host:
+                    </label>
+                    <input
+                      type="text"
+                      value={bapServerId}
+                      onChange={e => setBapServerId(e.target.value)}
+                      className="w-full px-2.5 py-1.5 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-medium text-slate-900 dark:text-white"
+                      placeholder="Contoh: SRV-58-CBT01"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                      Tahun Ajaran & Semester:
+                    </label>
+                    <div className="flex gap-1.5">
+                      <input
+                        type="text"
+                        value={bapAcademicYear}
+                        onChange={e => setBapAcademicYear(e.target.value)}
+                        className="w-1/2 px-2 py-1.5 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-medium text-slate-900 dark:text-white"
+                        placeholder="2026/2027"
+                      />
+                      <input
+                        type="text"
+                        value={bapSemester}
+                        onChange={e => setBapSemester(e.target.value)}
+                        className="w-1/2 px-2 py-1.5 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-medium text-slate-900 dark:text-white"
+                        placeholder="Semester Ganjil"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                      Pengawas Ruang Ujian:
+                    </label>
+                    <select
+                      value={effectiveBapSupervisorName}
+                      onChange={e => {
+                        const selectedT = (teachers || []).find(tc => tc.name === e.target.value);
+                        if (selectedT) {
+                          setBapSupervisorName(selectedT.name);
+                          setBapSupervisorNip(selectedT.nip || '-');
+                        } else {
+                          setBapSupervisorName(e.target.value);
+                        }
+                      }}
+                      className="w-full px-2.5 py-1.5 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-medium text-slate-900 dark:text-white [color-scheme:light] dark:[color-scheme:dark]"
+                    >
+                      {(teachers || []).map(tc => (
+                        <option key={tc.id} value={tc.name}>{tc.name} ({tc.nip || 'No NIP'})</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                      Proktor Utama CBT:
+                    </label>
+                    <select
+                      value={effectiveBapProctorName}
+                      onChange={e => {
+                        const selectedT = (teachers || []).find(tc => tc.name === e.target.value);
+                        if (selectedT) {
+                          setBapProctorName(selectedT.name);
+                          setBapProctorNip(selectedT.nip || '-');
+                        } else {
+                          setBapProctorName(e.target.value);
+                        }
+                      }}
+                      className="w-full px-2.5 py-1.5 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-medium text-slate-900 dark:text-white [color-scheme:light] dark:[color-scheme:dark]"
+                    >
+                      {(teachers || []).map(tc => (
+                        <option key={tc.id} value={tc.name}>{tc.name} ({tc.nip || 'No NIP'})</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="col-span-1 sm:col-span-2">
+                    <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                      Catatan Integritas & Pelaksanaan Ujian:
+                    </label>
+                    <textarea
+                      rows={2}
+                      value={bapNotes}
+                      onChange={e => setBapNotes(e.target.value)}
+                      className="w-full px-2.5 py-1.5 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-medium text-slate-900 dark:text-white"
+                      placeholder="Tulis catatan jika terjadi kendala teknis atau kejadian khusus saat ujian..."
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* LEMBAR DOKUMEN RESMI (PRINTABLE SHEET) */}
           <div className="p-8 sm:p-12 bg-white text-slate-900 rounded-2xl border border-slate-200/80 shadow-md font-serif space-y-6 max-w-4xl mx-auto print:border-none print:shadow-none print:p-0 print:max-w-none">
             {/* KOP SURAT RESMI SEKOLAH (DINAMIS DARI PENGATURAN SISTEM) */}
@@ -4784,24 +5033,19 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
               <div className="space-y-6 pt-2">
                 <div className="text-center space-y-1">
                   <h3 className="text-base font-bold underline uppercase tracking-wider font-sans">
-                    BERITA ACARA PELAKSANAAN ASESMEN SUMATIF
+                    BERITA ACARA PELAKSANAAN {bapExamTitle}
                   </h3>
                   <p className="text-xs font-sans text-slate-600">
-                    Tahun Ajaran 2026/2027 • Berbasis Komputer & Android (CBT)
+                    Tahun Ajaran {bapAcademicYear} • {bapSemester} • Berbasis Komputer & Android (CBT)
                   </p>
                 </div>
 
                 <div className="text-xs space-y-3 font-sans leading-relaxed text-slate-800">
                   <p>
-                    Pada hari ini,{' '}
-                    <strong className="text-slate-950 font-bold">
-                      {(selectedDocSubject.examDate ? new Date(selectedDocSubject.examDate) : new Date()).toLocaleDateString('id-ID', { weekday: 'long' })}
-                    </strong>
-                    , tanggal{' '}
-                    <strong className="text-slate-950 font-bold">
-                      {(selectedDocSubject.examDate ? new Date(selectedDocSubject.examDate) : new Date()).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}
-                    </strong>
-                    , telah dilaksanakan Asesmen Berbasis Komputer (CBT) dengan rincian sebagai berikut:
+                    Pada hari ini, <strong className="text-slate-950 font-bold">{bapDayName}</strong>, tanggal{' '}
+                    <strong className="text-slate-950 font-bold">{bapDateFormatted}</strong>, bertempat di{' '}
+                    <strong className="text-slate-950 font-bold">{bapRoom}</strong>, telah diselenggarakan Asesmen Berbasis Komputer (CBT) untuk mata pelajaran{' '}
+                    <strong className="text-slate-950 font-bold">{selectedDocSubject.title}</strong> dengan rincian data pelaksanaan sebagai berikut:
                   </p>
 
                   <div className="grid grid-cols-2 gap-y-2 gap-x-6 p-4 rounded-xl bg-slate-50 border border-slate-200">
@@ -4816,75 +5060,165 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                       </strong>
                     </div>
                     <div>
-                      <span className="text-slate-500 block text-[11px]">Durasi Ujian / Token Rilis:</span>
-                      <strong className="text-sm font-bold text-slate-900">{selectedDocSubject.durationMinutes} Menit • Token: {selectedDocSubject.token}</strong>
+                      <span className="text-slate-500 block text-[11px]">Sesi Pelaksanaan:</span>
+                      <strong className="text-sm font-bold text-slate-900">{bapSession}</strong>
                     </div>
                     <div>
                       <span className="text-slate-500 block text-[11px]">Ruang / Laboratorium:</span>
-                      <strong className="text-sm font-bold text-slate-900">Lab Komputer CBT SMPN 58</strong>
+                      <strong className="text-sm font-bold text-slate-900">{bapRoom}</strong>
+                    </div>
+                    <div>
+                      <span className="text-slate-500 block text-[11px]">Durasi Ujian & Token Rilis:</span>
+                      <strong className="text-sm font-bold text-slate-900">{selectedDocSubject.durationMinutes} Menit • Token: {selectedDocSubject.token}</strong>
+                    </div>
+                    <div>
+                      <span className="text-slate-500 block text-[11px]">ID Server & Jumlah Butir Soal:</span>
+                      <strong className="text-sm font-bold text-slate-900">
+                        {bapServerId} • {questions.filter(q => q.subjectId === selectedDocSubject.id).length} Soal
+                      </strong>
                     </div>
                   </div>
 
                   <div className="space-y-2 pt-2">
                     <h5 className="font-bold text-xs uppercase text-slate-900">A. Rekapitulasi Kehadiran Peserta:</h5>
-                    <div className="grid grid-cols-3 gap-3 text-center">
-                      <div className="p-3 border border-slate-200 rounded-lg">
-                        <span className="block text-[11px] text-slate-500">Terdaftar di Sistem</span>
+                    <div className="grid grid-cols-4 gap-3 text-center">
+                      <div className="p-3 border border-slate-200 rounded-lg bg-slate-50">
+                        <span className="block text-[11px] text-slate-500">Terdaftar</span>
                         <strong className="text-base font-bold text-slate-900">
-                          {selectedDocClass === 'Semua Kelas'
-                            ? (students?.length || 0)
-                            : (students?.filter(s => s.className === selectedDocClass).length || 0)} Siswa
+                          {bapTargetStudents.length} Siswa
                         </strong>
                       </div>
-                      <div className="p-3 border border-slate-200 rounded-lg bg-emerald-50/50">
+                      <div className="p-3 border border-emerald-200 rounded-lg bg-emerald-50/50">
                         <span className="block text-[11px] text-emerald-700">Hadir & Mengerjakan</span>
                         <strong className="text-base font-bold text-emerald-800">
-                          {selectedDocClass === 'Semua Kelas'
-                            ? docResults.length
-                            : docResults.filter(r => resolveStudentSingleClass(r.studentName, r.className, students) === selectedDocClass).length} Siswa
+                          {bapPresentStudents.length} Siswa
                         </strong>
                       </div>
-                      <div className="p-3 border border-slate-200 rounded-lg bg-rose-50/50">
+                      <div className="p-3 border border-rose-200 rounded-lg bg-rose-50/50">
                         <span className="block text-[11px] text-rose-700">Tidak Hadir / Izin</span>
                         <strong className="text-base font-bold text-rose-800">
-                          {Math.max(0, (selectedDocClass === 'Semua Kelas'
-                            ? (students?.length || 0) - docResults.length
-                            : (students?.filter(s => s.className === selectedDocClass).length || 0) - docResults.filter(r => resolveStudentSingleClass(r.studentName, r.className, students) === selectedDocClass).length))} Siswa
+                          {bapAbsentStudents.length} Siswa
                         </strong>
                       </div>
+                      <div className="p-3 border border-blue-200 rounded-lg bg-blue-50/50">
+                        <span className="block text-[11px] text-blue-700">Tingkat Kehadiran</span>
+                        <strong className="text-base font-bold text-blue-800">
+                          {bapTargetStudents.length > 0 ? Math.round((bapPresentStudents.length / bapTargetStudents.length) * 100) : 0}%
+                        </strong>
+                      </div>
+                    </div>
+
+                    {/* Keterangan Peserta Tidak Hadir */}
+                    <div className="pt-1">
+                      {bapAbsentStudents.length === 0 ? (
+                        <div className="p-2.5 rounded-lg border border-slate-200 bg-slate-50 text-[11px] text-slate-700 italic">
+                          Catatan Kehadiran: <strong>Nihil</strong> (Seluruh siswa terdaftar hadir lengkap dan telah menyelesaikan asesmen).
+                        </div>
+                      ) : (
+                        <div className="p-3 rounded-lg border border-rose-200 bg-rose-50/40 space-y-1.5">
+                          <span className="font-bold text-rose-900 block text-[11px]">
+                            Daftar Peserta Tidak Hadir / Belum Submit ({bapAbsentStudents.length} Siswa):
+                          </span>
+                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 text-[10px]">
+                            {bapAbsentStudents.map((std, idx) => (
+                              <div key={std.id} className="p-1.5 rounded bg-white border border-rose-200 text-slate-800">
+                                <span className="font-bold text-rose-700 mr-1">{idx + 1}.</span>
+                                <span className="font-semibold">{std.name}</span>
+                                <span className="text-slate-500 block text-[9px] font-mono">NISN: {std.nisn || '-'} • Kls: {std.className}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
 
                   <div className="space-y-1 pt-2">
                     <h5 className="font-bold text-xs uppercase text-slate-900">B. Catatan Integritas & Pelaksanaan Ujian:</h5>
-                    <p className="p-3 border border-slate-200 rounded-lg bg-slate-50 text-[11px] leading-relaxed">
-                      Ujian berlangsung secara tertib dan kondusif dengan proteksi anti-curang aktif. Seluruh butir soal berhasil diakses oleh peserta tanpa gangguan teknis server.
-                    </p>
+                    <div className="p-3 border border-slate-200 rounded-lg bg-slate-50 text-[11px] leading-relaxed text-slate-800 whitespace-pre-line">
+                      {bapNotes || 'Pelaksanaan ujian berlangsung tertib, aman, dan lancar.'}
+                    </div>
                   </div>
 
-                  {/* TANDA TANGAN RESMI */}
-                  <div className="grid grid-cols-3 gap-6 pt-8 text-center text-xs font-sans">
-                    <div className="space-y-16">
-                      <p>Pengawas Ruang Ujian,</p>
-                      <div>
-                        <strong className="underline block font-bold text-slate-900">{effectiveSchoolSettings.teacherName}</strong>
-                        <span className="text-[11px] text-slate-500">NIP: {effectiveSchoolSettings.teacherNip}</span>
-                      </div>
+                  {/* TANDA TANGAN RESMI 3 PEJABAT DENGAN TTE VERIFIKASI */}
+                  <div className="pt-4">
+                    <div className="flex justify-end text-xs font-sans text-slate-800 mb-4">
+                      <p>
+                        {effectiveSchoolSettings.city || 'Palembang'}, {bapDateFormatted}
+                      </p>
                     </div>
 
-                    <div className="space-y-16">
-                      <p>Proktor Utama CBT,</p>
-                      <div>
-                        <strong className="underline block font-bold text-slate-900">Administrator CBT</strong>
-                        <span className="text-[11px] text-slate-500">NIP: 198503142010011008</span>
+                    <div className="grid grid-cols-3 gap-4 text-center text-xs font-sans">
+                      {/* 1. Pengawas Ruang Ujian */}
+                      <div className="flex flex-col items-center justify-between min-h-[160px]">
+                        <p className="font-semibold text-slate-800">Pengawas Ruang Ujian,</p>
+                        {effectiveSchoolSettings.enableTTE ? (
+                          <div className="my-2">
+                            <TTESignatureSeal
+                              settings={effectiveSchoolSettings}
+                              documentId={`BAP-PGS-${selectedDocSubject.token || '58'}`}
+                              signerName={effectiveBapSupervisorName}
+                              signerTitle="Pengawas Ruang Ujian"
+                              signerNip={effectiveBapSupervisorNip}
+                              sealOnly={true}
+                            />
+                          </div>
+                        ) : (
+                          <div className="h-16" />
+                        )}
+                        <div>
+                          <strong className="underline block font-bold text-slate-950 uppercase">{effectiveBapSupervisorName}</strong>
+                          <span className="text-[11px] text-slate-600 font-mono">NIP: {effectiveBapSupervisorNip || '-'}</span>
+                        </div>
                       </div>
-                    </div>
 
-                    <div className="space-y-16">
-                      <p>Mengetahui,<br />Kepala {effectiveSchoolSettings.schoolName},</p>
-                      <div>
-                        <strong className="underline block font-bold text-slate-900">{effectiveSchoolSettings.principalName}</strong>
-                        <span className="text-[11px] text-slate-500">NIP: {effectiveSchoolSettings.principalNip}</span>
+                      {/* 2. Proktor Utama CBT */}
+                      <div className="flex flex-col items-center justify-between min-h-[160px]">
+                        <p className="font-semibold text-slate-800">Proktor / Teknisi CBT,</p>
+                        {effectiveSchoolSettings.enableTTE ? (
+                          <div className="my-2">
+                            <TTESignatureSeal
+                              settings={effectiveSchoolSettings}
+                              documentId={`BAP-PRK-${selectedDocSubject.token || '58'}`}
+                              signerName={effectiveBapProctorName}
+                              signerTitle="Proktor / Teknisi CBT"
+                              signerNip={effectiveBapProctorNip}
+                              sealOnly={true}
+                            />
+                          </div>
+                        ) : (
+                          <div className="h-16" />
+                        )}
+                        <div>
+                          <strong className="underline block font-bold text-slate-950 uppercase">{effectiveBapProctorName}</strong>
+                          <span className="text-[11px] text-slate-600 font-mono">NIP: {effectiveBapProctorNip || '-'}</span>
+                        </div>
+                      </div>
+
+                      {/* 3. Kepala Sekolah */}
+                      <div className="flex flex-col items-center justify-between min-h-[160px]">
+                        <p className="font-semibold text-slate-800">
+                          Mengetahui,<br />
+                          {effectiveSchoolSettings.principalTitle || `Kepala ${effectiveSchoolSettings.schoolName}`}
+                        </p>
+                        {effectiveSchoolSettings.enableTTE ? (
+                          <div className="my-2">
+                            <TTESignatureSeal
+                              settings={effectiveSchoolSettings}
+                              documentId={`BAP-KSP-${selectedDocSubject.token || '58'}`}
+                              signerName={effectiveSchoolSettings.principalName}
+                              signerTitle={effectiveSchoolSettings.principalTitle || `Kepala ${effectiveSchoolSettings.schoolName}`}
+                              signerNip={effectiveSchoolSettings.principalNip}
+                              sealOnly={true}
+                            />
+                          </div>
+                        ) : (
+                          <div className="h-16" />
+                        )}
+                        <div>
+                          <strong className="underline block font-bold text-slate-950 uppercase">{effectiveSchoolSettings.principalName}</strong>
+                          <span className="text-[11px] text-slate-600 font-mono">NIP: {effectiveSchoolSettings.principalNip || '-'}</span>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -4928,7 +5262,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                           return (
                             <tr key={std.id} className="border-b border-slate-300">
                               <td className="py-2 px-3 text-center font-bold border-r border-slate-900">{idx + 1}</td>
-                              <td className="py-2 px-3 border-r border-slate-900 text-center font-mono">{std.nisn || `008${idx}942`}</td>
+                              <td className="py-2 px-3 border-r border-slate-900 text-center font-mono">{std.nisn || '-'}</td>
                               <td className="py-2 px-3 border-r border-slate-900 font-semibold uppercase">{std.name}</td>
                               <td className="py-2 px-3 border-r border-slate-900 text-center">{std.className}</td>
                               <td className="py-2 px-3 border-r border-slate-900 text-center font-semibold">
@@ -4955,8 +5289,8 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                   <div className="text-center space-y-16">
                     <p>{effectiveSchoolSettings.city}, {new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}<br />Pengawas Ruang,</p>
                     <div>
-                      <strong className="underline block font-bold text-slate-900">{effectiveSchoolSettings.teacherName}</strong>
-                      <span className="text-[11px] text-slate-500">NIP: {effectiveSchoolSettings.teacherNip}</span>
+                      <strong className="underline block font-bold text-slate-900">{effectiveBapSupervisorName}</strong>
+                      <span className="text-[11px] text-slate-500 font-mono">NIP: {effectiveBapSupervisorNip || '-'}</span>
                     </div>
                   </div>
                 </div>
@@ -5010,7 +5344,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                             </div>
                             <div>
                               <span className="text-[10px] text-slate-500 block">NISN / No Peserta:</span>
-                              <span className="font-mono font-bold">{std.nisn || `008${idx}942`}</span>
+                              <span className="font-mono font-bold">{std.nisn || '-'}</span>
                             </div>
                             <div>
                               <span className="text-[10px] text-slate-500 block">Token Sesi Ujian:</span>
@@ -5091,18 +5425,18 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
 
                 <div className="grid grid-cols-2 gap-8 pt-8 text-center text-xs font-sans">
                   <div className="space-y-16">
-                    <p>Mengetahui,<br />Kepala {effectiveSchoolSettings.schoolName},</p>
+                    <p>Mengetahui,<br />{effectiveSchoolSettings.principalTitle || `Kepala ${effectiveSchoolSettings.schoolName}`},</p>
                     <div>
                       <strong className="underline block font-bold text-slate-900">{effectiveSchoolSettings.principalName}</strong>
-                      <span className="text-[11px] text-slate-500">NIP: {effectiveSchoolSettings.principalNip}</span>
+                      <span className="text-[11px] text-slate-500 font-mono">NIP: {effectiveSchoolSettings.principalNip || '-'}</span>
                     </div>
                   </div>
 
                   <div className="space-y-16">
                     <p>{effectiveSchoolSettings.city}, {new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}<br />Guru Mata Pelajaran,</p>
                     <div>
-                      <strong className="underline block font-bold text-slate-900">{effectiveSchoolSettings.teacherName}</strong>
-                      <span className="text-[11px] text-slate-500">NIP: {effectiveSchoolSettings.teacherNip}</span>
+                      <strong className="underline block font-bold text-slate-900">{effectiveBapSupervisorName}</strong>
+                      <span className="text-[11px] text-slate-500 font-mono">NIP: {effectiveBapSupervisorNip || '-'}</span>
                     </div>
                   </div>
                 </div>

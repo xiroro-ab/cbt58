@@ -1820,6 +1820,7 @@ export default function Home() {
             results={results}
             students={students}
             currentTeacher={currentTeacher}
+            teachers={teachers}
             allSubjects={subjects}
             onSelectNav={setCurrentNav}
             onSelectSubject={async (selectedSub) => {

@@ -1423,6 +1423,11 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
               <ChevronRight className="w-4 h-4" />
             </button>
           </div>
+
+          {/* Copyright Resmi & Pengembang Aplikasi */}
+          <div className="pt-6 pb-2 text-center text-[11px] text-slate-400 dark:text-slate-500 font-sans print:hidden">
+            © 2026 <strong>SMP Negeri 58 Palembang</strong> • Dikembangkan oleh <span className="font-semibold text-violet-600 dark:text-violet-400">Aris Bermansyah, S.Kom</span>
+          </div>
         </main>
 
         {/* SIDEBAR NOMOR SOAL (DESKTOP) */}

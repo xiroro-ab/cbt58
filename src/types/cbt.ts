@@ -47,6 +47,7 @@ export interface Subject {
   token: string;
   isActive: boolean;
   scheduleStart?: string;
+  examDate?: string; // Tanggal Pelaksanaan Ujian (e.g. "2026-11-01")
 }
 
 export interface StudentAnswerItem {

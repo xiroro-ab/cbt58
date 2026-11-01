@@ -8,6 +8,7 @@ export const initialSubject: Subject = {
   violationLimit: 3,
   token: 'IPA2026',
   isActive: true,
+  examDate: '2026-11-01',
   scoringRules: {
     'Pilihan Ganda': 1,
     'Pilihan Ganda Kompleks': 2,

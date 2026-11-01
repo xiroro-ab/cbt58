@@ -142,7 +142,7 @@ const dictionaries: Record<Language, Translations> = {
     navHelp: 'Bantuan & Panduan',
 
     greeting: 'Selamat Datang, Bapak/Ibu Guru',
-    examDateInfo: 'Tanggal Ujian: 30 Okt 2026 • SMP Negeri 58 Palembang',
+    examDateInfo: 'Asesmen Berbasis Komputer • SMP Negeri 58 Palembang',
     addQuestionBtn: 'Tambah Soal',
     studentViewBtn: 'Layar Siswa',
     switchThemeLight: 'Ganti ke Mode Terang',
@@ -240,7 +240,7 @@ const dictionaries: Record<Language, Translations> = {
     navHelp: 'Help & Guide',
 
     greeting: 'Welcome, Teacher',
-    examDateInfo: 'Exam Date: Oct 30, 2026 • SMP Negeri 58 Palembang',
+    examDateInfo: 'Computer-Based Assessment • SMP Negeri 58 Palembang',
     addQuestionBtn: 'Add Question',
     studentViewBtn: 'Student View',
     switchThemeLight: 'Switch to Light Mode',

@@ -167,10 +167,25 @@ export const Navbar: React.FC<NavbarProps> = ({
   const visibleTeachers = displayStackTeachers.slice(0, maxVisibleAvatars);
   const overflowTeacherCount = displayStackTeachers.length - maxVisibleAvatars;
 
+  const [displayDate, setDisplayDate] = useState<string>('');
+
+  React.useEffect(() => {
+    try {
+      setDisplayDate(new Date().toLocaleDateString(language === 'id' ? 'id-ID' : 'en-US', {
+        weekday: 'long',
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric'
+      }));
+    } catch {
+      setDisplayDate('');
+    }
+  }, [language]);
+
   return (
     <header className="sticky top-0 z-20 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b border-slate-200/80 dark:border-slate-800/80 px-3 sm:px-6 py-2.5 sm:py-4 flex items-center justify-between transition-colors gap-2 print:hidden">
-      {/* 1. HAMBURGER (MOBILE) + GREETING & DATE */}
-      <div className="flex items-center gap-2 sm:gap-3 min-w-0 shrink">
+      {/* 1. HAMBURGER (MOBILE) + GREETING & DATE (DESKTOP) */}
+      <div className="flex items-center gap-2 sm:gap-3 min-w-0 shrink-0">
         {onToggleMobileSidebar && (
           <button
             onClick={onToggleMobileSidebar}
@@ -180,20 +195,22 @@ export const Navbar: React.FC<NavbarProps> = ({
             <Menu className="w-4 h-4" />
           </button>
         )}
-        <div className="min-w-0">
+
+        {/* Badge Brand Elegan di Layar HP agar Tidak Kosong tapi Tetap Luas */}
+        <span className="sm:hidden font-extrabold text-[11px] text-violet-700 dark:text-violet-300 bg-violet-100/70 dark:bg-violet-950/60 px-2 py-1 rounded-lg border border-violet-200/60 dark:border-violet-800/60 font-sans shrink-0">
+          CBT 58
+        </span>
+
+        {/* Sapaan & Tanggal Dinamis Realtime (Hanya Tampil di Layar SM ke Atas agar di HP Tidak Padat) */}
+        <div className="min-w-0 hidden sm:block">
           <h2
-            className="text-xs xs:text-sm sm:text-base md:text-xl font-bold text-slate-900 dark:text-white leading-tight truncate max-w-[105px] xs:max-w-[145px] sm:max-w-xs md:max-w-md"
+            className="text-sm md:text-xl font-bold text-slate-900 dark:text-white leading-tight truncate max-w-xs md:max-w-md"
             title={currentTeacher ? `Selamat Datang, ${currentTeacher.name}` : t.greeting}
           >
-            <span className="hidden sm:inline">
-              {currentTeacher ? `Selamat Datang, ${currentTeacher.name}` : t.greeting}
-            </span>
-            <span className="inline sm:hidden">
-              {currentTeacher ? `Halo, ${currentTeacher.name.split(' ')[0]}` : t.greeting}
-            </span>
+            {currentTeacher ? `Selamat Datang, ${currentTeacher.name}` : t.greeting}
           </h2>
-          <p className="text-[10px] sm:text-xs text-slate-400 dark:text-slate-500 font-medium mt-0.5 truncate max-w-[105px] xs:max-w-[145px] sm:max-w-xs md:max-w-md hidden sm:block">
-            {t.examDateInfo}
+          <p className="text-xs text-slate-400 dark:text-slate-500 font-medium mt-0.5 truncate max-w-xs md:max-w-md">
+            {displayDate} • SMP Negeri 58 Palembang
           </p>
         </div>
       </div>
@@ -789,15 +806,15 @@ export const Navbar: React.FC<NavbarProps> = ({
           </div>
         )}
 
-        {/* Tombol Aksi Cepat */}
-        <div className="flex items-center gap-2 pl-2">
+        {/* Tombol Aksi Cepat: Masuk Mode Ujian Siswa */}
+        <div className="flex items-center gap-1.5 pl-1 sm:pl-2 shrink-0">
           <button
             onClick={onStartStudentExam}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-xs font-semibold transition shadow-md shadow-violet-600/20 cursor-pointer"
+            className="flex items-center gap-1.5 p-1.5 sm:px-3.5 sm:py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-xs font-semibold transition shadow-md shadow-violet-600/20 cursor-pointer shrink-0"
+            title={t.studentViewBtn}
           >
-            <Eye className="w-3.5 h-3.5 flex-shrink-0" />
+            <Eye className="w-4 h-4 flex-shrink-0" />
             <span className="hidden sm:inline">{t.studentViewBtn}</span>
-            <span className="sm:hidden">Siswa</span>
           </button>
         </div>
       </div>

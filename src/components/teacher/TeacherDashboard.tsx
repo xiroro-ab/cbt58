@@ -764,6 +764,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   // Form State Buat Jadwal Baru
   const [newSubTitle, setNewSubTitle] = useState('');
   const [newSubClass, setNewSubClass] = useState('VII.1, VII.2, VII.3');
+  const [newSubExamDate, setNewSubExamDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [newSubDuration, setNewSubDuration] = useState<number | string>(60);
   const [newSubToken, setNewSubToken] = useState(() => 'SMP58' + Math.floor(100 + Math.random() * 900));
   const [newSubViolationLimit, setNewSubViolationLimit] = useState<number | string>(3);
@@ -779,6 +780,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   // Form State Edit Jadwal
   const [editSubTitle, setEditSubTitle] = useState('');
   const [editSubClass, setEditSubClass] = useState('');
+  const [editSubExamDate, setEditSubExamDate] = useState('');
   const [editSubDuration, setEditSubDuration] = useState<number | string>(60);
   const [editSubToken, setEditSubToken] = useState('');
   const [editSubViolationLimit, setEditSubViolationLimit] = useState<number | string>(3);
@@ -1233,6 +1235,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
     setScheduleToEdit(targetSub);
     setEditSubTitle(targetSub.title);
     setEditSubClass(targetSub.className);
+    setEditSubExamDate(targetSub.examDate || new Date().toISOString().split('T')[0]);
     setEditSubDuration(targetSub.durationMinutes);
     setEditSubToken(targetSub.token);
     setEditSubViolationLimit(targetSub.violationLimit);
@@ -1266,6 +1269,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
       ...scheduleToEdit,
       title: editSubTitle.trim(),
       className: editSubClass.trim() || 'Semua Kelas',
+      examDate: editSubExamDate.trim() || undefined,
       durationMinutes: Number(editSubDuration) || 60,
       token: cleanToken,
       violationLimit: Number(editSubViolationLimit) || 3,
@@ -1304,6 +1308,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
       id: newId,
       title: newSubTitle.trim(),
       className: newSubClass.trim() || 'Semua Kelas',
+      examDate: newSubExamDate.trim() || new Date().toISOString().split('T')[0],
       durationMinutes: Number(newSubDuration) || 60,
       token: cleanToken,
       violationLimit: Number(newSubViolationLimit) || 3,
@@ -4788,7 +4793,15 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
 
                 <div className="text-xs space-y-3 font-sans leading-relaxed text-slate-800">
                   <p>
-                    Pada hari ini, <strong className="text-slate-950 font-bold">Jumat</strong>, tanggal <strong className="text-slate-950 font-bold">30 Oktober 2026</strong>, telah dilaksanakan Asesmen Berbasis Komputer (CBT) dengan rincian sebagai berikut:
+                    Pada hari ini,{' '}
+                    <strong className="text-slate-950 font-bold">
+                      {(selectedDocSubject.examDate ? new Date(selectedDocSubject.examDate) : new Date()).toLocaleDateString('id-ID', { weekday: 'long' })}
+                    </strong>
+                    , tanggal{' '}
+                    <strong className="text-slate-950 font-bold">
+                      {(selectedDocSubject.examDate ? new Date(selectedDocSubject.examDate) : new Date()).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}
+                    </strong>
+                    , telah dilaksanakan Asesmen Berbasis Komputer (CBT) dengan rincian sebagai berikut:
                   </p>
 
                   <div className="grid grid-cols-2 gap-y-2 gap-x-6 p-4 rounded-xl bg-slate-50 border border-slate-200">
@@ -5188,16 +5201,25 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                         <BookOpen className="w-5 h-5" />
                       </div>
                       <div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
                           <h4 className="font-bold text-slate-900 dark:text-white text-base">
                             {formatSubjectTitle(subItem.title)}
                           </h4>
                           <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-semibold border border-slate-200 dark:border-slate-700">
                             Kelas {subItem.className}
                           </span>
+                          {subItem.examDate && (
+                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-violet-50 dark:bg-violet-950/60 text-violet-700 dark:text-violet-300 font-semibold border border-violet-200 dark:border-violet-800 flex items-center gap-1">
+                              <Calendar className="w-3 h-3 text-violet-600 dark:text-violet-400" />
+                              <span>{subItem.examDate}</span>
+                            </span>
+                          )}
                         </div>
-                        <p className="text-xs text-slate-400 mt-0.5">
-                          ID Paket: <code className="font-mono text-[11px]">{subItem.id}</code>
+                        <p className="text-xs text-slate-400 mt-0.5 flex items-center gap-2 flex-wrap">
+                          <span>ID Paket: <code className="font-mono text-[11px]">{subItem.id}</code></span>
+                          {subItem.examDate && (
+                            <span>• Tanggal Ujian: <strong className="text-slate-700 dark:text-slate-300 font-mono">{subItem.examDate}</strong></span>
+                          )}
                         </p>
                       </div>
                     </div>
@@ -8293,8 +8315,23 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1">
-                    Durasi Pengerjaan (Menit)
+                  <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1 flex items-center gap-1.5">
+                    <Calendar className="w-3.5 h-3.5 text-violet-600 dark:text-violet-400" />
+                    <span>Tanggal Pelaksanaan Ujian</span>
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    value={newSubExamDate}
+                    onChange={e => setNewSubExamDate(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white font-semibold cursor-pointer"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1 flex items-center gap-1.5">
+                    <Clock className="w-3.5 h-3.5 text-violet-600 dark:text-violet-400" />
+                    <span>Durasi Pengerjaan (Menit)</span>
                   </label>
                   <input
                     type="number"
@@ -8556,8 +8593,23 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1">
-                    Durasi Pengerjaan (Menit)
+                  <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1 flex items-center gap-1.5">
+                    <Calendar className="w-3.5 h-3.5 text-violet-600 dark:text-violet-400" />
+                    <span>Tanggal Pelaksanaan Ujian</span>
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    value={editSubExamDate}
+                    onChange={e => setEditSubExamDate(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white font-semibold cursor-pointer"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1 flex items-center gap-1.5">
+                    <Clock className="w-3.5 h-3.5 text-violet-600 dark:text-violet-400" />
+                    <span>Durasi Pengerjaan (Menit)</span>
                   </label>
                   <input
                     type="number"

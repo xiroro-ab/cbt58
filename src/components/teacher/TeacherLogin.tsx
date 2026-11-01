@@ -5,6 +5,7 @@ import { Teacher, TeacherAssignment } from '@/types/cbt';
 import { useLanguage } from '@/context/LanguageContext';
 import { useTheme } from '@/context/ThemeContext';
 import { fetchTeachers, mergeTeachers } from '@/lib/supabaseService';
+import { Footer } from '@/components/layout/Footer';
 import {
   GraduationCap,
   ShieldCheck,
@@ -822,6 +823,9 @@ export const TeacherLogin: React.FC<TeacherLoginProps> = ({
           </span>
         </div>
       </div>
+
+      {/* Global Footer Copyright */}
+      <Footer className="mt-8 border-t border-slate-200/60 dark:border-slate-800/60 bg-transparent" />
     </div>
   );
 };

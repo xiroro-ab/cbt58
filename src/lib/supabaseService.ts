@@ -32,7 +32,8 @@ export async function fetchAllSubjects(): Promise<Subject[]> {
       violationLimit: d.violation_limit,
       token: d.token,
       isActive: d.is_active,
-      scoringRules: d.scoring_rules || initialSubject.scoringRules
+      scoringRules: d.scoring_rules || initialSubject.scoringRules,
+      examDate: d.scoring_rules?._examDate || (d.created_at ? d.created_at.split('T')[0] : '')
     }));
   } catch (err) {
     console.error('Error fetchAllSubjects:', err);
@@ -116,7 +117,8 @@ export async function fetchActiveSubject(): Promise<Subject> {
       violationLimit: data.violation_limit,
       token: data.token,
       isActive: data.is_active,
-      scoringRules: data.scoring_rules || initialSubject.scoringRules
+      scoringRules: data.scoring_rules || initialSubject.scoringRules,
+      examDate: data.scoring_rules?._examDate || (data.created_at ? data.created_at.split('T')[0] : '')
     };
   } catch (err) {
     console.error('Error fetchActiveSubject:', err);
@@ -671,6 +673,10 @@ export async function deleteExamResult(resultId: string, subjectId?: string, stu
  */
 export async function updateSubjectInSupabase(sub: Subject): Promise<boolean> {
   try {
+    const rulesWithMeta = {
+      ...(sub.scoringRules || {}),
+      ...(sub.examDate ? { _examDate: sub.examDate } : {})
+    };
     const { error } = await supabase
       .from('subjects')
       .update({
@@ -680,7 +686,7 @@ export async function updateSubjectInSupabase(sub: Subject): Promise<boolean> {
         violation_limit: sub.violationLimit,
         token: sub.token,
         is_active: sub.isActive,
-        scoring_rules: sub.scoringRules
+        scoring_rules: rulesWithMeta
       })
       .eq('id', sub.id);
 
@@ -719,6 +725,10 @@ export async function checkSubjectIsActive(subjectId: string): Promise<boolean |
 export async function insertSubject(sub: Subject): Promise<Subject | null> {
   try {
     const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(sub.id);
+    const rulesWithMeta = {
+      ...(sub.scoringRules || {}),
+      ...(sub.examDate ? { _examDate: sub.examDate } : {})
+    };
     const payload: any = {
       title: sub.title,
       class_target: sub.className,
@@ -726,7 +736,7 @@ export async function insertSubject(sub: Subject): Promise<Subject | null> {
       violation_limit: sub.violationLimit,
       token: sub.token,
       is_active: sub.isActive,
-      scoring_rules: sub.scoringRules
+      scoring_rules: rulesWithMeta
     };
     if (isUUID) {
       payload.id = sub.id;
@@ -747,7 +757,8 @@ export async function insertSubject(sub: Subject): Promise<Subject | null> {
       violationLimit: data.violation_limit,
       token: data.token,
       isActive: data.is_active,
-      scoringRules: data.scoring_rules || sub.scoringRules
+      scoringRules: data.scoring_rules || sub.scoringRules,
+      examDate: data.scoring_rules?._examDate || sub.examDate || ''
     };
   } catch (err) {
     console.error('Exception insertSubject:', err);

@@ -354,6 +354,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </button>
           )}
         </div>
+
+        {/* Hak Cipta & Pengembang Resmi */}
+        <div className="pt-2 px-1 text-[10px] text-slate-400 dark:text-slate-500 border-t border-slate-100 dark:border-slate-800 text-center leading-tight">
+          <p>© 2026 SMP Negeri 58 Palembang</p>
+          <p className="font-semibold text-violet-600 dark:text-violet-400 mt-0.5">
+            Dev: Aris Bermansyah, S.Kom
+          </p>
+        </div>
       </div>
     </div>
   );

@@ -13,6 +13,7 @@ import { TeacherLogin } from '@/components/teacher/TeacherLogin';
 import { ExamScreen } from '@/components/exam/ExamScreen';
 import { HelpModal } from '@/components/modals/HelpModal';
 import { CertificateModal } from '@/components/modals/CertificateModal';
+import { Footer } from '@/components/layout/Footer';
 import { broadcastAnnouncementToStudents } from '@/lib/liveMonitoringService';
 import {
   fetchActiveSubject,
@@ -1531,6 +1532,11 @@ export default function Home() {
                     <div className="flex-1">
                       <p className="font-bold">{detectedSubject.title}</p>
                       <p className="text-[10px] text-violet-600/80 dark:text-violet-400/80">
+                        {detectedSubject.examDate && (
+                          <span className="font-semibold text-emerald-600 dark:text-emerald-400 mr-1.5">
+                            📅 {detectedSubject.examDate} •
+                          </span>
+                        )}
                         Rombel: <span className="font-semibold">{detectedSubject.className || 'Semua Rombel'}</span> • Durasi: {detectedSubject.durationMinutes} Menit • Toleransi: {detectedSubject.violationLimit || 3}x
                       </p>
                     </div>
@@ -1625,7 +1631,7 @@ export default function Home() {
                       {briefingData.subject.title}
                     </span>
                   </div>
-                  <div className="grid grid-cols-2 gap-2 text-slate-700 dark:text-slate-300">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-slate-700 dark:text-slate-300">
                     <div>
                       <span className="text-slate-400 block text-[10px]">Nama Siswa:</span>
                       <strong className="text-slate-900 dark:text-white">{studentName}</strong>
@@ -1633,6 +1639,12 @@ export default function Home() {
                     <div>
                       <span className="text-slate-400 block text-[10px]">Rombel / Kelas:</span>
                       <strong className="text-slate-900 dark:text-white">{selectedStudentClass}</strong>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block text-[10px]">Tanggal Ujian:</span>
+                      <strong className="text-emerald-600 dark:text-emerald-400 font-bold">
+                        {briefingData.subject.examDate || new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}
+                      </strong>
                     </div>
                     {briefingData.student && (
                       <>
@@ -1745,9 +1757,8 @@ export default function Home() {
           </div>
         )}
 
-        <footer className="text-center text-[11px] text-slate-400 dark:text-slate-500 py-3">
-          SMP Negeri 58 Palembang • Sistem Ujian Berbasis Komputer
-        </footer>
+        {/* Global Footer Copyright */}
+        <Footer className="mt-8 border-t border-slate-200/60 dark:border-slate-800/60 bg-transparent max-w-md" />
       </div>
     );
   }
@@ -1860,6 +1871,9 @@ export default function Home() {
             onUpdateTeacher={handleUpdateTeacher}
           />
         </main>
+
+        {/* Global Footer Copyright */}
+        <Footer />
       </div>
 
       {/* MODAL PANDUAN & BANTUAN AKTIF */}

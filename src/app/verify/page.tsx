@@ -16,6 +16,7 @@ import {
   QrCode
 } from 'lucide-react';
 import Link from 'next/link';
+import { Footer } from '@/components/layout/Footer';
 import { 
   fetchSchoolSettingsFromSupabase, 
   fetchTeachers, 
@@ -312,6 +313,9 @@ function VerifyDetails() {
         </div>
 
       </div>
+
+      {/* Global Footer Copyright */}
+      <Footer className="mt-8 max-w-xl rounded-2xl border border-slate-700/60 bg-slate-900/40 text-slate-400" />
     </div>
   );
 }

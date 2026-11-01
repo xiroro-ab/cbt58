@@ -2076,6 +2076,27 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
     return selectedDocSubject.className.split(',').map(c => c.trim().toLowerCase()).filter(Boolean);
   }, [selectedDocSubject.className]);
 
+  // Deteksi Otomatis Jenjang / Tingkat Kelas Ujian (VII, VIII, IX) dari Judul, Kelas Mapel, atau Hasil Ujian
+  const subjectDetectedGrade = useMemo<'VII' | 'VIII' | 'IX' | null>(() => {
+    const text = `${selectedDocSubject.className || ''} ${selectedDocSubject.title || ''}`.toUpperCase();
+    if (text.includes('VIII') || text.includes('KELAS 8') || text.includes('KELAS VIII') || /\b8\b/.test(text)) {
+      return 'VIII';
+    }
+    if (text.includes('IX') || text.includes('KELAS 9') || text.includes('KELAS IX') || /\b9\b/.test(text)) {
+      return 'IX';
+    }
+    if (text.includes('VII') || text.includes('KELAS 7') || text.includes('KELAS VII') || /\b7\b/.test(text)) {
+      return 'VII';
+    }
+    if (docResults.length > 0) {
+      const sample = (docResults[0]?.className || '').toUpperCase();
+      if (sample.includes('VIII') || sample.startsWith('8.') || sample === '8') return 'VIII';
+      if (sample.includes('IX') || sample.startsWith('9.') || sample === '9') return 'IX';
+      if (sample.includes('VII') || sample.startsWith('7.') || sample === '7') return 'VII';
+    }
+    return null;
+  }, [selectedDocSubject.className, selectedDocSubject.title, docResults]);
+
   // Tanggal Hari Ini (WIB/Lokal) Format YYYY-MM-DD
   const todayDateISO = useMemo(() => {
     const now = new Date();
@@ -2108,24 +2129,37 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   const [bapProctorNip, setBapProctorNip] = useState<string>('');
   const [isBapConfigOpen, setIsBapConfigOpen] = useState<boolean>(false);
 
-  // Mode Format Cetak Presensi & Kartu Peserta
-  const [attendanceMode, setAttendanceMode] = useState<'signature_sheet' | 'cbt_status'>('signature_sheet');
+  // Format Lembar Daftar Hadir (Presensi) & Kartu Peserta
+  const [attendanceFormat, setAttendanceFormat] = useState<'parentheses' | 'strikeout' | 'cbt_status'>('parentheses');
   const [cardMode, setCardMode] = useState<'general' | 'subject'>('general');
 
-  // Perhitungan Siswa Real untuk Berita Acara Pelaksanaan (BAP)
+  // Perhitungan Siswa Real untuk Berita Acara Pelaksanaan (BAP) & Seluruh Dokumen Ujian
   const bapTargetStudents = useMemo(() => {
     if (!students || students.length === 0) return [];
+
+    // 1. Jika guru memilih kelas spesifik (bukan 'Semua Kelas')
     if (selectedDocClass !== 'Semua Kelas') {
       return students.filter(s => s.className?.trim() === selectedDocClass.trim());
     }
-    if (docTargetClasses.length > 0) {
-      return students.filter(s => {
+
+    // 2. Jika mata pelajaran memiliki target kelas eksplisit (misal 'VIII.1, VIII.2')
+    const explicitClasses = docTargetClasses.filter(c => c !== 'semua kelas' && !c.includes('semua'));
+    if (explicitClasses.length > 0) {
+      const filtered = students.filter(s => {
         const c = (s.className || '').trim().toLowerCase();
-        return docTargetClasses.includes(c);
+        return explicitClasses.includes(c);
       });
+      if (filtered.length > 0) return filtered;
     }
+
+    // 3. Jika jenjang terdeteksi (VII, VIII, IX), filter HANYA siswa pada jenjang ujian tersebut!
+    if (subjectDetectedGrade) {
+      const gradeFiltered = students.filter(s => isClassInGrade(s.className, subjectDetectedGrade));
+      if (gradeFiltered.length > 0) return gradeFiltered;
+    }
+
     return students;
-  }, [students, selectedDocClass, docTargetClasses]);
+  }, [students, selectedDocClass, docTargetClasses, subjectDetectedGrade]);
 
   const bapPresentStudents = useMemo(() => {
     if (!bapTargetStudents || bapTargetStudents.length === 0) return [];
@@ -2197,6 +2231,15 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
     });
     return Array.from(set).sort();
   }, [students]);
+
+  // Daftar Kelas Tersedia yang Disesuaikan Otomatis dengan Jenjang Mapel (VII / VIII / IX)
+  const docAvailableClasses = useMemo(() => {
+    if (subjectDetectedGrade) {
+      const filtered = availableClasses.filter(c => isClassInGrade(c, subjectDetectedGrade));
+      if (filtered.length > 0) return filtered;
+    }
+    return availableClasses;
+  }, [availableClasses, subjectDetectedGrade]);
 
 
   const parseClassList = (classStr: string) => {
@@ -4789,14 +4832,16 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                 ))}
               </select>
 
-              {/* Selector Kelas */}
+              {/* Selector Kelas (Dinamis Sesuai Jenjang Mapel) */}
               <select
                 value={selectedDocClass}
                 onChange={e => setSelectedDocClass(e.target.value)}
                 className="px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-700 dark:text-slate-200 [color-scheme:light] dark:[color-scheme:dark] [&>option]:bg-white [&>option]:text-slate-900 [&>option]:dark:bg-slate-900 [&>option]:dark:text-slate-100"
               >
-                <option value="Semua Kelas">Semua Kelas</option>
-                {availableClasses.map(c => (
+                <option value="Semua Kelas">
+                  {subjectDetectedGrade ? `Semua Kelas ${subjectDetectedGrade}` : 'Semua Kelas'}
+                </option>
+                {docAvailableClasses.map(c => (
                   <option key={c} value={c}>Kelas {c}</option>
                 ))}
               </select>
@@ -5034,36 +5079,50 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                 </div>
                 <div>
                   <h4 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">
-                    Format Lembar Presensi Siswa
+                    Format Status Kehadiran
                   </h4>
                   <p className="text-[11px] text-slate-500">
-                    Pilih format lembar tanda tangan sebelum ujian atau rekapitulasi submit digital pasca ujian.
+                    Pilih format tanda kurung kosong untuk centang manual, format teks coret, atau status submit CBT.
                   </p>
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
+              <div className="flex flex-wrap items-center gap-1.5 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
                 <button
                   type="button"
-                  onClick={() => setAttendanceMode('signature_sheet')}
+                  onClick={() => setAttendanceFormat('parentheses')}
                   className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
-                    attendanceMode === 'signature_sheet'
+                    attendanceFormat === 'parentheses'
                       ? 'bg-white dark:bg-slate-900 text-violet-700 dark:text-violet-300 shadow-xs'
                       : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
                   }`}
+                  title="Format tanda dalam kurung kosong untuk dicentang manual saat siswa hadir"
                 >
-                  📝 Lembar Tanda Tangan (Sebelum Ujian)
+                  ✍️ ( &nbsp; ) Centang Manual
                 </button>
                 <button
                   type="button"
-                  onClick={() => setAttendanceMode('cbt_status')}
+                  onClick={() => setAttendanceFormat('strikeout')}
                   className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
-                    attendanceMode === 'cbt_status'
+                    attendanceFormat === 'strikeout'
+                      ? 'bg-white dark:bg-slate-900 text-violet-700 dark:text-violet-300 shadow-xs'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                  }`}
+                  title="Format teks Hadir / Tdk Hadir untuk dicoret manual jika siswa tidak hadir"
+                >
+                  📝 Hadir / Tdk Hadir (Coret)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAttendanceFormat('cbt_status')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+                    attendanceFormat === 'cbt_status'
                       ? 'bg-white dark:bg-slate-900 text-emerald-700 dark:text-emerald-300 shadow-xs'
                       : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
                   }`}
+                  title="Format status submit digital real-time dari server CBT"
                 >
-                  📊 Rekap Status Submit (Setelah Ujian)
+                  📊 Status Submit CBT
                 </button>
               </div>
             </div>
@@ -5187,7 +5246,9 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                     <div>
                       <span className="text-slate-500 block text-[11px]">Rombongan Belajar / Kelas:</span>
                       <strong className="text-sm font-bold text-slate-900">
-                        {selectedDocClass === 'Semua Kelas' ? (selectedDocSubject.className || 'Semua Kelas') : selectedDocClass}
+                        {selectedDocClass === 'Semua Kelas'
+                          ? (subjectDetectedGrade ? `Seluruh Rombel Kelas ${subjectDetectedGrade}` : (selectedDocSubject.className || 'Semua Kelas'))
+                          : `Kelas ${selectedDocClass}`}
                       </strong>
                     </div>
                     <div>
@@ -5273,6 +5334,20 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
 
                   {/* TANDA TANGAN RESMI 3 PEJABAT DENGAN TTE VERIFIKASI */}
                   <div className="pt-4">
+                    {/* Verifikasi Keaslian Digital BAP (Format Screenshot 2) */}
+                    <div className="mb-4 p-3 rounded-xl bg-slate-50 border border-slate-200/80 space-y-1 text-left">
+                      <div className="flex items-center gap-2 text-emerald-700 font-bold text-xs">
+                        <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                        <span>Dokumen Berita Acara Resmi Terverifikasi</span>
+                      </div>
+                      <p className="text-[10px] text-slate-500 font-mono">
+                        ID BAP: CBT58-BAP-{(selectedDocSubject.token || '58').toUpperCase()} • Server: {bapServerId}
+                      </p>
+                      <p className="text-[9.5px] text-slate-500">
+                        Diterbitkan otomatis dari Server CBT {effectiveSchoolSettings.schoolName}. Keaslian pengesahan dapat divalidasi melalui stempel TTE resmi.
+                      </p>
+                    </div>
+
                     <div className="flex justify-end text-xs font-sans text-slate-800 mb-4">
                       <p>
                         {effectiveSchoolSettings.city || 'Palembang'}, {bapDateFormatted}
@@ -5291,14 +5366,16 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                               signerName={effectiveBapSupervisorName}
                               signerTitle="Pengawas Ruang Ujian"
                               signerNip={effectiveBapSupervisorNip}
+                              signDate={bapDateFormatted}
                               sealOnly={true}
+                              className="scale-95"
                             />
                           </div>
                         ) : (
                           <div className="h-16" />
                         )}
                         <div>
-                          <strong className="underline block font-bold text-slate-950 uppercase">{effectiveBapSupervisorName}</strong>
+                          <strong className="underline block font-bold text-slate-950 font-sans leading-tight">{effectiveBapSupervisorName}</strong>
                           <span className="text-[11px] text-slate-600 font-mono">NIP: {effectiveBapSupervisorNip || '-'}</span>
                         </div>
                       </div>
@@ -5314,14 +5391,16 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                               signerName={effectiveBapProctorName}
                               signerTitle="Proktor / Teknisi CBT"
                               signerNip={effectiveBapProctorNip}
+                              signDate={bapDateFormatted}
                               sealOnly={true}
+                              className="scale-95"
                             />
                           </div>
                         ) : (
                           <div className="h-16" />
                         )}
                         <div>
-                          <strong className="underline block font-bold text-slate-950 uppercase">{effectiveBapProctorName}</strong>
+                          <strong className="underline block font-bold text-slate-950 font-sans leading-tight">{effectiveBapProctorName}</strong>
                           <span className="text-[11px] text-slate-600 font-mono">NIP: {effectiveBapProctorNip || '-'}</span>
                         </div>
                       </div>
@@ -5340,14 +5419,16 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                               signerName={effectiveSchoolSettings.principalName}
                               signerTitle={effectiveSchoolSettings.principalTitle || `Kepala ${effectiveSchoolSettings.schoolName}`}
                               signerNip={effectiveSchoolSettings.principalNip}
+                              signDate={bapDateFormatted}
                               sealOnly={true}
+                              className="scale-95"
                             />
                           </div>
                         ) : (
                           <div className="h-16" />
                         )}
                         <div>
-                          <strong className="underline block font-bold text-slate-950 uppercase">{effectiveSchoolSettings.principalName}</strong>
+                          <strong className="underline block font-bold text-slate-950 font-sans leading-tight">{effectiveSchoolSettings.principalName}</strong>
                           <span className="text-[11px] text-slate-600 font-mono">NIP: {effectiveSchoolSettings.principalNip || '-'}</span>
                         </div>
                       </div>
@@ -5360,7 +5441,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                         <span>Dokumen Berita Acara Resmi Terverifikasi TTE Elektronik Server CBT {effectiveSchoolSettings.schoolName}</span>
                       </div>
                       <div className="font-mono text-[9px] text-slate-400">
-                        ID: CBT58-BAP-{selectedDocSubject.token || 'VALID'} • Dicetak: {bapDateFormatted}
+                        ID: CBT58-BAP-{(selectedDocSubject.token || '58').toUpperCase()} • Dicetak: {bapDateFormatted}
                       </div>
                     </div>
                   </div>
@@ -5376,7 +5457,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                     DAFTAR HADIR PESERTA ASESMEN SUMATIF
                   </h3>
                   <p className="text-xs text-slate-600">
-                    Mata Pelajaran: <strong>{selectedDocSubject.title}</strong> • Rombel: <strong>{selectedDocClass}</strong>
+                    Mata Pelajaran: <strong>{selectedDocSubject.title}</strong> • Rombel: <strong>{selectedDocClass === 'Semua Kelas' ? (subjectDetectedGrade ? `Seluruh Rombel Kelas ${subjectDetectedGrade}` : 'Semua Kelas') : `Kelas ${selectedDocClass}`}</strong>
                   </p>
                 </div>
 
@@ -5388,81 +5469,119 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                         <th className="py-2.5 px-3 border-r border-slate-900 w-32">NISN</th>
                         <th className="py-2.5 px-3 border-r border-slate-900 text-left">Nama Lengkap Peserta</th>
                         <th className="py-2.5 px-3 border-r border-slate-900 w-24">Kelas</th>
-                        <th className="py-2.5 px-3 border-r border-slate-900 w-28">
-                          {attendanceMode === 'signature_sheet' ? 'Presensi' : 'Status CBT'}
+                        <th className="py-2.5 px-3 border-r border-slate-900 w-32">
+                          {attendanceFormat === 'cbt_status' ? 'Status CBT' : 'Kehadiran'}
                         </th>
                         <th className="py-2.5 px-4 w-44 text-left">Tanda Tangan</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-300">
-                      {(students || [])
-                        .filter(s => {
-                          if (selectedDocClass !== 'Semua Kelas') return s.className === selectedDocClass;
-                          return docTargetClasses.length === 0 || docTargetClasses.includes(s.className.toLowerCase());
-                        })
-                        .slice(0, 45)
-                        .map((std, idx) => {
-                          const hasSubmitted = docResults.some(r => r.studentName.toLowerCase().trim() === std.name.toLowerCase().trim());
-                          return (
-                            <tr key={std.id} className="border-b border-slate-300">
-                              <td className="py-2 px-3 text-center font-bold border-r border-slate-900">{idx + 1}</td>
-                              <td className="py-2 px-3 border-r border-slate-900 text-center font-mono">{std.nisn || '-'}</td>
-                              <td className="py-2 px-3 border-r border-slate-900 font-semibold uppercase">{std.name}</td>
-                              <td className="py-2 px-3 border-r border-slate-900 text-center">{std.className}</td>
-                              <td className="py-2 px-3 border-r border-slate-900 text-center font-semibold">
-                                {attendanceMode === 'signature_sheet' ? (
-                                  <span className="text-slate-800 font-mono text-[11px] font-bold">[ &nbsp;✓&nbsp; ] Hadir</span>
-                                ) : hasSubmitted ? (
-                                  <span className="text-emerald-700 font-bold">Hadir / Selesai</span>
-                                ) : (
-                                  <span className="text-slate-400">Belum Submit</span>
-                                )}
-                              </td>
-                              <td className="py-2 px-4 font-mono text-[11px] text-slate-400">
-                                {idx % 2 === 0 ? `${idx + 1}. ....................` : `    ${idx + 1}. ....................`}
-                              </td>
-                            </tr>
-                          );
-                        })}
+                      {bapTargetStudents.map((std, idx) => {
+                        const hasSubmitted = docResults.some(r => r.studentName.toLowerCase().trim() === std.name.toLowerCase().trim());
+                        return (
+                          <tr key={std.id} className="border-b border-slate-300">
+                            <td className="py-2 px-3 text-center font-bold border-r border-slate-900">{idx + 1}</td>
+                            <td className="py-2 px-3 border-r border-slate-900 text-center font-mono">{std.nisn || '-'}</td>
+                            <td className="py-2 px-3 border-r border-slate-900 font-semibold uppercase">{std.name}</td>
+                            <td className="py-2 px-3 border-r border-slate-900 text-center">{std.className}</td>
+                            <td className="py-2 px-3 border-r border-slate-900 text-center font-semibold">
+                              {attendanceFormat === 'parentheses' ? (
+                                <span className="text-slate-800 font-mono text-[11px] font-semibold tracking-wide">
+                                  ( &nbsp; &nbsp; &nbsp; ) Hadir
+                                </span>
+                              ) : attendanceFormat === 'strikeout' ? (
+                                <span className="text-slate-800 text-[11px] font-medium tracking-tight">
+                                  Hadir / <span className="text-slate-400">Tdk Hadir</span>
+                                </span>
+                              ) : hasSubmitted ? (
+                                <span className="text-emerald-700 font-bold">Hadir / Selesai</span>
+                              ) : (
+                                <span className="text-slate-400">Belum Submit</span>
+                              )}
+                            </td>
+                            <td className="py-2 px-4 font-mono text-[11px] text-slate-400">
+                              {idx % 2 === 0 ? `${idx + 1}. ....................` : `    ${idx + 1}. ....................`}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                      {bapTargetStudents.length === 0 && (
+                        <tr>
+                          <td colSpan={6} className="py-8 text-center text-slate-400">
+                            Tidak ada data peserta ujian untuk rombel yang dipilih.
+                          </td>
+                        </tr>
+                      )}
                     </tbody>
                   </table>
                 </div>
 
-                <div className="flex justify-between items-end pt-8 text-xs font-sans">
-                  <div>
-                    {/* Keterangan Otentikasi Digital */}
-                    <div className="flex items-center gap-1.5 text-emerald-700 font-semibold text-[10px]">
-                      <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
-                      <span>Dokumen Presensi Resmi Terverifikasi TTE Elektronik Server CBT {effectiveSchoolSettings.schoolName}</span>
+                {/* Tanda Tangan Pengawas & TTE Validasi Resmi (Persis Screenshot 2 / Format Sertifikat) */}
+                <div className="pt-8 flex flex-col sm:flex-row items-center sm:items-end justify-between gap-6 text-xs font-sans print:break-inside-avoid">
+                  {/* Bagian Kiri: Verifikasi Keaslian Digital (Persis Screenshot 2) */}
+                  <div className="space-y-1.5 text-center sm:text-left">
+                    <div className="flex items-center justify-center sm:justify-start gap-2 text-emerald-700 font-bold text-xs">
+                      <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                      <span>Dokumen Resmi Terverifikasi</span>
                     </div>
-                    <p className="text-[9px] font-mono text-slate-400 mt-0.5">
-                      ID: CBT58-PRESENSI-{selectedDocSubject.token || 'VALID'} • Dicetak: {bapDateFormatted}
+                    <p className="text-[10px] sm:text-xs text-slate-500 font-mono">
+                      ID Presensi: CBT58-PRESENSI-{(selectedDocSubject.token || '58').toUpperCase()}
+                    </p>
+                    <p className="text-[9px] sm:text-[10px] text-slate-400">
+                      Diterbitkan otomatis dari Server CBT {effectiveSchoolSettings.schoolName}
+                    </p>
+                    <p className="text-[8.5px] sm:text-[9.5px] text-slate-400">
+                      Keaslian pengesahan dapat divalidasi melalui stempel TTE resmi.
                     </p>
                   </div>
 
-                  <div className="text-center min-h-[160px] flex flex-col items-center justify-between">
-                    <p className="font-semibold text-slate-800">
-                      {effectiveSchoolSettings.city || 'Palembang'}, {bapDateFormatted}<br />
-                      Pengawas Ruang,
-                    </p>
-                    {effectiveSchoolSettings.enableTTE ? (
-                      <div className="my-2">
+                  {/* Bagian Kanan: Pejabat Pengawas Ruang (Tanpa Huruf Kapital / Uppercase) */}
+                  <div className="text-center sm:text-right min-h-[160px] flex flex-col items-center sm:items-end justify-between">
+                    <div>
+                      <p className="text-[11px] sm:text-xs text-slate-600 font-sans">
+                        {effectiveSchoolSettings.city || 'Palembang'}, {bapDateFormatted}
+                      </p>
+                      <p className="font-bold text-slate-900 uppercase font-sans tracking-wide text-xs sm:text-sm mt-0.5">
+                        Pengawas Ruang Ujian
+                      </p>
+                    </div>
+
+                    <div className="py-2 flex items-center justify-center min-h-[85px]">
+                      {effectiveSchoolSettings.enableTTE !== false ? (
                         <TTESignatureSeal
                           settings={effectiveSchoolSettings}
                           documentId={`PRESENSI-${selectedDocSubject.token || '58'}`}
                           signerName={effectiveBapSupervisorName}
                           signerTitle="Pengawas Ruang Ujian"
                           signerNip={effectiveBapSupervisorNip}
+                          signDate={bapDateFormatted}
                           sealOnly={true}
+                          className="scale-95"
                         />
-                      </div>
-                    ) : (
-                      <div className="h-16" />
-                    )}
-                    <div>
-                      <strong className="underline block font-bold text-slate-950 uppercase">{effectiveBapSupervisorName}</strong>
-                      <span className="text-[11px] text-slate-600 font-mono">NIP: {effectiveBapSupervisorNip || '-'}</span>
+                      ) : (
+                        <div className="h-16" />
+                      )}
                     </div>
+
+                    <div className="text-center sm:text-right">
+                      <strong className="underline font-bold text-slate-900 block leading-tight text-xs sm:text-sm font-sans">
+                        {effectiveBapSupervisorName}
+                      </strong>
+                      <span className="text-[10px] sm:text-xs text-slate-600 font-mono block mt-0.5">
+                        NIP. {effectiveBapSupervisorNip || '-'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Catatan Kaki Otentikasi Digital */}
+                <div className="mt-6 pt-3 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between text-[9px] sm:text-[10px] text-slate-500 font-sans gap-2 print:border-slate-300">
+                  <div className="flex items-center gap-1.5 text-emerald-700 font-medium">
+                    <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                    <span>Dokumen Resmi Terverifikasi TTE Elektronik Server CBT {effectiveSchoolSettings.schoolName}</span>
+                  </div>
+                  <div className="font-mono text-[8.5px] sm:text-[9px] text-slate-400">
+                    ID: CBT58-PRESENSI-{(selectedDocSubject.token || '58').toUpperCase()} • Dicetak: {bapDateFormatted}
                   </div>
                 </div>
               </div>
@@ -5477,19 +5596,15 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                   </h3>
                   <p className="text-xs text-slate-600">
                     {cardMode === 'general'
-                      ? `${effectiveSchoolSettings.schoolName} • Berlaku untuk Seluruh Sesi Asesmen • Rombel: ${selectedDocClass}`
-                      : `${effectiveSchoolSettings.schoolName} • Mata Pelajaran: ${selectedDocSubject.title} • Rombel: ${selectedDocClass}`}
+                      ? `${effectiveSchoolSettings.schoolName} • Berlaku untuk Seluruh Sesi Asesmen • Rombel: ${selectedDocClass === 'Semua Kelas' ? (subjectDetectedGrade ? `Seluruh Rombel Kelas ${subjectDetectedGrade}` : 'Semua Kelas') : `Kelas ${selectedDocClass}`}`
+                      : `${effectiveSchoolSettings.schoolName} • Mata Pelajaran: ${selectedDocSubject.title} • Rombel: ${selectedDocClass === 'Semua Kelas' ? (subjectDetectedGrade ? `Seluruh Rombel Kelas ${subjectDetectedGrade}` : 'Semua Kelas') : `Kelas ${selectedDocClass}`}`}
                   </p>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
-                  {(students || [])
-                    .filter(s => {
-                      if (selectedDocClass !== 'Semua Kelas') return s.className === selectedDocClass;
-                      return docTargetClasses.length === 0 || docTargetClasses.includes(s.className.toLowerCase());
-                    })
-                    .slice(0, 24)
-                    .map((std, idx) => (
+                  {bapTargetStudents
+                    .slice(0, 60)
+                    .map((std) => (
                       <div key={std.id} className="p-4 border-2 border-slate-900 rounded-xl space-y-3 bg-white text-xs print:break-inside-avoid">
                         <div className="flex items-center justify-between border-b border-slate-900 pb-2">
                           <div className="flex items-center gap-2">
@@ -5551,7 +5666,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                     <span>Kartu Peserta Resmi Terverifikasi Server CBT {effectiveSchoolSettings.schoolName}</span>
                   </div>
                   <div className="font-mono text-[9px] text-slate-400">
-                    ID: CBT58-KARTU-{selectedDocClass.replace(/\s+/g, '')} • Dicetak: {bapDateFormatted}
+                    ID: CBT58-KARTU-{(selectedDocClass || 'ALL').replace(/\s+/g, '')} • Dicetak: {bapDateFormatted}
                   </div>
                 </div>
               </div>
@@ -5565,7 +5680,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                     LEGER HASIL ASESMEN SUMATIF RESMI
                   </h3>
                   <p className="text-xs text-slate-600">
-                    Mata Pelajaran: <strong>{selectedDocSubject.title}</strong> • Standar KKM: <strong>75</strong> • Rombel: <strong>{selectedDocClass}</strong>
+                    Mata Pelajaran: <strong>{selectedDocSubject.title}</strong> • Standar KKM: <strong>75</strong> • Rombel: <strong>{selectedDocClass === 'Semua Kelas' ? (subjectDetectedGrade ? `Seluruh Rombel Kelas ${subjectDetectedGrade}` : 'Semua Kelas') : `Kelas ${selectedDocClass}`}</strong>
                   </p>
                 </div>
 
@@ -5584,7 +5699,12 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                     </thead>
                     <tbody className="divide-y divide-slate-300">
                       {docResults
-                        .filter(r => selectedDocClass === 'Semua Kelas' || resolveStudentSingleClass(r.studentName, r.className, students) === selectedDocClass)
+                        .filter(r => {
+                          const cls = resolveStudentSingleClass(r.studentName, r.className, students);
+                          if (selectedDocClass !== 'Semua Kelas') return cls === selectedDocClass;
+                          if (subjectDetectedGrade) return isClassInGrade(cls, subjectDetectedGrade);
+                          return true;
+                        })
                         .map((res, idx) => {
                           const pred = res.score >= 90 ? 'A' : res.score >= 75 ? 'B' : res.score >= 60 ? 'C' : 'D';
                           const isPass = res.score >= 75;
@@ -5606,7 +5726,12 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                             </tr>
                           );
                         })}
-                      {docResults.filter(r => selectedDocClass === 'Semua Kelas' || resolveStudentSingleClass(r.studentName, r.className, students) === selectedDocClass).length === 0 && (
+                      {docResults.filter(r => {
+                        const cls = resolveStudentSingleClass(r.studentName, r.className, students);
+                        if (selectedDocClass !== 'Semua Kelas') return cls === selectedDocClass;
+                        if (subjectDetectedGrade) return isClassInGrade(cls, subjectDetectedGrade);
+                        return true;
+                      }).length === 0 && (
                         <tr>
                           <td colSpan={7} className="py-8 text-center text-slate-400">
                             Belum ada lembar nilai untuk rombel ini pada mata pelajaran {selectedDocSubject.title}.
@@ -5617,68 +5742,111 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                   </table>
                 </div>
 
-                <div className="grid grid-cols-2 gap-8 pt-8 text-center text-xs font-sans">
-                  {/* Tanda Tangan Kepala Sekolah */}
-                  <div className="flex flex-col items-center justify-between min-h-[160px]">
-                    <p className="font-semibold text-slate-800">
-                      Mengetahui,<br />
-                      {effectiveSchoolSettings.principalTitle || `Kepala ${effectiveSchoolSettings.schoolName}`},
-                    </p>
-                    {effectiveSchoolSettings.enableTTE ? (
-                      <div className="my-2">
-                        <TTESignatureSeal
-                          settings={effectiveSchoolSettings}
-                          documentId={`LEGER-KSP-${selectedDocSubject.token || '58'}`}
-                          signerName={effectiveSchoolSettings.principalName}
-                          signerTitle={effectiveSchoolSettings.principalTitle || `Kepala ${effectiveSchoolSettings.schoolName}`}
-                          signerNip={effectiveSchoolSettings.principalNip}
-                          sealOnly={true}
-                        />
-                      </div>
-                    ) : (
-                      <div className="h-16" />
-                    )}
-                    <div>
-                      <strong className="underline block font-bold text-slate-950 uppercase">{effectiveSchoolSettings.principalName}</strong>
-                      <span className="text-[11px] text-slate-600 font-mono">NIP: {effectiveSchoolSettings.principalNip || '-'}</span>
+                {/* Tanda Tangan Pengesahan Leger & TTE Validasi Resmi (Persis Format Sertifikat / Screenshot 2) */}
+                <div className="pt-8 flex flex-col md:flex-row items-center md:items-end justify-between gap-6 text-xs font-sans print:break-inside-avoid">
+                  {/* Bagian Kiri: Verifikasi Keaslian Digital */}
+                  <div className="space-y-1.5 text-center sm:text-left">
+                    <div className="flex items-center justify-center sm:justify-start gap-2 text-emerald-700 font-bold text-xs">
+                      <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                      <span>Dokumen Resmi Terverifikasi</span>
                     </div>
+                    <p className="text-[10px] sm:text-xs text-slate-500 font-mono">
+                      ID Leger: CBT58-LEGER-{(selectedDocSubject.token || '58').toUpperCase()}
+                    </p>
+                    <p className="text-[9px] sm:text-[10px] text-slate-400">
+                      Diterbitkan otomatis dari Server CBT {effectiveSchoolSettings.schoolName}
+                    </p>
+                    <p className="text-[8.5px] sm:text-[9.5px] text-slate-400">
+                      Keaslian pengesahan dapat divalidasi melalui stempel TTE resmi.
+                    </p>
                   </div>
 
-                  {/* Tanda Tangan Guru Mata Pelajaran */}
-                  <div className="flex flex-col items-center justify-between min-h-[160px]">
-                    <p className="font-semibold text-slate-800">
-                      {effectiveSchoolSettings.city || 'Palembang'}, {bapDateFormatted}<br />
-                      Guru Mata Pelajaran,
-                    </p>
-                    {effectiveSchoolSettings.enableTTE ? (
-                      <div className="my-2">
-                        <TTESignatureSeal
-                          settings={effectiveSchoolSettings}
-                          documentId={`LEGER-GURU-${selectedDocSubject.token || '58'}`}
-                          signerName={effectiveBapSupervisorName}
-                          signerTitle="Guru Mata Pelajaran"
-                          signerNip={effectiveBapSupervisorNip}
-                          sealOnly={true}
-                        />
+                  {/* Bagian Kanan: 2 Pejabat Penandatangan (Kepala Sekolah & Guru Mapel Tanpa Uppercase) */}
+                  <div className="grid grid-cols-2 gap-8 text-center text-xs font-sans">
+                    {/* Kepala Sekolah */}
+                    <div className="flex flex-col items-center justify-between min-h-[160px]">
+                      <div>
+                        <p className="text-[11px] text-slate-600 font-sans">Mengetahui,</p>
+                        <p className="font-bold text-slate-900 uppercase font-sans tracking-wide text-xs mt-0.5">
+                          {effectiveSchoolSettings.principalTitle || `Kepala ${effectiveSchoolSettings.schoolName}`}
+                        </p>
                       </div>
-                    ) : (
-                      <div className="h-16" />
-                    )}
-                    <div>
-                      <strong className="underline block font-bold text-slate-950 uppercase">{effectiveBapSupervisorName}</strong>
-                      <span className="text-[11px] text-slate-600 font-mono">NIP: {effectiveBapSupervisorNip || '-'}</span>
+
+                      <div className="py-2 flex items-center justify-center min-h-[85px]">
+                        {effectiveSchoolSettings.enableTTE !== false ? (
+                          <TTESignatureSeal
+                            settings={effectiveSchoolSettings}
+                            documentId={`LEGER-KSP-${selectedDocSubject.token || '58'}`}
+                            signerName={effectiveSchoolSettings.principalName}
+                            signerTitle={effectiveSchoolSettings.principalTitle || `Kepala ${effectiveSchoolSettings.schoolName}`}
+                            signerNip={effectiveSchoolSettings.principalNip}
+                            signDate={bapDateFormatted}
+                            sealOnly={true}
+                            className="scale-95"
+                          />
+                        ) : (
+                          <div className="h-16" />
+                        )}
+                      </div>
+
+                      <div>
+                        <strong className="underline block font-bold text-slate-900 text-xs sm:text-sm font-sans leading-tight">
+                          {effectiveSchoolSettings.principalName}
+                        </strong>
+                        <span className="text-[10px] sm:text-xs text-slate-600 font-mono block mt-0.5">
+                          NIP: {effectiveSchoolSettings.principalNip || '-'}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Guru Mata Pelajaran */}
+                    <div className="flex flex-col items-center justify-between min-h-[160px]">
+                      <div>
+                        <p className="text-[11px] text-slate-600 font-sans">
+                          {effectiveSchoolSettings.city || 'Palembang'}, {bapDateFormatted}
+                        </p>
+                        <p className="font-bold text-slate-900 uppercase font-sans tracking-wide text-xs mt-0.5">
+                          Guru Mata Pelajaran
+                        </p>
+                      </div>
+
+                      <div className="py-2 flex items-center justify-center min-h-[85px]">
+                        {effectiveSchoolSettings.enableTTE !== false ? (
+                          <TTESignatureSeal
+                            settings={effectiveSchoolSettings}
+                            documentId={`LEGER-GURU-${selectedDocSubject.token || '58'}`}
+                            signerName={effectiveBapSupervisorName}
+                            signerTitle="Guru Mata Pelajaran"
+                            signerNip={effectiveBapSupervisorNip}
+                            signDate={bapDateFormatted}
+                            sealOnly={true}
+                            className="scale-95"
+                          />
+                        ) : (
+                          <div className="h-16" />
+                        )}
+                      </div>
+
+                      <div>
+                        <strong className="underline block font-bold text-slate-900 text-xs sm:text-sm font-sans leading-tight">
+                          {effectiveBapSupervisorName}
+                        </strong>
+                        <span className="text-[10px] sm:text-xs text-slate-600 font-mono block mt-0.5">
+                          NIP: {effectiveBapSupervisorNip || '-'}
+                        </span>
+                      </div>
                     </div>
                   </div>
                 </div>
 
                 {/* Catatan Kaki Otentikasi Digital Leger */}
-                <div className="mt-8 pt-3 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between text-[10px] text-slate-500 font-sans gap-2 print:border-slate-300">
-                  <div className="flex items-center gap-1.5 text-emerald-700 font-semibold">
-                    <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+                <div className="mt-6 pt-3 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between text-[9px] sm:text-[10px] text-slate-500 font-sans gap-2 print:border-slate-300">
+                  <div className="flex items-center gap-1.5 text-emerald-700 font-medium">
+                    <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
                     <span>Dokumen Leger Nilai Resmi Terverifikasi TTE Elektronik Server CBT {effectiveSchoolSettings.schoolName}</span>
                   </div>
-                  <div className="font-mono text-[9px] text-slate-400">
-                    ID: CBT58-LEGER-{selectedDocSubject.token || 'VALID'} • Dicetak: {bapDateFormatted}
+                  <div className="font-mono text-[8.5px] sm:text-[9px] text-slate-400">
+                    ID: CBT58-LEGER-{(selectedDocSubject.token || '58').toUpperCase()} • Dicetak: {bapDateFormatted}
                   </div>
                 </div>
               </div>

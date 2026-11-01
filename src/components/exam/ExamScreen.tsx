@@ -1423,11 +1423,6 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
               <ChevronRight className="w-4 h-4" />
             </button>
           </div>
-
-          {/* Copyright Resmi & Pengembang Aplikasi */}
-          <div className="pt-6 pb-2 text-center text-[11px] text-slate-400 dark:text-slate-500 font-sans print:hidden">
-            © 2026 <strong>SMP Negeri 58 Palembang</strong> • Dikembangkan oleh <span className="font-semibold text-violet-600 dark:text-violet-400">Aris Bermansyah, S.Kom</span>
-          </div>
         </main>
 
         {/* SIDEBAR NOMOR SOAL (DESKTOP) */}
@@ -1535,6 +1530,14 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Copyright Resmi & Pengembang Aplikasi (Posisi Paling Bawah Setelah Soal & Sidebar) */}
+      <footer className="mt-8 py-3 px-4 border-t border-slate-200/60 dark:border-slate-800/60 text-center text-[10px] sm:text-[11px] text-slate-400 dark:text-slate-500 font-sans print:hidden">
+        © 2026 <strong>SMP Negeri 58 Palembang</strong> • Dikembangkan oleh{' '}
+        <span className="font-semibold text-violet-600 dark:text-violet-400">
+          Aris Bermansyah, S.Kom
+        </span>
+      </footer>
 
       {/* POPUP PALETTE DAFTAR SOAL KHUSUS MOBILE (SAAT TOMBOL 'DAFTAR SOAL' DI ATAS DIKLIK) */}
       {showMobilePalette && (

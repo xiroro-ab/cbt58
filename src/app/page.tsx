@@ -1357,9 +1357,9 @@ export default function Home() {
   // =========================================================================
   if (viewMode === 'student_login') {
     return (
-      <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 flex flex-col justify-between items-center p-3 sm:p-6 transition-colors">
+      <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 flex flex-col justify-between transition-colors relative">
         {/* Top Minimalist Controls */}
-        <div className="w-full max-w-md flex items-center justify-between py-2">
+        <div className="w-full max-w-md mx-auto flex items-center justify-between p-3 sm:p-6 pb-2">
           <button
             onClick={() => {
               if (currentTeacher) {
@@ -1400,7 +1400,7 @@ export default function Home() {
         </div>
 
         {/* Card Login Siswa Formal SaaS */}
-        <div className="max-w-md w-full bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-3xl p-5 sm:p-8 space-y-6 shadow-xl shadow-slate-200/50 dark:shadow-none animate-in fade-in zoom-in-95 duration-200 my-auto">
+        <div className="max-w-md w-full mx-auto bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-3xl p-5 sm:p-8 space-y-6 shadow-xl shadow-slate-200/50 dark:shadow-none animate-in fade-in zoom-in-95 duration-200 my-auto">
           <div className="text-center space-y-2">
             <div className="inline-flex p-2.5 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-xs mb-1">
               <img
@@ -1758,7 +1758,7 @@ export default function Home() {
         )}
 
         {/* Global Footer Copyright */}
-        <Footer className="mt-8 border-t border-slate-200/60 dark:border-slate-800/60 bg-transparent w-full max-w-5xl" />
+        <Footer className="mt-8 border-t border-slate-200/60 dark:border-slate-800/60 bg-transparent w-full" />
       </div>
     );
   }

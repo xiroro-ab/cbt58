@@ -352,9 +352,9 @@ export const TeacherLogin: React.FC<TeacherLoginProps> = ({
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 flex flex-col justify-center items-center p-4 transition-colors relative">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 flex flex-col justify-between transition-colors relative">
       {/* Top Bar Controls */}
-      <div className="absolute top-4 left-4 right-4 sm:top-6 sm:left-8 sm:right-8 flex items-center justify-between">
+      <div className="w-full flex items-center justify-between p-4 sm:p-6 sm:px-8">
         <div className="flex items-center gap-2.5">
           <div className="w-9 h-9 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-1 flex items-center justify-center shadow-xs">
             <img
@@ -397,7 +397,8 @@ export const TeacherLogin: React.FC<TeacherLoginProps> = ({
       </div>
 
       {/* Main Authentication Card */}
-      <div className="max-w-xl w-full bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-3xl p-6 sm:p-8 space-y-6 shadow-xl shadow-slate-200/50 dark:shadow-none animate-in fade-in zoom-in-95 duration-200 my-10">
+      <div className="flex-1 flex flex-col items-center justify-center p-4 my-auto w-full">
+        <div className="max-w-xl w-full bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-3xl p-6 sm:p-8 space-y-6 shadow-xl shadow-slate-200/50 dark:shadow-none animate-in fade-in zoom-in-95 duration-200">
         {/* Header */}
         <div className="text-center space-y-1.5">
           <div className="inline-flex p-2.5 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-xs mb-1">
@@ -823,9 +824,10 @@ export const TeacherLogin: React.FC<TeacherLoginProps> = ({
           </span>
         </div>
       </div>
+      </div>
 
       {/* Global Footer Copyright */}
-      <Footer className="mt-8 border-t border-slate-200/60 dark:border-slate-800/60 bg-transparent" />
+      <Footer className="border-t border-slate-200/60 dark:border-slate-800/60 bg-transparent w-full" />
     </div>
   );
 };

@@ -5387,17 +5387,11 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                       </p>
                     </div>
 
-                    {/* Baris Tanggal di Atas (Rata Kanan Rapi Tanpa Merusak Ketinggian Kolom TTE) */}
-                    <div className="flex justify-end text-xs font-sans text-slate-800 mb-5 font-medium">
-                      <p>
-                        {effectiveSchoolSettings.city || 'Palembang'}, {bapDateFormatted}
-                      </p>
-                    </div>
-
                     {/* Grid 3 Kolom Tanda Tangan: Ketinggian Slot Header, Barcode, & Nama Diselaraskan 100% */}
                     <div className="grid grid-cols-3 gap-4 text-center text-xs font-sans">
                       {/* 1. Pengawas Ruang Ujian */}
                       <div className="flex flex-col items-center">
+                        <div className="h-6 mb-1 hidden sm:block" />
                         <div className="h-12 flex items-center justify-center font-semibold text-slate-800">
                           <p>Pengawas Ruang Ujian,</p>
                         </div>
@@ -5432,20 +5426,21 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                               </span>
                             </>
                           ) : (
-                            <>
-                              <strong className="block text-slate-900 text-xs sm:text-sm font-sans tracking-wide">
-                                ( ................................................................ )
+                            <div className="space-y-1 max-w-[200px] mx-auto">
+                              <strong className="block text-slate-900 text-xs font-sans tracking-wide whitespace-nowrap">
+                                ( ............................ )
                               </strong>
-                              <span className="text-[11px] text-slate-700 font-mono block mt-1">
-                                NIP. ........................................................
+                              <span className="text-[11px] text-slate-700 font-mono block whitespace-nowrap">
+                                NIP. ............................
                               </span>
-                            </>
+                            </div>
                           )}
                         </div>
                       </div>
 
                       {/* 2. Proktor Utama CBT */}
                       <div className="flex flex-col items-center">
+                        <div className="h-6 mb-1 hidden sm:block" />
                         <div className="h-12 flex items-center justify-center font-semibold text-slate-800">
                           <p>Proktor / Teknisi CBT,</p>
                         </div>
@@ -5480,20 +5475,25 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                               </span>
                             </>
                           ) : (
-                            <>
-                              <strong className="block text-slate-900 text-xs sm:text-sm font-sans tracking-wide">
-                                ( ................................................................ )
+                            <div className="space-y-1 max-w-[200px] mx-auto">
+                              <strong className="block text-slate-900 text-xs font-sans tracking-wide whitespace-nowrap">
+                                ( ............................ )
                               </strong>
-                              <span className="text-[11px] text-slate-700 font-mono block mt-1">
-                                NIP. ........................................................
+                              <span className="text-[11px] text-slate-700 font-mono block whitespace-nowrap">
+                                NIP. ............................
                               </span>
-                            </>
+                            </div>
                           )}
                         </div>
                       </div>
 
                       {/* 3. Kepala Sekolah */}
                       <div className="flex flex-col items-center">
+                        <div className="h-6 flex items-center justify-center text-xs font-sans text-slate-800 font-medium mb-1">
+                          <p>
+                            {effectiveSchoolSettings.city || 'Palembang'}, {bapDateFormatted}
+                          </p>
+                        </div>
                         <div className="h-12 flex items-center justify-center font-semibold text-slate-800 leading-tight">
                           <p>
                             Mengetahui,<br />
@@ -5677,14 +5677,14 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                           </span>
                         </>
                       ) : (
-                        <>
-                          <strong className="block text-slate-900 text-xs sm:text-sm font-sans tracking-wide">
-                            ( ................................................................ )
+                        <div className="space-y-1 w-48 text-center mx-auto sm:ml-auto sm:mr-0">
+                          <strong className="block text-slate-900 text-xs font-sans tracking-wide whitespace-nowrap">
+                            ( ............................ )
                           </strong>
-                          <span className="text-[10px] sm:text-xs text-slate-600 font-mono block mt-1">
-                            NIP. ........................................................
+                          <span className="text-[10px] sm:text-xs text-slate-600 font-mono block whitespace-nowrap">
+                            NIP. ............................
                           </span>
-                        </>
+                        </div>
                       )}
                     </div>
                   </div>
@@ -5939,14 +5939,14 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                           </span>
                         </>
                       ) : (
-                        <>
-                          <strong className="block text-slate-900 text-xs sm:text-sm font-sans tracking-wide">
-                            ( ................................................................ )
+                        <div className="space-y-1 w-48 text-center mx-auto sm:ml-auto sm:mr-0">
+                          <strong className="block text-slate-900 text-xs font-sans tracking-wide whitespace-nowrap">
+                            ( ............................ )
                           </strong>
-                          <span className="text-[10px] sm:text-xs text-slate-600 font-mono block mt-1">
-                            NIP. ........................................................
+                          <span className="text-[10px] sm:text-xs text-slate-600 font-mono block whitespace-nowrap">
+                            NIP. ............................
                           </span>
-                        </>
+                        </div>
                       )}
                     </div>
                   </div>

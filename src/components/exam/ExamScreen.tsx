@@ -45,6 +45,7 @@ import {
   Layers,
   RotateCcw
 } from 'lucide-react';
+import { Footer } from '@/components/layout/Footer';
 
 interface ExamScreenProps {
   subject: Subject;
@@ -1532,12 +1533,7 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
       </div>
 
       {/* Copyright Resmi & Pengembang Aplikasi (Posisi Paling Bawah Setelah Soal & Sidebar) */}
-      <footer className="mt-8 py-3.5 px-4 border-t border-slate-200/60 dark:border-slate-800/60 text-center text-xs sm:text-sm text-slate-400 dark:text-slate-500 font-sans print:hidden">
-        © 2026 <strong>SMP Negeri 58 Palembang</strong> • Dikembangkan oleh{' '}
-        <span className="font-semibold text-violet-600 dark:text-violet-400">
-          Aris Bermansyah, S.Kom
-        </span>
-      </footer>
+      <Footer className="mt-8 border-t border-slate-200/60 dark:border-slate-800/60 bg-transparent w-full" />
 
       {/* POPUP PALETTE DAFTAR SOAL KHUSUS MOBILE (SAAT TOMBOL 'DAFTAR SOAL' DI ATAS DIKLIK) */}
       {showMobilePalette && (

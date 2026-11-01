@@ -14,8 +14,8 @@ export const Footer: React.FC<FooterProps> = ({ className = '' }) => {
   }, []);
 
   return (
-    <footer className={`py-3.5 px-4 sm:px-6 border-t border-slate-200/80 dark:border-slate-800/80 bg-white/70 dark:bg-slate-900/70 backdrop-blur-md text-xs print:hidden transition-colors w-full ${className}`}>
-      <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2 text-center sm:text-left text-[11px] sm:text-xs">
+    <footer className={`py-3 px-4 sm:px-6 lg:px-8 border-t border-slate-200/80 dark:border-slate-800/80 bg-white/70 dark:bg-slate-900/70 backdrop-blur-md text-xs print:hidden transition-colors w-full ${className}`}>
+      <div className="w-full flex flex-col sm:flex-row items-center justify-between gap-2 text-center sm:text-left text-[11px] sm:text-xs">
         {/* Hak Cipta Sekolah Resmi */}
         <div className="flex items-center gap-1.5 font-medium text-slate-600 dark:text-slate-300">
           <span>

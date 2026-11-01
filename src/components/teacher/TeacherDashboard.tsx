@@ -2076,7 +2076,23 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
     return selectedDocSubject.className.split(',').map(c => c.trim().toLowerCase()).filter(Boolean);
   }, [selectedDocSubject.className]);
 
+  // Tanggal Hari Ini (WIB/Lokal) Format YYYY-MM-DD
+  const todayDateISO = useMemo(() => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }, []);
+
   // State Konfigurasi Rinci Berita Acara Pelaksanaan (BAP)
+  const [bapDate, setBapDate] = useState<string>(() => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  });
   const [bapSession, setBapSession] = useState<string>('Sesi 1 (07.30 - 09.00 WIB)');
   const [bapRoom, setBapRoom] = useState<string>('Laboratorium Komputer CBT 1');
   const [bapServerId, setBapServerId] = useState<string>('SRV-58-CBT01');
@@ -2091,6 +2107,10 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   const [bapProctorName, setBapProctorName] = useState<string>('');
   const [bapProctorNip, setBapProctorNip] = useState<string>('');
   const [isBapConfigOpen, setIsBapConfigOpen] = useState<boolean>(false);
+
+  // Mode Format Cetak Presensi & Kartu Peserta
+  const [attendanceMode, setAttendanceMode] = useState<'signature_sheet' | 'cbt_status'>('signature_sheet');
+  const [cardMode, setCardMode] = useState<'general' | 'subject'>('general');
 
   // Perhitungan Siswa Real untuk Berita Acara Pelaksanaan (BAP)
   const bapTargetStudents = useMemo(() => {
@@ -2147,9 +2167,10 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   }, [bapProctorNip, defaultBapProctor]);
 
   const effectiveExamDate = useMemo(() => {
-    if (selectedDocSubject.examDate) {
+    const targetDateStr = bapDate || todayDateISO;
+    if (targetDateStr) {
       try {
-        const parts = selectedDocSubject.examDate.split('-');
+        const parts = targetDateStr.split('-');
         if (parts.length === 3) {
           const d = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
           if (!isNaN(d.getTime())) return d;
@@ -2159,7 +2180,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
       }
     }
     return new Date();
-  }, [selectedDocSubject.examDate]);
+  }, [bapDate, todayDateISO]);
 
   const bapDayName = useMemo(() => {
     return effectiveExamDate.toLocaleDateString('id-ID', { weekday: 'long' });
@@ -4859,6 +4880,28 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
               {isBapConfigOpen && (
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 pt-3 border-t border-slate-100 dark:border-slate-800 text-xs">
                   <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400">
+                        Tanggal Berita Acara:
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => setBapDate(todayDateISO)}
+                        className="text-[10px] text-violet-600 dark:text-violet-400 hover:underline font-bold cursor-pointer"
+                        title="Set tanggal ke hari ini"
+                      >
+                        Hari Ini
+                      </button>
+                    </div>
+                    <input
+                      type="date"
+                      value={bapDate}
+                      onChange={e => setBapDate(e.target.value)}
+                      className="w-full px-2.5 py-1.5 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-medium text-slate-900 dark:text-white [color-scheme:light] dark:[color-scheme:dark]"
+                    />
+                  </div>
+
+                  <div>
                     <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
                       Sesi Ujian & Waktu:
                     </label>
@@ -4979,6 +5022,94 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                   </div>
                 </div>
               )}
+            </div>
+          )}
+
+          {/* Toolbar Pilihan Format Cetak Presensi */}
+          {selectedDocType === 'attendance' && (
+            <div className="p-3.5 sm:p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 print:hidden">
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded-lg bg-emerald-100 dark:bg-emerald-900/50 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
+                  <FileSpreadsheet className="w-4 h-4" />
+                </div>
+                <div>
+                  <h4 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">
+                    Format Lembar Presensi Siswa
+                  </h4>
+                  <p className="text-[11px] text-slate-500">
+                    Pilih format lembar tanda tangan sebelum ujian atau rekapitulasi submit digital pasca ujian.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
+                <button
+                  type="button"
+                  onClick={() => setAttendanceMode('signature_sheet')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+                    attendanceMode === 'signature_sheet'
+                      ? 'bg-white dark:bg-slate-900 text-violet-700 dark:text-violet-300 shadow-xs'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                  }`}
+                >
+                  📝 Lembar Tanda Tangan (Sebelum Ujian)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAttendanceMode('cbt_status')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+                    attendanceMode === 'cbt_status'
+                      ? 'bg-white dark:bg-slate-900 text-emerald-700 dark:text-emerald-300 shadow-xs'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                  }`}
+                >
+                  📊 Rekap Status Submit (Setelah Ujian)
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Toolbar Pilihan Format Cetak Kartu Peserta */}
+          {selectedDocType === 'cards' && (
+            <div className="p-3.5 sm:p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 print:hidden">
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded-lg bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-400 flex items-center justify-center">
+                  <UserCheck className="w-4 h-4" />
+                </div>
+                <div>
+                  <h4 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">
+                    Format Kartu Peserta Asesmen
+                  </h4>
+                  <p className="text-[11px] text-slate-500">
+                    Siswa cukup menggunakan 1 kartu resmi untuk seluruh mata pelajaran asesmen.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
+                <button
+                  type="button"
+                  onClick={() => setCardMode('general')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+                    cardMode === 'general'
+                      ? 'bg-white dark:bg-slate-900 text-blue-700 dark:text-blue-300 shadow-xs'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                  }`}
+                >
+                  🪪 Kartu Resmi (Semua Mapel - 1 Kartu)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCardMode('subject')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+                    cardMode === 'subject'
+                      ? 'bg-white dark:bg-slate-900 text-violet-700 dark:text-violet-300 shadow-xs'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                  }`}
+                >
+                  📌 Kartu Khusus Mapel Ini ({selectedDocSubject.token})
+                </button>
+              </div>
             </div>
           )}
 
@@ -5221,6 +5352,17 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                         </div>
                       </div>
                     </div>
+
+                    {/* Catatan Kaki Otentikasi Digital BAP */}
+                    <div className="mt-8 pt-3 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between text-[10px] text-slate-500 font-sans gap-2 print:border-slate-300">
+                      <div className="flex items-center gap-1.5 text-emerald-700 font-semibold">
+                        <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+                        <span>Dokumen Berita Acara Resmi Terverifikasi TTE Elektronik Server CBT {effectiveSchoolSettings.schoolName}</span>
+                      </div>
+                      <div className="font-mono text-[9px] text-slate-400">
+                        ID: CBT58-BAP-{selectedDocSubject.token || 'VALID'} • Dicetak: {bapDateFormatted}
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -5246,7 +5388,9 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                         <th className="py-2.5 px-3 border-r border-slate-900 w-32">NISN</th>
                         <th className="py-2.5 px-3 border-r border-slate-900 text-left">Nama Lengkap Peserta</th>
                         <th className="py-2.5 px-3 border-r border-slate-900 w-24">Kelas</th>
-                        <th className="py-2.5 px-3 border-r border-slate-900 w-28">Status</th>
+                        <th className="py-2.5 px-3 border-r border-slate-900 w-28">
+                          {attendanceMode === 'signature_sheet' ? 'Presensi' : 'Status CBT'}
+                        </th>
                         <th className="py-2.5 px-4 w-44 text-left">Tanda Tangan</th>
                       </tr>
                     </thead>
@@ -5266,7 +5410,9 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                               <td className="py-2 px-3 border-r border-slate-900 font-semibold uppercase">{std.name}</td>
                               <td className="py-2 px-3 border-r border-slate-900 text-center">{std.className}</td>
                               <td className="py-2 px-3 border-r border-slate-900 text-center font-semibold">
-                                {hasSubmitted ? (
+                                {attendanceMode === 'signature_sheet' ? (
+                                  <span className="text-slate-800 font-mono text-[11px] font-bold">[ &nbsp;✓&nbsp; ] Hadir</span>
+                                ) : hasSubmitted ? (
                                   <span className="text-emerald-700 font-bold">Hadir / Selesai</span>
                                 ) : (
                                   <span className="text-slate-400">Belum Submit</span>
@@ -5284,13 +5430,38 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
 
                 <div className="flex justify-between items-end pt-8 text-xs font-sans">
                   <div>
-                    <p className="text-[11px] text-slate-500">* Dokumen presensi resmi dicetak otomatis dari sistem CBT {effectiveSchoolSettings.schoolName}</p>
+                    {/* Keterangan Otentikasi Digital */}
+                    <div className="flex items-center gap-1.5 text-emerald-700 font-semibold text-[10px]">
+                      <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+                      <span>Dokumen Presensi Resmi Terverifikasi TTE Elektronik Server CBT {effectiveSchoolSettings.schoolName}</span>
+                    </div>
+                    <p className="text-[9px] font-mono text-slate-400 mt-0.5">
+                      ID: CBT58-PRESENSI-{selectedDocSubject.token || 'VALID'} • Dicetak: {bapDateFormatted}
+                    </p>
                   </div>
-                  <div className="text-center space-y-16">
-                    <p>{effectiveSchoolSettings.city}, {new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}<br />Pengawas Ruang,</p>
+
+                  <div className="text-center min-h-[160px] flex flex-col items-center justify-between">
+                    <p className="font-semibold text-slate-800">
+                      {effectiveSchoolSettings.city || 'Palembang'}, {bapDateFormatted}<br />
+                      Pengawas Ruang,
+                    </p>
+                    {effectiveSchoolSettings.enableTTE ? (
+                      <div className="my-2">
+                        <TTESignatureSeal
+                          settings={effectiveSchoolSettings}
+                          documentId={`PRESENSI-${selectedDocSubject.token || '58'}`}
+                          signerName={effectiveBapSupervisorName}
+                          signerTitle="Pengawas Ruang Ujian"
+                          signerNip={effectiveBapSupervisorNip}
+                          sealOnly={true}
+                        />
+                      </div>
+                    ) : (
+                      <div className="h-16" />
+                    )}
                     <div>
-                      <strong className="underline block font-bold text-slate-900">{effectiveBapSupervisorName}</strong>
-                      <span className="text-[11px] text-slate-500 font-mono">NIP: {effectiveBapSupervisorNip || '-'}</span>
+                      <strong className="underline block font-bold text-slate-950 uppercase">{effectiveBapSupervisorName}</strong>
+                      <span className="text-[11px] text-slate-600 font-mono">NIP: {effectiveBapSupervisorNip || '-'}</span>
                     </div>
                   </div>
                 </div>
@@ -5302,10 +5473,12 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
               <div className="space-y-6 pt-2 font-sans">
                 <div className="text-center space-y-1">
                   <h3 className="text-base font-bold underline uppercase tracking-wider">
-                    KARTU PESERTA ASESMEN SUMATIF TAHUN 2026
+                    KARTU PESERTA ASESMEN SUMATIF TAHUN {bapAcademicYear}
                   </h3>
                   <p className="text-xs text-slate-600">
-                    SMP Negeri 58 Palembang • Mata Pelajaran: <strong>{selectedDocSubject.title}</strong> • Rombel: <strong>{selectedDocClass}</strong>
+                    {cardMode === 'general'
+                      ? `${effectiveSchoolSettings.schoolName} • Berlaku untuk Seluruh Sesi Asesmen • Rombel: ${selectedDocClass}`
+                      : `${effectiveSchoolSettings.schoolName} • Mata Pelajaran: ${selectedDocSubject.title} • Rombel: ${selectedDocClass}`}
                   </p>
                 </div>
 
@@ -5325,7 +5498,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                             </div>
                             <div>
                               <strong className="block text-[11px] uppercase leading-tight font-bold">KARTU PESERTA CBT</strong>
-                              <span className="text-[10px] text-slate-600">SMP Negeri 58 Palembang</span>
+                              <span className="text-[10px] text-slate-600">{effectiveSchoolSettings.schoolName}</span>
                             </div>
                           </div>
                           <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 border border-slate-300">
@@ -5347,8 +5520,18 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                               <span className="font-mono font-bold">{std.nisn || '-'}</span>
                             </div>
                             <div>
-                              <span className="text-[10px] text-slate-500 block">Token Sesi Ujian:</span>
-                              <span className="font-mono font-bold text-violet-700 bg-violet-50 px-1 rounded">{selectedDocSubject.token}</span>
+                              <span className="text-[10px] text-slate-500 block">
+                                {cardMode === 'general' ? 'Ruang & Sesi:' : 'Token Sesi Ujian:'}
+                              </span>
+                              {cardMode === 'general' ? (
+                                <span className="font-medium text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded text-[10px]">
+                                  {bapRoom} • Token diumumkan di ruang
+                                </span>
+                              ) : (
+                                <span className="font-mono font-bold text-violet-700 bg-violet-50 px-1 rounded">
+                                  {selectedDocSubject.token}
+                                </span>
+                              )}
                             </div>
                           </div>
                         </div>
@@ -5359,6 +5542,17 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                         </div>
                       </div>
                     ))}
+                </div>
+
+                {/* Catatan Kaki Otentikasi Digital Kartu */}
+                <div className="mt-6 pt-3 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between text-[10px] text-slate-500 font-sans gap-2 print:border-slate-300">
+                  <div className="flex items-center gap-1.5 text-emerald-700 font-semibold">
+                    <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <span>Kartu Peserta Resmi Terverifikasi Server CBT {effectiveSchoolSettings.schoolName}</span>
+                  </div>
+                  <div className="font-mono text-[9px] text-slate-400">
+                    ID: CBT58-KARTU-{selectedDocClass.replace(/\s+/g, '')} • Dicetak: {bapDateFormatted}
+                  </div>
                 </div>
               </div>
             )}
@@ -5424,20 +5618,67 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                 </div>
 
                 <div className="grid grid-cols-2 gap-8 pt-8 text-center text-xs font-sans">
-                  <div className="space-y-16">
-                    <p>Mengetahui,<br />{effectiveSchoolSettings.principalTitle || `Kepala ${effectiveSchoolSettings.schoolName}`},</p>
+                  {/* Tanda Tangan Kepala Sekolah */}
+                  <div className="flex flex-col items-center justify-between min-h-[160px]">
+                    <p className="font-semibold text-slate-800">
+                      Mengetahui,<br />
+                      {effectiveSchoolSettings.principalTitle || `Kepala ${effectiveSchoolSettings.schoolName}`},
+                    </p>
+                    {effectiveSchoolSettings.enableTTE ? (
+                      <div className="my-2">
+                        <TTESignatureSeal
+                          settings={effectiveSchoolSettings}
+                          documentId={`LEGER-KSP-${selectedDocSubject.token || '58'}`}
+                          signerName={effectiveSchoolSettings.principalName}
+                          signerTitle={effectiveSchoolSettings.principalTitle || `Kepala ${effectiveSchoolSettings.schoolName}`}
+                          signerNip={effectiveSchoolSettings.principalNip}
+                          sealOnly={true}
+                        />
+                      </div>
+                    ) : (
+                      <div className="h-16" />
+                    )}
                     <div>
-                      <strong className="underline block font-bold text-slate-900">{effectiveSchoolSettings.principalName}</strong>
-                      <span className="text-[11px] text-slate-500 font-mono">NIP: {effectiveSchoolSettings.principalNip || '-'}</span>
+                      <strong className="underline block font-bold text-slate-950 uppercase">{effectiveSchoolSettings.principalName}</strong>
+                      <span className="text-[11px] text-slate-600 font-mono">NIP: {effectiveSchoolSettings.principalNip || '-'}</span>
                     </div>
                   </div>
 
-                  <div className="space-y-16">
-                    <p>{effectiveSchoolSettings.city}, {new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}<br />Guru Mata Pelajaran,</p>
+                  {/* Tanda Tangan Guru Mata Pelajaran */}
+                  <div className="flex flex-col items-center justify-between min-h-[160px]">
+                    <p className="font-semibold text-slate-800">
+                      {effectiveSchoolSettings.city || 'Palembang'}, {bapDateFormatted}<br />
+                      Guru Mata Pelajaran,
+                    </p>
+                    {effectiveSchoolSettings.enableTTE ? (
+                      <div className="my-2">
+                        <TTESignatureSeal
+                          settings={effectiveSchoolSettings}
+                          documentId={`LEGER-GURU-${selectedDocSubject.token || '58'}`}
+                          signerName={effectiveBapSupervisorName}
+                          signerTitle="Guru Mata Pelajaran"
+                          signerNip={effectiveBapSupervisorNip}
+                          sealOnly={true}
+                        />
+                      </div>
+                    ) : (
+                      <div className="h-16" />
+                    )}
                     <div>
-                      <strong className="underline block font-bold text-slate-900">{effectiveBapSupervisorName}</strong>
-                      <span className="text-[11px] text-slate-500 font-mono">NIP: {effectiveBapSupervisorNip || '-'}</span>
+                      <strong className="underline block font-bold text-slate-950 uppercase">{effectiveBapSupervisorName}</strong>
+                      <span className="text-[11px] text-slate-600 font-mono">NIP: {effectiveBapSupervisorNip || '-'}</span>
                     </div>
+                  </div>
+                </div>
+
+                {/* Catatan Kaki Otentikasi Digital Leger */}
+                <div className="mt-8 pt-3 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between text-[10px] text-slate-500 font-sans gap-2 print:border-slate-300">
+                  <div className="flex items-center gap-1.5 text-emerald-700 font-semibold">
+                    <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <span>Dokumen Leger Nilai Resmi Terverifikasi TTE Elektronik Server CBT {effectiveSchoolSettings.schoolName}</span>
+                  </div>
+                  <div className="font-mono text-[9px] text-slate-400">
+                    ID: CBT58-LEGER-{selectedDocSubject.token || 'VALID'} • Dicetak: {bapDateFormatted}
                   </div>
                 </div>
               </div>

@@ -16,7 +16,12 @@ import {
   QrCode
 } from 'lucide-react';
 import Link from 'next/link';
-import { fetchSchoolSettingsFromSupabase, fetchTeachers, defaultSchoolSettings } from '@/lib/supabaseService';
+import { 
+  fetchSchoolSettingsFromSupabase, 
+  fetchTeachers, 
+  fetchTeacherPhotosFromSupabase,
+  defaultSchoolSettings 
+} from '@/lib/supabaseService';
 import { SchoolSettings, Teacher } from '@/types/cbt';
 
 function VerifyDetails() {
@@ -35,6 +40,7 @@ function VerifyDetails() {
   const [verifyTime, setVerifyTime] = useState<string>('');
   const [settings, setSettings] = useState<SchoolSettings>(defaultSchoolSettings);
   const [teachers, setTeachers] = useState<Teacher[]>([]);
+  const [teacherPhotosMap, setTeacherPhotosMap] = useState<Record<string, string>>({});
 
   useEffect(() => {
     setVerifyTime(new Date().toLocaleString('id-ID', {
@@ -57,7 +63,7 @@ function VerifyDetails() {
       } catch {}
     }
 
-    // Muat data resmi terbaru dari Database Supabase (Cloud) agar verifikasi dari HP pihak luar selalu menampilkan kop & logo valid
+    // Muat data resmi terbaru dari Database Supabase (Cloud) agar verifikasi dari HP pihak luar selalu valid
     fetchSchoolSettingsFromSupabase().then(dbSettings => {
       if (dbSettings) {
         setSettings(dbSettings);
@@ -69,6 +75,11 @@ function VerifyDetails() {
     fetchTeachers().then(ts => {
       if (ts) setTeachers(ts);
     }).catch(() => {});
+
+    // Ambil foto guru langsung dari Supabase Cloud
+    fetchTeacherPhotosFromSupabase().then(pm => {
+      if (pm) setTeacherPhotosMap(pm);
+    }).catch(() => {});
   }, []);
 
   const effectiveSettings: SchoolSettings = {
@@ -79,24 +90,32 @@ function VerifyDetails() {
     logoRight: settings?.logoRight || defaultSchoolSettings.logoRight
   };
 
-  const displaySigner = (signer && signer !== 'Drs. H. Syarifuddin, M.Si')
+  const isPrincipal = title.toLowerCase().includes('kepala');
+
+  const displaySigner = (signer && signer !== 'Drs. H. Syarifuddin, M.Si' && signer !== 'Nama Guru Pengampu')
     ? signer
-    : (title.toLowerCase().includes('kepala') ? effectiveSettings.principalName : (signer || effectiveSettings.principalName));
+    : (isPrincipal ? effectiveSettings.principalName : (effectiveSettings.teacherName || 'Guru Pengampu'));
 
   const displayNip = (nip && nip !== '197001011995031002' && nip !== '-')
     ? nip
-    : (title.toLowerCase().includes('kepala') ? effectiveSettings.principalNip : nip);
-
-  const isPrincipal = title.toLowerCase().includes('kepala');
+    : (isPrincipal ? effectiveSettings.principalNip : (effectiveSettings.teacherNip || '-'));
 
   const matchedTeacher = !isPrincipal ? teachers.find(t => 
-    (displayNip && t.nip === displayNip) || 
+    (displayNip && displayNip !== '-' && t.nip === displayNip) || 
     (displaySigner && t.name.toLowerCase().trim() === displaySigner.toLowerCase().trim())
   ) : null;
 
+  // Resolusi Foto: Jika Kepala Sekolah gunakan principalPhoto, jika Guru gunakan foto guru di Cloud (TIDAK PERNAH pakai foto Kepsek!)
   const signerPhoto = isPrincipal 
-    ? effectiveSettings.principalPhoto 
-    : (matchedTeacher?.photoUrl || matchedTeacher?.avatar || (typeof window !== 'undefined' && matchedTeacher?.id ? localStorage.getItem(`cbt_teacher_${matchedTeacher.id}_photo`) : null) || effectiveSettings.principalPhoto);
+    ? (effectiveSettings.principalPhoto || null)
+    : (
+        (displayNip && displayNip !== '-' ? teacherPhotosMap[displayNip] : null) ||
+        (matchedTeacher ? teacherPhotosMap[matchedTeacher.id] : null) ||
+        matchedTeacher?.photoUrl || 
+        matchedTeacher?.avatar || 
+        (typeof window !== 'undefined' && matchedTeacher?.id ? localStorage.getItem(`cbt_teacher_${matchedTeacher.id}_photo`) : null) ||
+        null
+      );
 
   return (
     <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col items-center justify-center p-4 sm:p-6 print:bg-white print:text-black print:p-0">
@@ -205,18 +224,18 @@ function VerifyDetails() {
             <div className="space-y-1 p-2.5 rounded-xl bg-slate-800/40 print:bg-white border border-slate-700/40 print:border-slate-200">
               <div className="flex items-center gap-1.5 text-slate-400">
                 <UserCheck className="w-3.5 h-3.5 text-emerald-400" />
-                <span>Pejabat Penandatangan:</span>
+                <span>{isPrincipal ? 'Kepala Satuan Pendidikan:' : 'Guru Pengampu / Penandatangan:'}</span>
               </div>
               <div className="flex items-center gap-2.5 pt-0.5">
                 {signerPhoto ? (
                   <img
                     src={signerPhoto}
                     alt={`Foto Resmi ${displaySigner}`}
-                    className="w-11 h-13 rounded-xl object-cover border border-emerald-500/40 shrink-0 shadow-xs"
+                    className="w-11 h-14 rounded-xl object-cover border border-emerald-500/40 shrink-0 shadow-xs"
                   />
                 ) : (
-                  <div className="w-10 h-12 rounded-lg bg-slate-700/60 border border-slate-600 flex items-center justify-center shrink-0">
-                    <UserCheck className="w-5 h-5 text-slate-400" />
+                  <div className="w-11 h-14 rounded-xl bg-violet-950/60 border border-violet-500/40 flex items-center justify-center shrink-0 text-violet-400 font-bold text-base uppercase">
+                    {displaySigner.charAt(0)}
                   </div>
                 )}
                 <div>
@@ -224,7 +243,7 @@ function VerifyDetails() {
                     {displaySigner}
                   </p>
                   <span className="text-[10px] text-emerald-400 print:text-emerald-700 font-semibold block">
-                    ✓ Identitas Terotentikasi
+                    {isPrincipal ? '✓ Identitas Kepala Sekolah Terotentikasi' : '✓ Identitas Guru Pengampu Sah & Terverifikasi'}
                   </span>
                 </div>
               </div>
@@ -236,8 +255,13 @@ function VerifyDetails() {
                 <span>Jabatan / Otoritas:</span>
               </div>
               <p className="font-medium text-slate-200 print:text-slate-800">
-                {title}
+                {isPrincipal ? (effectiveSettings.principalTitle || title || 'Kepala Sekolah') : (title || 'Guru Pengampu Mata Pelajaran')}
               </p>
+              {!isPrincipal && matchedTeacher?.subject && (
+                <p className="text-[11px] text-emerald-400 print:text-emerald-700 font-semibold mt-0.5">
+                  Mata Pelajaran: {matchedTeacher.subject}
+                </p>
+              )}
             </div>
 
             {displayNip && displayNip !== '-' && (

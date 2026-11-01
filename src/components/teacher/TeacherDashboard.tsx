@@ -9,7 +9,7 @@ import { AiQuestionGeneratorModal } from './AiQuestionGeneratorModal';
 import { extractSubjectAndGrade } from '@/lib/aiQuestionGenerator';
 import { evaluateFullExam, calculateSingleQuestionScore } from '@/lib/scoringEngine';
 import { sendProctorCommand, subscribeToLiveSessions, removeStudentSession, broadcastAnnouncementToStudents } from '@/lib/liveMonitoringService';
-import { clearStudentAutolockInSupabase, insertMessage, fetchQuestionsBySubject } from '@/lib/supabaseService';
+import { clearStudentAutolockInSupabase, insertMessage, fetchQuestionsBySubject, updateTeacherPhotoInSupabase } from '@/lib/supabaseService';
 import { resolveStudentSingleClass, isClassInGrade } from '@/lib/rosterStudents';
 import { TTESignatureSeal } from '@/components/common/TTESignatureSeal';
 import { ClassRecapModal } from '../modals/ClassRecapModal';
@@ -258,6 +258,21 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
     }
   }, [currentTeacher?.id]);
 
+  const formatProperName = (name: string): string => {
+    if (!name) return '';
+    if (name === name.toUpperCase()) {
+      return name
+        .toLowerCase()
+        .split(' ')
+        .map(part => {
+          if (!part) return '';
+          return part.charAt(0).toUpperCase() + part.slice(1);
+        })
+        .join(' ');
+    }
+    return name;
+  };
+
   const handleTeacherPhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !currentTeacher?.id) return;
@@ -267,6 +282,9 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
         setCurrentTeacherPhoto(compressedDataUrl);
         if (typeof window !== 'undefined') {
           localStorage.setItem(`cbt_teacher_${currentTeacher.id}_photo`, compressedDataUrl);
+          if (currentTeacher.nip) {
+            localStorage.setItem(`cbt_teacher_${currentTeacher.nip}_photo`, compressedDataUrl);
+          }
         }
         if (onUpdateTeacher) {
           onUpdateTeacher({
@@ -275,6 +293,10 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
             avatar: compressedDataUrl
           });
         }
+        // Simpan langsung ke Supabase Cloud agar dapat diverifikasi pihak luar lewat HP
+        updateTeacherPhotoInSupabase(currentTeacher.id, compressedDataUrl, currentTeacher.nip).catch(err => {
+          console.warn('Gagal sinkron foto guru ke Cloud Supabase:', err);
+        });
       }
     } catch (err) {
       console.error('Gagal upload foto guru:', err);
@@ -286,6 +308,9 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
     setCurrentTeacherPhoto('');
     if (typeof window !== 'undefined') {
       localStorage.removeItem(`cbt_teacher_${currentTeacher.id}_photo`);
+      if (currentTeacher.nip) {
+        localStorage.removeItem(`cbt_teacher_${currentTeacher.nip}_photo`);
+      }
     }
     if (onUpdateTeacher) {
       onUpdateTeacher({
@@ -294,6 +319,9 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
         avatar: ''
       });
     }
+    updateTeacherPhotoInSupabase(currentTeacher.id, '', currentTeacher.nip).catch(err => {
+      console.warn('Gagal hapus foto guru di Cloud Supabase:', err);
+    });
   };
 
   const compressImageFile = (
@@ -7446,7 +7474,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                     )}
                   </div>
                   <h3 className="font-extrabold text-slate-900 dark:text-white print:text-black text-lg sm:text-xl">
-                    {selectedResult.studentName}
+                    {formatProperName(selectedResult.studentName)}
                   </h3>
                   <p className="text-xs text-slate-500 dark:text-slate-400 print:text-slate-700">
                     NISN: <strong className="text-slate-800 dark:text-slate-200 print:text-black font-mono">{dossierNisn}</strong> • Kelas: <strong className="text-slate-800 dark:text-slate-200 print:text-black">{cleanDossierClass}</strong> • Mapel: <strong className="text-slate-800 dark:text-slate-200 print:text-black">{cleanDossierSubjectName}</strong> • Waktu Kumpul: <strong className="text-slate-800 dark:text-slate-200 print:text-black">{selectedResult.submittedAt}</strong>
@@ -7959,7 +7987,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
 
                   <div>
                     <strong className="underline block font-bold text-slate-900 dark:text-white print:text-black text-xs sm:text-sm font-sans leading-tight">
-                      {selectedResult.studentName}
+                      {formatProperName(selectedResult.studentName)}
                     </strong>
                     <span className="text-[10px] sm:text-[11px] text-slate-600 dark:text-slate-400 print:text-slate-700 block font-mono mt-0.5">
                       NISN: {dossierNisn}

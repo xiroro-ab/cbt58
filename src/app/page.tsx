@@ -869,7 +869,7 @@ export default function Home() {
       }
       return updated;
     });
-    updateTeacherPhotoInSupabase(updatedTeacher.id, updatedTeacher.photoUrl || '').catch(console.warn);
+    updateTeacherPhotoInSupabase(updatedTeacher.id, updatedTeacher.photoUrl || '', updatedTeacher.nip).catch(console.warn);
   };
 
   const handleStartExam = async (e: React.FormEvent) => {

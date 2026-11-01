@@ -1771,35 +1771,77 @@ export function mergeTeachers(supabaseTeachers: Teacher[], fallbackTeachers: Tea
 }
 
 /**
+ * Mengambil katalog foto profil seluruh guru dari Cloud Supabase
+ */
+export async function fetchTeacherPhotosFromSupabase(): Promise<Record<string, string>> {
+  try {
+    const { data, error } = await supabase
+      .from('teachers')
+      .select('assignments')
+      .eq('id', '__cbt_teacher_photos__')
+      .maybeSingle();
+
+    if (!error && data?.assignments && typeof data.assignments === 'object') {
+      return data.assignments as Record<string, string>;
+    }
+    return {};
+  } catch (err) {
+    console.warn('fetchTeacherPhotosFromSupabase error:', err);
+    return {};
+  }
+}
+
+/**
  * Mengambil daftar Akun Guru & Pengawas Resmi dari Supabase (fallback ke initialTeachers)
  */
 export async function fetchTeachers(): Promise<Teacher[]> {
   try {
-    const { data, error } = await supabase
-      .from('teachers')
-      .select('*')
-      .neq('id', '__cbt_school_settings__')
-      .order('name', { ascending: true });
+    // Ambil data guru dan katalog foto dari Supabase Cloud secara paralel
+    const [teachersRes, photosMap] = await Promise.all([
+      supabase
+        .from('teachers')
+        .select('*')
+        .neq('id', '__cbt_school_settings__')
+        .neq('id', '__cbt_teacher_photos__')
+        .order('name', { ascending: true }),
+      fetchTeacherPhotosFromSupabase()
+    ]);
+
+    const { data, error } = teachersRes;
 
     if (!error && data && data.length > 0) {
       const supabaseTeachers: Teacher[] = data
-        .filter(t => t.id !== '__cbt_school_settings__' && t.nip !== 'CFG-SCHOOL-SETTINGS' && !t.id?.match(/^tea-\d{2}$/))
-        .map(t => ({
-          id: t.id,
-          nip: t.nip,
-          name: t.name,
-          email: t.email,
-          subject: t.subject,
-          classes: t.classes || [],
-          assignments: t.assignments || [],
-          role: t.role || 'guru_mapel',
-          pin: t.pin || '123456',
-          avatarColor: t.avatar_color || 'bg-violet-600',
-          photoUrl: t.photo_url || t.avatar_url || (typeof window !== 'undefined' ? localStorage.getItem(`cbt_teacher_${t.id}_photo`) || '' : ''),
-          avatar: t.photo_url || t.avatar_url || (typeof window !== 'undefined' ? localStorage.getItem(`cbt_teacher_${t.id}_photo`) || '' : ''),
-          status: t.status || 'Standby',
-          lastLogin: t.last_login
-        }));
+        .filter(t => t.id !== '__cbt_school_settings__' && t.id !== '__cbt_teacher_photos__' && t.nip !== 'CFG-SCHOOL-SETTINGS' && t.nip !== 'CFG-TEACHER-PHOTOS' && !t.id?.match(/^tea-\d{2}$/))
+        .map(t => {
+          const cloudPhoto = photosMap[t.id] || (t.nip ? photosMap[t.nip] : '') || '';
+          const localPhoto = typeof window !== 'undefined' ? localStorage.getItem(`cbt_teacher_${t.id}_photo`) || '' : '';
+          const photo = cloudPhoto || localPhoto || t.photo_url || t.avatar_url || '';
+
+          // Sinkronisasi ke cache lokal perangkat
+          if (cloudPhoto && typeof window !== 'undefined') {
+            try {
+              localStorage.setItem(`cbt_teacher_${t.id}_photo`, cloudPhoto);
+              if (t.nip) localStorage.setItem(`cbt_teacher_${t.nip}_photo`, cloudPhoto);
+            } catch {}
+          }
+
+          return {
+            id: t.id,
+            nip: t.nip,
+            name: t.name,
+            email: t.email,
+            subject: t.subject,
+            classes: t.classes || [],
+            assignments: t.assignments || [],
+            role: t.role || 'guru_mapel',
+            pin: t.pin || '123456',
+            avatarColor: t.avatar_color || 'bg-violet-600',
+            photoUrl: photo,
+            avatar: photo,
+            status: t.status || 'Standby',
+            lastLogin: t.last_login
+          };
+        });
 
       if (typeof window !== 'undefined') {
         try {
@@ -1841,18 +1883,68 @@ export async function updateTeacherStatusInSupabase(
 }
 
 /**
- * Memperbarui foto profil guru di Supabase & Storage
+ * Memperbarui foto profil guru di Supabase Cloud (pada row __cbt_teacher_photos__)
  */
-export async function updateTeacherPhotoInSupabase(teacherId: string, photoUrl: string): Promise<boolean> {
+export async function updateTeacherPhotoInSupabase(
+  teacherId: string, 
+  photoUrl: string, 
+  teacherNip?: string
+): Promise<boolean> {
   try {
+    // 1. Ambil map foto yang ada di __cbt_teacher_photos__
+    const { data } = await supabase
+      .from('teachers')
+      .select('assignments')
+      .eq('id', '__cbt_teacher_photos__')
+      .maybeSingle();
+
+    const photosMap: Record<string, string> = (data?.assignments && typeof data.assignments === 'object')
+      ? { ...(data.assignments as Record<string, string>) }
+      : {};
+
+    if (photoUrl) {
+      photosMap[teacherId] = photoUrl;
+      if (teacherNip) {
+        photosMap[teacherNip] = photoUrl;
+      }
+    } else {
+      delete photosMap[teacherId];
+      if (teacherNip) {
+        delete photosMap[teacherNip];
+      }
+    }
+
+    // 2. Simpan kembali ke Cloud Database Supabase
     const { error } = await supabase
       .from('teachers')
-      .update({ photo_url: photoUrl })
-      .eq('id', teacherId);
+      .upsert({
+        id: '__cbt_teacher_photos__',
+        nip: 'CFG-TEACHER-PHOTOS',
+        name: 'Katalog Foto Guru',
+        email: 'photos@system.cbt',
+        subject: 'Photos',
+        role: 'admin',
+        assignments: photosMap
+      }, { onConflict: 'id' });
+
     if (error) {
       console.warn('updateTeacherPhotoInSupabase error:', error.message);
       return false;
     }
+
+    // Simpan ke local storage perangkat saat ini
+    if (typeof window !== 'undefined') {
+      try {
+        if (photoUrl) {
+          localStorage.setItem(`cbt_teacher_${teacherId}_photo`, photoUrl);
+          if (teacherNip) localStorage.setItem(`cbt_teacher_${teacherNip}_photo`, photoUrl);
+        } else {
+          localStorage.removeItem(`cbt_teacher_${teacherId}_photo`);
+          if (teacherNip) localStorage.removeItem(`cbt_teacher_${teacherNip}_photo`);
+        }
+      } catch {}
+    }
+
     return true;
   } catch (err) {
     console.warn('updateTeacherPhotoInSupabase exception:', err);

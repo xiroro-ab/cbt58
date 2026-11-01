@@ -168,47 +168,58 @@ export const Navbar: React.FC<NavbarProps> = ({
   const overflowTeacherCount = displayStackTeachers.length - maxVisibleAvatars;
 
   return (
-    <header className="sticky top-0 z-20 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b border-slate-200/80 dark:border-slate-800/80 px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between transition-colors gap-2 print:hidden">
+    <header className="sticky top-0 z-20 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b border-slate-200/80 dark:border-slate-800/80 px-3 sm:px-6 py-2.5 sm:py-4 flex items-center justify-between transition-colors gap-2 print:hidden">
       {/* 1. HAMBURGER (MOBILE) + GREETING & DATE */}
-      <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1">
+      <div className="flex items-center gap-2 sm:gap-3 min-w-0 shrink">
         {onToggleMobileSidebar && (
           <button
             onClick={onToggleMobileSidebar}
-            className="lg:hidden p-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:text-violet-600 transition flex-shrink-0 cursor-pointer"
+            className="lg:hidden p-1.5 sm:p-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:text-violet-600 transition shrink-0 cursor-pointer"
             title="Buka Menu"
           >
             <Menu className="w-4 h-4" />
           </button>
         )}
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0">
           <h2
-            className="text-sm sm:text-base md:text-xl font-bold text-slate-900 dark:text-white leading-tight truncate max-w-[150px] xs:max-w-[200px] sm:max-w-xs md:max-w-md"
+            className="text-xs xs:text-sm sm:text-base md:text-xl font-bold text-slate-900 dark:text-white leading-tight truncate max-w-[105px] xs:max-w-[145px] sm:max-w-xs md:max-w-md"
             title={currentTeacher ? `Selamat Datang, ${currentTeacher.name}` : t.greeting}
           >
-            {currentTeacher ? `Selamat Datang, ${currentTeacher.name}` : t.greeting}
+            <span className="hidden sm:inline">
+              {currentTeacher ? `Selamat Datang, ${currentTeacher.name}` : t.greeting}
+            </span>
+            <span className="inline sm:hidden">
+              {currentTeacher ? `Halo, ${currentTeacher.name.split(' ')[0]}` : t.greeting}
+            </span>
           </h2>
-          <p className="text-[10px] sm:text-xs text-slate-400 dark:text-slate-500 font-medium mt-0.5 truncate max-w-[150px] xs:max-w-[200px] sm:max-w-xs md:max-w-md">
+          <p className="text-[10px] sm:text-xs text-slate-400 dark:text-slate-500 font-medium mt-0.5 truncate max-w-[105px] xs:max-w-[145px] sm:max-w-xs md:max-w-md hidden sm:block">
             {t.examDateInfo}
           </p>
         </div>
       </div>
 
       {/* 2. ACTIONS & USER BAR */}
-      <div className="flex items-center gap-2.5">
-        {/* Toggle Language ID / EN (Dengan SVG Flag Murni yang Selalu Muncul di Windows PC & HP) */}
+      <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
+        {/* Toggle Language ID / EN */}
         <button
           onClick={toggleLanguage}
-          className="flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs font-bold text-slate-700 dark:text-slate-200 hover:text-violet-600 hover:border-violet-500 transition shadow-xs cursor-pointer"
+          className="flex items-center gap-1 sm:gap-1.5 px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs font-bold text-slate-700 dark:text-slate-200 hover:text-violet-600 hover:border-violet-500 transition shadow-xs cursor-pointer shrink-0"
           title={t.switchLanguage}
         >
-          {language === 'id' ? <IndonesiaFlagIcon /> : <UKFlagIcon />}
-          <span>{language === 'id' ? 'ID' : 'EN'}</span>
+          <Languages className="w-3.5 h-3.5 text-violet-600 dark:text-violet-400 shrink-0" />
+          {/* Khusus di HP / Tablet: Tampilkan emoji bendera bawaan OS */}
+          <span className="inline md:hidden text-xs">{language === 'id' ? 'ID 🇮🇩' : 'EN 🇬🇧'}</span>
+          {/* Khusus di PC / Laptop: Tampilkan icon bendera SVG murni karena Windows tidak support emoji bendera */}
+          <span className="hidden md:inline-flex items-center gap-1.5">
+            {language === 'id' ? <IndonesiaFlagIcon /> : <UKFlagIcon />}
+            <span>{language === 'id' ? 'ID' : 'EN'}</span>
+          </span>
         </button>
 
         {/* Toggle Dark / Light Mode Button */}
         <button
           onClick={toggleTheme}
-          className="p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:text-violet-600 dark:hover:text-violet-400 transition shadow-xs"
+          className="p-1.5 sm:p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:text-violet-600 dark:hover:text-violet-400 transition shadow-xs shrink-0"
           title={theme === 'dark' ? t.switchThemeLight : t.switchThemeDark}
         >
           {theme === 'dark' ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-indigo-600" />}
@@ -420,7 +431,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               setShowNotifications(!showNotifications);
               setShowMessages(false);
             }}
-            className="relative p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition cursor-pointer"
+            className="relative p-1.5 sm:p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition cursor-pointer shrink-0"
             title="Notifikasi Real-time Sistem CBT"
           >
             <Bell className="w-4 h-4" />
@@ -574,11 +585,11 @@ export const Navbar: React.FC<NavbarProps> = ({
         {/* Profil Akun Guru / Pengawas yang Sedang Login & Avatar Stack Guru Terdaftar */}
         <button
           onClick={() => setShowTeachersModal(true)}
-          className="flex items-center gap-1.5 p-1 rounded-2xl hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
+          className="flex items-center gap-1 sm:gap-1.5 p-0.5 sm:p-1 rounded-2xl hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer shrink-0"
           title="Profil Pengguna & Direktori Akun Guru Terdaftar"
         >
           {/* Avatar Stack: Maksimal 3 Lingkaran Saling Timpa Ujungnya + Indikator Sisanya */}
-          <div className="flex items-center -space-x-2.5 overflow-hidden p-0.5">
+          <div className="flex items-center -space-x-2 sm:-space-x-2.5 overflow-hidden p-0.5">
             {visibleTeachers.map((tea) => {
               const isCurrent = tea.id === currentTeacher?.id;
               const photo = getTeacherPhoto(tea);
@@ -586,7 +597,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               return (
                 <div
                   key={tea.id}
-                  className={`relative inline-block w-8 h-8 rounded-full ring-2 ${
+                  className={`relative inline-block w-7 h-7 sm:w-8 sm:h-8 rounded-full ring-2 ${
                     isCurrent
                       ? 'ring-emerald-500 z-10'
                       : 'ring-white dark:ring-slate-900 z-0'
@@ -609,7 +620,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
             {overflowTeacherCount > 0 && (
               <div
-                className="relative z-10 inline-flex items-center justify-center w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-700 ring-2 ring-white dark:ring-slate-900 text-[10px] font-black text-slate-700 dark:text-slate-200 shadow-xs shrink-0"
+                className="relative z-10 inline-flex items-center justify-center w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-slate-200 dark:bg-slate-700 ring-2 ring-white dark:ring-slate-900 text-[9px] sm:text-[10px] font-black text-slate-700 dark:text-slate-200 shadow-xs shrink-0"
                 title={`${overflowTeacherCount} guru lainnya terdaftar`}
               >
                 +{overflowTeacherCount}

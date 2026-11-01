@@ -1,7 +1,6 @@
 'use client';
 
 import React from 'react';
-import { ShieldCheck, Code2 } from 'lucide-react';
 
 interface FooterProps {
   className?: string;
@@ -19,7 +18,6 @@ export const Footer: React.FC<FooterProps> = ({ className = '' }) => {
       <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2 text-center sm:text-left text-[11px] sm:text-xs">
         {/* Hak Cipta Sekolah Resmi */}
         <div className="flex items-center gap-1.5 font-medium text-slate-600 dark:text-slate-300">
-          <ShieldCheck className="w-4 h-4 text-emerald-500 shrink-0" />
           <span>
             © {currentYear} <strong>SMP Negeri 58 Palembang</strong>. Seluruh Hak Cipta Dilindungi.
           </span>
@@ -27,7 +25,6 @@ export const Footer: React.FC<FooterProps> = ({ className = '' }) => {
 
         {/* Identitas Pengembang Aplikasi */}
         <div className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400">
-          <Code2 className="w-3.5 h-3.5 text-violet-500 shrink-0" />
           <span>Dikembangkan oleh:</span>
           <span className="font-bold text-violet-600 dark:text-violet-400">
             Aris Bermansyah, S.Kom

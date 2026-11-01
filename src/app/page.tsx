@@ -1534,7 +1534,7 @@ export default function Home() {
                       <p className="text-[10px] text-violet-600/80 dark:text-violet-400/80">
                         {detectedSubject.examDate && (
                           <span className="font-semibold text-emerald-600 dark:text-emerald-400 mr-1.5">
-                            📅 {detectedSubject.examDate} •
+                            Tanggal: {detectedSubject.examDate} •
                           </span>
                         )}
                         Rombel: <span className="font-semibold">{detectedSubject.className || 'Semua Rombel'}</span> • Durasi: {detectedSubject.durationMinutes} Menit • Toleransi: {detectedSubject.violationLimit || 3}x

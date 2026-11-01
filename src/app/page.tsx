@@ -1758,7 +1758,7 @@ export default function Home() {
         )}
 
         {/* Global Footer Copyright */}
-        <Footer className="mt-8 border-t border-slate-200/60 dark:border-slate-800/60 bg-transparent max-w-md" />
+        <Footer className="mt-8 border-t border-slate-200/60 dark:border-slate-800/60 bg-transparent w-full max-w-5xl" />
       </div>
     );
   }

@@ -28,6 +28,7 @@ import {
   Edit2,
   Edit3,
   Pencil,
+  PenLine,
   Trash2,
   PlusCircle,
   Plus,
@@ -2132,6 +2133,9 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   // Format Lembar Daftar Hadir (Presensi) & Kartu Peserta
   const [attendanceFormat, setAttendanceFormat] = useState<'parentheses' | 'strikeout' | 'cbt_status'>('parentheses');
   const [cardMode, setCardMode] = useState<'general' | 'subject'>('general');
+
+  // Mode Pengesahan Tanda Tangan: 'tte' (Barcode Elektronik Sah) vs 'manual' (Tanda Tangan Basah / Kosongkan Guru)
+  const [docSignatureMode, setDocSignatureMode] = useState<'tte' | 'manual'>('tte');
 
   // Perhitungan Siswa Real untuk Berita Acara Pelaksanaan (BAP) & Seluruh Dokumen Ujian
   const bapTargetStudents = useMemo(() => {
@@ -4872,27 +4876,60 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
             </div>
           </div>
 
-          {/* Sub-Tabs Jenis Dokumen */}
-          <div className="flex items-center gap-2 overflow-x-auto pb-1 print:hidden">
-            {[
-              { id: 'bap', label: '📋 Berita Acara Ujian (BAP)' },
-              { id: 'attendance', label: '📝 Daftar Hadir Peserta' },
-              { id: 'cards', label: '🪪 Kartu Ujian Siswa' },
-              { id: 'ledger', label: '📊 Leger Rekap Nilai' }
-            ].map(tab => (
+          {/* Sub-Tabs Jenis Dokumen & Pilihan Pengesahan (TTE vs TTD Manual) */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 print:hidden">
+            <div className="flex items-center gap-2 overflow-x-auto pb-1">
+              {[
+                { id: 'bap', label: '📋 Berita Acara Ujian (BAP)' },
+                { id: 'attendance', label: '📝 Daftar Hadir Peserta' },
+                { id: 'cards', label: '🪪 Kartu Ujian Siswa' },
+                { id: 'ledger', label: '📊 Leger Rekap Nilai' }
+              ].map(tab => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setSelectedDocType(tab.id as any)}
+                  className={`px-3.5 py-2 rounded-xl text-xs font-bold transition whitespace-nowrap cursor-pointer ${
+                    selectedDocType === tab.id
+                      ? 'bg-violet-600 text-white shadow-xs'
+                      : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:border-violet-500'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Selector Global: TTE Elektronik vs TTD Manual / Blanko Guru */}
+            <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl self-start sm:self-auto border border-slate-200/60 dark:border-slate-700/60 shadow-xs">
+              <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 pl-2">Mode TTD:</span>
               <button
-                key={tab.id}
                 type="button"
-                onClick={() => setSelectedDocType(tab.id as any)}
-                className={`px-4 py-2 rounded-xl text-xs font-bold transition whitespace-nowrap cursor-pointer ${
-                  selectedDocType === tab.id
-                    ? 'bg-violet-600 text-white shadow-xs'
-                    : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:border-violet-500'
+                onClick={() => setDocSignatureMode('tte')}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+                  docSignatureMode === 'tte'
+                    ? 'bg-white dark:bg-slate-900 text-emerald-700 dark:text-emerald-300 shadow-xs'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
                 }`}
+                title="Gunakan stempel TTE resmi elektronik dengan nama & NIP otomatis"
               >
-                {tab.label}
+                <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                <span>TTE Barcode</span>
               </button>
-            ))}
+              <button
+                type="button"
+                onClick={() => setDocSignatureMode('manual')}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+                  docSignatureMode === 'manual'
+                    ? 'bg-white dark:bg-slate-900 text-violet-700 dark:text-violet-300 shadow-xs'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                }`}
+                title="Tanda tangan fisik dengan mengosongkan nama & NIP guru untuk diisi pena manual"
+              >
+                <PenLine className="w-3.5 h-3.5 text-violet-600 shrink-0" />
+                <span>TTD Manual (Blanko)</span>
+              </button>
+            </div>
           </div>
 
           {/* Panel Konfigurasi Rincian BAP Interaktif (Hanya Muncul saat Tab BAP Aktif, Tersembunyi saat Cetak) */}
@@ -5332,34 +5369,41 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                     </div>
                   </div>
 
-                  {/* TANDA TANGAN RESMI 3 PEJABAT DENGAN TTE VERIFIKASI */}
+                  {/* TANDA TANGAN RESMI 3 PEJABAT (TTE / MANUAL) */}
                   <div className="pt-4">
-                    {/* Verifikasi Keaslian Digital BAP (Format Screenshot 2) */}
-                    <div className="mb-4 p-3 rounded-xl bg-slate-50 border border-slate-200/80 space-y-1 text-left">
+                    {/* Verifikasi Keaslian Digital BAP */}
+                    <div className="mb-6 p-3 rounded-xl bg-slate-50 border border-slate-200/80 space-y-1 text-left">
                       <div className="flex items-center gap-2 text-emerald-700 font-bold text-xs">
                         <ShieldCheck className="w-4 h-4 text-emerald-600" />
-                        <span>Dokumen Berita Acara Resmi Terverifikasi</span>
+                        <span>{docSignatureMode === 'tte' ? 'Dokumen Berita Acara Resmi Terverifikasi' : 'Dokumen Berita Acara Resmi (Blanko Fisik)'}</span>
                       </div>
                       <p className="text-[10px] text-slate-500 font-mono">
                         ID BAP: CBT58-BAP-{(selectedDocSubject.token || '58').toUpperCase()} • Server: {bapServerId}
                       </p>
                       <p className="text-[9.5px] text-slate-500">
-                        Diterbitkan otomatis dari Server CBT {effectiveSchoolSettings.schoolName}. Keaslian pengesahan dapat divalidasi melalui stempel TTE resmi.
+                        {docSignatureMode === 'tte'
+                          ? `Diterbitkan otomatis dari Server CBT ${effectiveSchoolSettings.schoolName}. Keaslian pengesahan dapat divalidasi melalui stempel TTE resmi.`
+                          : `Format cetak fisik resmi ${effectiveSchoolSettings.schoolName} untuk ditandatangani pena basah secara manual oleh Pengawas Ruang & Proktor.`}
                       </p>
                     </div>
 
-                    <div className="flex justify-end text-xs font-sans text-slate-800 mb-4">
+                    {/* Baris Tanggal di Atas (Rata Kanan Rapi Tanpa Merusak Ketinggian Kolom TTE) */}
+                    <div className="flex justify-end text-xs font-sans text-slate-800 mb-5 font-medium">
                       <p>
                         {effectiveSchoolSettings.city || 'Palembang'}, {bapDateFormatted}
                       </p>
                     </div>
 
+                    {/* Grid 3 Kolom Tanda Tangan: Ketinggian Slot Header, Barcode, & Nama Diselaraskan 100% */}
                     <div className="grid grid-cols-3 gap-4 text-center text-xs font-sans">
                       {/* 1. Pengawas Ruang Ujian */}
-                      <div className="flex flex-col items-center justify-between min-h-[160px]">
-                        <p className="font-semibold text-slate-800">Pengawas Ruang Ujian,</p>
-                        {effectiveSchoolSettings.enableTTE ? (
-                          <div className="my-2">
+                      <div className="flex flex-col items-center">
+                        <div className="h-12 flex items-center justify-center font-semibold text-slate-800">
+                          <p>Pengawas Ruang Ujian,</p>
+                        </div>
+
+                        <div className="h-[95px] flex items-center justify-center my-2">
+                          {docSignatureMode === 'tte' && effectiveSchoolSettings.enableTTE !== false ? (
                             <TTESignatureSeal
                               settings={effectiveSchoolSettings}
                               documentId={`BAP-PGS-${selectedDocSubject.token || '58'}`}
@@ -5370,21 +5414,44 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                               sealOnly={true}
                               className="scale-95"
                             />
-                          </div>
-                        ) : (
-                          <div className="h-16" />
-                        )}
-                        <div>
-                          <strong className="underline block font-bold text-slate-950 font-sans leading-tight">{effectiveBapSupervisorName}</strong>
-                          <span className="text-[11px] text-slate-600 font-mono">NIP: {effectiveBapSupervisorNip || '-'}</span>
+                          ) : (
+                            <div className="h-16 flex items-center justify-center">
+                              <div className="w-36 border-b border-dashed border-slate-300" />
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="min-h-[44px] flex flex-col justify-start">
+                          {docSignatureMode === 'tte' ? (
+                            <>
+                              <strong className="underline block font-bold text-slate-950 font-sans leading-tight">
+                                {effectiveBapSupervisorName}
+                              </strong>
+                              <span className="text-[11px] text-slate-600 font-mono mt-0.5">
+                                NIP: {effectiveBapSupervisorNip || '-'}
+                              </span>
+                            </>
+                          ) : (
+                            <>
+                              <strong className="block text-slate-900 text-xs sm:text-sm font-sans tracking-wide">
+                                ( ................................................................ )
+                              </strong>
+                              <span className="text-[11px] text-slate-700 font-mono block mt-1">
+                                NIP. ........................................................
+                              </span>
+                            </>
+                          )}
                         </div>
                       </div>
 
                       {/* 2. Proktor Utama CBT */}
-                      <div className="flex flex-col items-center justify-between min-h-[160px]">
-                        <p className="font-semibold text-slate-800">Proktor / Teknisi CBT,</p>
-                        {effectiveSchoolSettings.enableTTE ? (
-                          <div className="my-2">
+                      <div className="flex flex-col items-center">
+                        <div className="h-12 flex items-center justify-center font-semibold text-slate-800">
+                          <p>Proktor / Teknisi CBT,</p>
+                        </div>
+
+                        <div className="h-[95px] flex items-center justify-center my-2">
+                          {docSignatureMode === 'tte' && effectiveSchoolSettings.enableTTE !== false ? (
                             <TTESignatureSeal
                               settings={effectiveSchoolSettings}
                               documentId={`BAP-PRK-${selectedDocSubject.token || '58'}`}
@@ -5395,24 +5462,49 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                               sealOnly={true}
                               className="scale-95"
                             />
-                          </div>
-                        ) : (
-                          <div className="h-16" />
-                        )}
-                        <div>
-                          <strong className="underline block font-bold text-slate-950 font-sans leading-tight">{effectiveBapProctorName}</strong>
-                          <span className="text-[11px] text-slate-600 font-mono">NIP: {effectiveBapProctorNip || '-'}</span>
+                          ) : (
+                            <div className="h-16 flex items-center justify-center">
+                              <div className="w-36 border-b border-dashed border-slate-300" />
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="min-h-[44px] flex flex-col justify-start">
+                          {docSignatureMode === 'tte' ? (
+                            <>
+                              <strong className="underline block font-bold text-slate-950 font-sans leading-tight">
+                                {effectiveBapProctorName}
+                              </strong>
+                              <span className="text-[11px] text-slate-600 font-mono mt-0.5">
+                                NIP: {effectiveBapProctorNip || '-'}
+                              </span>
+                            </>
+                          ) : (
+                            <>
+                              <strong className="block text-slate-900 text-xs sm:text-sm font-sans tracking-wide">
+                                ( ................................................................ )
+                              </strong>
+                              <span className="text-[11px] text-slate-700 font-mono block mt-1">
+                                NIP. ........................................................
+                              </span>
+                            </>
+                          )}
                         </div>
                       </div>
 
                       {/* 3. Kepala Sekolah */}
-                      <div className="flex flex-col items-center justify-between min-h-[160px]">
-                        <p className="font-semibold text-slate-800">
-                          Mengetahui,<br />
-                          {effectiveSchoolSettings.principalTitle || `Kepala ${effectiveSchoolSettings.schoolName}`}
-                        </p>
-                        {effectiveSchoolSettings.enableTTE ? (
-                          <div className="my-2">
+                      <div className="flex flex-col items-center">
+                        <div className="h-12 flex items-center justify-center font-semibold text-slate-800 leading-tight">
+                          <p>
+                            Mengetahui,<br />
+                            <span className="text-[11px] font-bold">
+                              {effectiveSchoolSettings.principalTitle || `Kepala ${effectiveSchoolSettings.schoolName}`}
+                            </span>
+                          </p>
+                        </div>
+
+                        <div className="h-[95px] flex items-center justify-center my-2">
+                          {docSignatureMode === 'tte' && effectiveSchoolSettings.enableTTE !== false ? (
                             <TTESignatureSeal
                               settings={effectiveSchoolSettings}
                               documentId={`BAP-KSP-${selectedDocSubject.token || '58'}`}
@@ -5423,13 +5515,20 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                               sealOnly={true}
                               className="scale-95"
                             />
-                          </div>
-                        ) : (
-                          <div className="h-16" />
-                        )}
-                        <div>
-                          <strong className="underline block font-bold text-slate-950 font-sans leading-tight">{effectiveSchoolSettings.principalName}</strong>
-                          <span className="text-[11px] text-slate-600 font-mono">NIP: {effectiveSchoolSettings.principalNip || '-'}</span>
+                          ) : (
+                            <div className="h-16 flex items-center justify-center">
+                              <div className="w-36 border-b border-dashed border-slate-300" />
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="min-h-[44px] flex flex-col justify-start">
+                          <strong className="underline block font-bold text-slate-950 font-sans leading-tight">
+                            {effectiveSchoolSettings.principalName}
+                          </strong>
+                          <span className="text-[11px] text-slate-600 font-mono mt-0.5">
+                            NIP: {effectiveSchoolSettings.principalNip || '-'}
+                          </span>
                         </div>
                       </div>
                     </div>
@@ -5516,13 +5615,13 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                   </table>
                 </div>
 
-                {/* Tanda Tangan Pengawas & TTE Validasi Resmi (Persis Screenshot 2 / Format Sertifikat) */}
+                {/* Tanda Tangan Pengawas & TTE Validasi Resmi */}
                 <div className="pt-8 flex flex-col sm:flex-row items-center sm:items-end justify-between gap-6 text-xs font-sans print:break-inside-avoid">
-                  {/* Bagian Kiri: Verifikasi Keaslian Digital (Persis Screenshot 2) */}
+                  {/* Bagian Kiri: Verifikasi Keaslian Digital */}
                   <div className="space-y-1.5 text-center sm:text-left">
                     <div className="flex items-center justify-center sm:justify-start gap-2 text-emerald-700 font-bold text-xs">
                       <ShieldCheck className="w-4 h-4 text-emerald-600" />
-                      <span>Dokumen Resmi Terverifikasi</span>
+                      <span>{docSignatureMode === 'tte' ? 'Dokumen Resmi Terverifikasi' : 'Dokumen Presensi Resmi (Blanko Fisik)'}</span>
                     </div>
                     <p className="text-[10px] sm:text-xs text-slate-500 font-mono">
                       ID Presensi: CBT58-PRESENSI-{(selectedDocSubject.token || '58').toUpperCase()}
@@ -5531,11 +5630,13 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                       Diterbitkan otomatis dari Server CBT {effectiveSchoolSettings.schoolName}
                     </p>
                     <p className="text-[8.5px] sm:text-[9.5px] text-slate-400">
-                      Keaslian pengesahan dapat divalidasi melalui stempel TTE resmi.
+                      {docSignatureMode === 'tte'
+                        ? 'Keaslian pengesahan dapat divalidasi melalui stempel TTE resmi.'
+                        : 'Format blanko fisik untuk ditandatangani manual pena basah oleh Pengawas Ruang.'}
                     </p>
                   </div>
 
-                  {/* Bagian Kanan: Pejabat Pengawas Ruang (Tanpa Huruf Kapital / Uppercase) */}
+                  {/* Bagian Kanan: Pejabat Pengawas Ruang */}
                   <div className="text-center sm:text-right min-h-[160px] flex flex-col items-center sm:items-end justify-between">
                     <div>
                       <p className="text-[11px] sm:text-xs text-slate-600 font-sans">
@@ -5547,7 +5648,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                     </div>
 
                     <div className="py-2 flex items-center justify-center min-h-[85px]">
-                      {effectiveSchoolSettings.enableTTE !== false ? (
+                      {docSignatureMode === 'tte' && effectiveSchoolSettings.enableTTE !== false ? (
                         <TTESignatureSeal
                           settings={effectiveSchoolSettings}
                           documentId={`PRESENSI-${selectedDocSubject.token || '58'}`}
@@ -5559,17 +5660,32 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                           className="scale-95"
                         />
                       ) : (
-                        <div className="h-16" />
+                        <div className="h-16 flex items-center justify-center">
+                          <div className="w-36 border-b border-dashed border-slate-300" />
+                        </div>
                       )}
                     </div>
 
                     <div className="text-center sm:text-right">
-                      <strong className="underline font-bold text-slate-900 block leading-tight text-xs sm:text-sm font-sans">
-                        {effectiveBapSupervisorName}
-                      </strong>
-                      <span className="text-[10px] sm:text-xs text-slate-600 font-mono block mt-0.5">
-                        NIP. {effectiveBapSupervisorNip || '-'}
-                      </span>
+                      {docSignatureMode === 'tte' ? (
+                        <>
+                          <strong className="underline font-bold text-slate-900 block leading-tight text-xs sm:text-sm font-sans">
+                            {effectiveBapSupervisorName}
+                          </strong>
+                          <span className="text-[10px] sm:text-xs text-slate-600 font-mono block mt-0.5">
+                            NIP. {effectiveBapSupervisorNip || '-'}
+                          </span>
+                        </>
+                      ) : (
+                        <>
+                          <strong className="block text-slate-900 text-xs sm:text-sm font-sans tracking-wide">
+                            ( ................................................................ )
+                          </strong>
+                          <span className="text-[10px] sm:text-xs text-slate-600 font-mono block mt-1">
+                            NIP. ........................................................
+                          </span>
+                        </>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -5742,108 +5858,104 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                   </table>
                 </div>
 
-                {/* Tanda Tangan Pengesahan Leger & TTE Validasi Resmi (Persis Format Sertifikat / Screenshot 2) */}
-                <div className="pt-8 flex flex-col md:flex-row items-center md:items-end justify-between gap-6 text-xs font-sans print:break-inside-avoid">
-                  {/* Bagian Kiri: Verifikasi Keaslian Digital */}
-                  <div className="space-y-1.5 text-center sm:text-left">
-                    <div className="flex items-center justify-center sm:justify-start gap-2 text-emerald-700 font-bold text-xs">
-                      <ShieldCheck className="w-4 h-4 text-emerald-600" />
-                      <span>Dokumen Resmi Terverifikasi</span>
+                {/* Tanda Tangan Pengesahan Leger Nilai (Tanpa Box Kiri Agar Luas & Tidak Berhimpitan) */}
+                <div className="pt-8 grid grid-cols-2 gap-12 sm:gap-24 text-center text-xs font-sans print:break-inside-avoid w-full">
+                  {/* Sisi Kiri: Kepala Sekolah */}
+                  <div className="flex flex-col items-center justify-between min-h-[160px]">
+                    <div>
+                      <p className="text-[11px] text-slate-600 font-sans">Mengetahui,</p>
+                      <p className="font-bold text-slate-900 uppercase font-sans tracking-wide text-xs mt-0.5">
+                        {effectiveSchoolSettings.principalTitle || `Kepala ${effectiveSchoolSettings.schoolName}`}
+                      </p>
                     </div>
-                    <p className="text-[10px] sm:text-xs text-slate-500 font-mono">
-                      ID Leger: CBT58-LEGER-{(selectedDocSubject.token || '58').toUpperCase()}
-                    </p>
-                    <p className="text-[9px] sm:text-[10px] text-slate-400">
-                      Diterbitkan otomatis dari Server CBT {effectiveSchoolSettings.schoolName}
-                    </p>
-                    <p className="text-[8.5px] sm:text-[9.5px] text-slate-400">
-                      Keaslian pengesahan dapat divalidasi melalui stempel TTE resmi.
-                    </p>
+
+                    <div className="py-2 flex items-center justify-center min-h-[85px]">
+                      {docSignatureMode === 'tte' && effectiveSchoolSettings.enableTTE !== false ? (
+                        <TTESignatureSeal
+                          settings={effectiveSchoolSettings}
+                          documentId={`LEGER-KSP-${selectedDocSubject.token || '58'}`}
+                          signerName={effectiveSchoolSettings.principalName}
+                          signerTitle={effectiveSchoolSettings.principalTitle || `Kepala ${effectiveSchoolSettings.schoolName}`}
+                          signerNip={effectiveSchoolSettings.principalNip}
+                          signDate={bapDateFormatted}
+                          sealOnly={true}
+                          className="scale-95"
+                        />
+                      ) : (
+                        <div className="h-16 flex items-center justify-center">
+                          <div className="w-36 border-b border-dashed border-slate-300" />
+                        </div>
+                      )}
+                    </div>
+
+                    <div>
+                      <strong className="underline block font-bold text-slate-900 text-xs sm:text-sm font-sans leading-tight">
+                        {effectiveSchoolSettings.principalName}
+                      </strong>
+                      <span className="text-[10px] sm:text-xs text-slate-600 font-mono block mt-0.5">
+                        NIP: {effectiveSchoolSettings.principalNip || '-'}
+                      </span>
+                    </div>
                   </div>
 
-                  {/* Bagian Kanan: 2 Pejabat Penandatangan (Kepala Sekolah & Guru Mapel Tanpa Uppercase) */}
-                  <div className="grid grid-cols-2 gap-8 text-center text-xs font-sans">
-                    {/* Kepala Sekolah */}
-                    <div className="flex flex-col items-center justify-between min-h-[160px]">
-                      <div>
-                        <p className="text-[11px] text-slate-600 font-sans">Mengetahui,</p>
-                        <p className="font-bold text-slate-900 uppercase font-sans tracking-wide text-xs mt-0.5">
-                          {effectiveSchoolSettings.principalTitle || `Kepala ${effectiveSchoolSettings.schoolName}`}
-                        </p>
-                      </div>
-
-                      <div className="py-2 flex items-center justify-center min-h-[85px]">
-                        {effectiveSchoolSettings.enableTTE !== false ? (
-                          <TTESignatureSeal
-                            settings={effectiveSchoolSettings}
-                            documentId={`LEGER-KSP-${selectedDocSubject.token || '58'}`}
-                            signerName={effectiveSchoolSettings.principalName}
-                            signerTitle={effectiveSchoolSettings.principalTitle || `Kepala ${effectiveSchoolSettings.schoolName}`}
-                            signerNip={effectiveSchoolSettings.principalNip}
-                            signDate={bapDateFormatted}
-                            sealOnly={true}
-                            className="scale-95"
-                          />
-                        ) : (
-                          <div className="h-16" />
-                        )}
-                      </div>
-
-                      <div>
-                        <strong className="underline block font-bold text-slate-900 text-xs sm:text-sm font-sans leading-tight">
-                          {effectiveSchoolSettings.principalName}
-                        </strong>
-                        <span className="text-[10px] sm:text-xs text-slate-600 font-mono block mt-0.5">
-                          NIP: {effectiveSchoolSettings.principalNip || '-'}
-                        </span>
-                      </div>
+                  {/* Sisi Kanan: Guru Mata Pelajaran */}
+                  <div className="flex flex-col items-center justify-between min-h-[160px]">
+                    <div>
+                      <p className="text-[11px] text-slate-600 font-sans">
+                        {effectiveSchoolSettings.city || 'Palembang'}, {bapDateFormatted}
+                      </p>
+                      <p className="font-bold text-slate-900 uppercase font-sans tracking-wide text-xs mt-0.5">
+                        Guru Mata Pelajaran
+                      </p>
                     </div>
 
-                    {/* Guru Mata Pelajaran */}
-                    <div className="flex flex-col items-center justify-between min-h-[160px]">
-                      <div>
-                        <p className="text-[11px] text-slate-600 font-sans">
-                          {effectiveSchoolSettings.city || 'Palembang'}, {bapDateFormatted}
-                        </p>
-                        <p className="font-bold text-slate-900 uppercase font-sans tracking-wide text-xs mt-0.5">
-                          Guru Mata Pelajaran
-                        </p>
-                      </div>
+                    <div className="py-2 flex items-center justify-center min-h-[85px]">
+                      {docSignatureMode === 'tte' && effectiveSchoolSettings.enableTTE !== false ? (
+                        <TTESignatureSeal
+                          settings={effectiveSchoolSettings}
+                          documentId={`LEGER-GURU-${selectedDocSubject.token || '58'}`}
+                          signerName={effectiveBapSupervisorName}
+                          signerTitle="Guru Mata Pelajaran"
+                          signerNip={effectiveBapSupervisorNip}
+                          signDate={bapDateFormatted}
+                          sealOnly={true}
+                          className="scale-95"
+                        />
+                      ) : (
+                        <div className="h-16 flex items-center justify-center">
+                          <div className="w-36 border-b border-dashed border-slate-300" />
+                        </div>
+                      )}
+                    </div>
 
-                      <div className="py-2 flex items-center justify-center min-h-[85px]">
-                        {effectiveSchoolSettings.enableTTE !== false ? (
-                          <TTESignatureSeal
-                            settings={effectiveSchoolSettings}
-                            documentId={`LEGER-GURU-${selectedDocSubject.token || '58'}`}
-                            signerName={effectiveBapSupervisorName}
-                            signerTitle="Guru Mata Pelajaran"
-                            signerNip={effectiveBapSupervisorNip}
-                            signDate={bapDateFormatted}
-                            sealOnly={true}
-                            className="scale-95"
-                          />
-                        ) : (
-                          <div className="h-16" />
-                        )}
-                      </div>
-
-                      <div>
-                        <strong className="underline block font-bold text-slate-900 text-xs sm:text-sm font-sans leading-tight">
-                          {effectiveBapSupervisorName}
-                        </strong>
-                        <span className="text-[10px] sm:text-xs text-slate-600 font-mono block mt-0.5">
-                          NIP: {effectiveBapSupervisorNip || '-'}
-                        </span>
-                      </div>
+                    <div>
+                      {docSignatureMode === 'tte' ? (
+                        <>
+                          <strong className="underline block font-bold text-slate-900 text-xs sm:text-sm font-sans leading-tight">
+                            {effectiveBapSupervisorName}
+                          </strong>
+                          <span className="text-[10px] sm:text-xs text-slate-600 font-mono block mt-0.5">
+                            NIP: {effectiveBapSupervisorNip || '-'}
+                          </span>
+                        </>
+                      ) : (
+                        <>
+                          <strong className="block text-slate-900 text-xs sm:text-sm font-sans tracking-wide">
+                            ( ................................................................ )
+                          </strong>
+                          <span className="text-[10px] sm:text-xs text-slate-600 font-mono block mt-1">
+                            NIP. ........................................................
+                          </span>
+                        </>
+                      )}
                     </div>
                   </div>
                 </div>
 
-                {/* Catatan Kaki Otentikasi Digital Leger */}
-                <div className="mt-6 pt-3 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between text-[9px] sm:text-[10px] text-slate-500 font-sans gap-2 print:border-slate-300">
-                  <div className="flex items-center gap-1.5 text-emerald-700 font-medium">
-                    <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                    <span>Dokumen Leger Nilai Resmi Terverifikasi TTE Elektronik Server CBT {effectiveSchoolSettings.schoolName}</span>
+                {/* Catatan Kaki Leger Nilai */}
+                <div className="mt-8 pt-3 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between text-[9px] sm:text-[10px] text-slate-500 font-sans gap-2 print:border-slate-300">
+                  <div className="text-slate-600 font-medium">
+                    {effectiveSchoolSettings.schoolName} • Leger Asesmen Sumatif Mata Pelajaran: {selectedDocSubject.title}
                   </div>
                   <div className="font-mono text-[8.5px] sm:text-[9px] text-slate-400">
                     ID: CBT58-LEGER-{(selectedDocSubject.token || '58').toUpperCase()} • Dicetak: {bapDateFormatted}

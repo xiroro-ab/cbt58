@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
+import { ErrorBoundary } from '@/components/common/ErrorBoundary';
 import { initialSubject } from '@/lib/mockData';
 import { initialStudents, resolveStudentSingleClass } from '@/lib/rosterStudents';
 import { initialTeachers } from '@/lib/rosterTeachers';
@@ -508,8 +509,10 @@ export default function Home() {
   }, []);
 
   // 2. Realtime listener: Dapatkan hasil ujian baru, notifikasi, dan kendala siswa dari Supabase
+  // OPTIMASI SUPABASE FREE TIER: Hanya aktifkan koneksi realtime database saat pengguna berada di tampilan GURU.
+  // Mencegah 300 siswa membuka 300 koneksi websocket database exam_results yang dapat melampaui batas free tier.
   useEffect(() => {
-    if (!subject?.id) return;
+    if (viewMode !== 'teacher' || !subject?.id) return;
 
     // Realtime hasil ujian global (Mendukung INSERT, UPDATE, dan DELETE seketika untuk semua mapel)
     const unsubResults = subscribeToExamResults('', changePayload => {
@@ -561,10 +564,11 @@ export default function Home() {
       unsubNotifs();
       unsubMsgs();
     };
-  }, [subject?.id]);
+  }, [viewMode, subject?.id]);
 
   // 2b. Auto-sync background poller untuk Teacher Dashboard & Database Nilai
-  // Memastikan data 100% selalu up-to-date setiap beberapa detik tanpa perlu refresh manual browser
+  // OPTIMASI SUPABASE FREE TIER: Gunakan interval 20 detik (karena Realtime Push di atas sudah instan sub-detik)
+  // Menjaga database tetap ringan dan terhindar dari pool exhaustion.
   useEffect(() => {
     if (viewMode !== 'teacher' || !subject?.id) return;
 
@@ -584,7 +588,7 @@ export default function Home() {
           return hasDiff ? cloudResults : prev;
         });
       } catch {}
-    }, 4000);
+    }, 20000);
 
     return () => {
       isMounted = false;
@@ -606,8 +610,7 @@ export default function Home() {
     return () => clearInterval(interval);
   }, [currentTeacher?.id, viewMode]);
 
-  // 2d. Auto-sync status keaktifan dewan guru dari Supabase Cloud setiap 6 detik
-  // Memastikan jika ada guru lain login di perangkat/browser lain, statusnya seketika tampil "Aktif Mengawas"
+  // 2d. Auto-sync status keaktifan dewan guru dari Supabase Cloud setiap 25 detik
   useEffect(() => {
     if (viewMode !== 'teacher') return;
 
@@ -627,7 +630,7 @@ export default function Home() {
           return cloudTeachers;
         });
       } catch {}
-    }, 6000);
+    }, 25000);
 
     return () => {
       isMounted = false;
@@ -1522,20 +1525,22 @@ export default function Home() {
   // =========================================================================
   if (viewMode === 'student_exam') {
     return (
-      <ExamScreen
-        subject={subject}
-        questions={questions}
-        studentName={studentName}
-        studentClass={resolveStudentSingleClass(studentName, selectedStudentClass || matchedStudent?.className)}
-        onFinishExam={handleFinishExam}
-        onExit={() => {
-          if (currentTeacher) {
-            setViewMode('teacher');
-          } else {
-            setViewMode('teacher_login');
-          }
-        }}
-      />
+      <ErrorBoundary fallbackTitle="Pemulihan Sesi Ujian Siswa">
+        <ExamScreen
+          subject={subject}
+          questions={questions}
+          studentName={studentName}
+          studentClass={resolveStudentSingleClass(studentName, selectedStudentClass || matchedStudent?.className)}
+          onFinishExam={handleFinishExam}
+          onExit={() => {
+            if (currentTeacher) {
+              setViewMode('teacher');
+            } else {
+              setViewMode('teacher_login');
+            }
+          }}
+        />
+      </ErrorBoundary>
     );
   }
 
@@ -2009,64 +2014,66 @@ export default function Home() {
 
         {/* DASHBOARD CONTENT BODY */}
         <main className={`flex-1 print:h-auto print:overflow-visible print:bg-white ${isCertificatesModalOpen ? 'print:hidden' : ''}`}>
-          <TeacherDashboard
-            currentNav={currentNav}
-            subject={subject}
-            questions={questions}
-            results={results}
-            students={students}
-            currentTeacher={currentTeacher}
-            teachers={teachers}
-            allSubjects={subjects}
-            onSelectNav={setCurrentNav}
-            onSelectSubject={async (selectedSub) => {
-              setSubject(selectedSub);
-              if (selectedSub.className) {
-                const firstCls = selectedSub.className.split(',')[0].trim();
-                if (firstCls && !firstCls.includes('Semua')) {
-                  setSelectedStudentClass(firstCls);
+          <ErrorBoundary fallbackTitle="Pemulihan Dashboard Guru">
+            <TeacherDashboard
+              currentNav={currentNav}
+              subject={subject}
+              questions={questions}
+              results={results}
+              students={students}
+              currentTeacher={currentTeacher}
+              teachers={teachers}
+              allSubjects={subjects}
+              onSelectNav={setCurrentNav}
+              onSelectSubject={async (selectedSub) => {
+                setSubject(selectedSub);
+                if (selectedSub.className) {
+                  const firstCls = selectedSub.className.split(',')[0].trim();
+                  if (firstCls && !firstCls.includes('Semua')) {
+                    setSelectedStudentClass(firstCls);
+                  }
                 }
-              }
-              if (selectedSub.id) {
-                try {
-                  const qList = await fetchQuestionsBySubject(selectedSub.id);
-                  setQuestions(prev => {
-                    const otherQuestions = prev.filter(q => q.subjectId && q.subjectId !== selectedSub.id);
-                    return [...otherQuestions, ...(qList || [])];
-                  });
-                  const resList = await fetchExamResults(selectedSub.id);
-                  setResults(prev => {
-                    const otherResults = prev.filter(r => r.subjectId && r.subjectId !== selectedSub.id);
-                    return [...(resList || []), ...otherResults];
-                  });
-                } catch (err) {
-                  console.warn('Gagal memuat soal/hasil untuk mapel:', err);
+                if (selectedSub.id) {
+                  try {
+                    const qList = await fetchQuestionsBySubject(selectedSub.id);
+                    setQuestions(prev => {
+                      const otherQuestions = prev.filter(q => q.subjectId && q.subjectId !== selectedSub.id);
+                      return [...otherQuestions, ...(qList || [])];
+                    });
+                    const resList = await fetchExamResults(selectedSub.id);
+                    setResults(prev => {
+                      const otherResults = prev.filter(r => r.subjectId && r.subjectId !== selectedSub.id);
+                      return [...(resList || []), ...otherResults];
+                    });
+                  } catch (err) {
+                    console.warn('Gagal memuat soal/hasil untuk mapel:', err);
+                  }
                 }
-              }
-            }}
-            onUpdateSubject={handleUpdateSubject}
-            onAddSubject={handleAddSubject}
-            onDeleteSubject={handleDeleteSubject}
-            onAddQuestion={handleAddQuestion}
-            onUpdateQuestion={handleUpdateQuestion}
-            onDeleteQuestion={handleDeleteQuestion}
-            onUpdateResult={handleUpdateResult}
-            onDeleteResult={handleDeleteResult}
-            onAddStudent={handleAddStudent}
-            onUpdateStudent={handleUpdateStudent}
-            onDeleteStudent={handleDeleteStudent}
-            onBulkInsertStudents={handleBulkInsertStudents}
-            onBulkDeleteStudents={handleBulkDeleteStudents}
-            isAddModalOpen={isAddModalOpen}
-            onCloseAddModal={() => setIsAddModalOpen(false)}
-            onOpenAddModal={() => setIsAddModalOpen(true)}
-            onStartStudentExam={() => setViewMode('student_login')}
-            searchQuery={searchQuery}
-            onOpenCertificates={handleOpenCertificates}
-            schoolSettings={schoolSettings}
-            onUpdateSchoolSettings={handleUpdateSchoolSettings}
-            onUpdateTeacher={handleUpdateTeacher}
-          />
+              }}
+              onUpdateSubject={handleUpdateSubject}
+              onAddSubject={handleAddSubject}
+              onDeleteSubject={handleDeleteSubject}
+              onAddQuestion={handleAddQuestion}
+              onUpdateQuestion={handleUpdateQuestion}
+              onDeleteQuestion={handleDeleteQuestion}
+              onUpdateResult={handleUpdateResult}
+              onDeleteResult={handleDeleteResult}
+              onAddStudent={handleAddStudent}
+              onUpdateStudent={handleUpdateStudent}
+              onDeleteStudent={handleDeleteStudent}
+              onBulkInsertStudents={handleBulkInsertStudents}
+              onBulkDeleteStudents={handleBulkDeleteStudents}
+              isAddModalOpen={isAddModalOpen}
+              onCloseAddModal={() => setIsAddModalOpen(false)}
+              onOpenAddModal={() => setIsAddModalOpen(true)}
+              onStartStudentExam={() => setViewMode('student_login')}
+              searchQuery={searchQuery}
+              onOpenCertificates={handleOpenCertificates}
+              schoolSettings={schoolSettings}
+              onUpdateSchoolSettings={handleUpdateSchoolSettings}
+              onUpdateTeacher={handleUpdateTeacher}
+            />
+          </ErrorBoundary>
         </main>
 
         {/* Global Footer Copyright */}

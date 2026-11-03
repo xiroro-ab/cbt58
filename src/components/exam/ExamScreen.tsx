@@ -497,7 +497,7 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
 
     const pollInterval = setInterval(async () => {
       try {
-        const lockStatus = await checkStudentLockStatus(subject.id, studentName, subject.violationLimit || 3);
+        const lockStatus = await checkStudentLockStatus(subject.id, studentName, subject.violationLimit || 3, studentActualClass);
         if (!lockStatus.isBlocked) {
           setIsLocked(false);
           setViolationCount(0);
@@ -930,10 +930,10 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
 
     checkCloudBroadcasts();
 
-    // D. Polling berkala fail-safe (tiap 5 detik jika koneksi websocket sempat terputus)
+    // D. Polling berkala fail-safe (tiap 45 detik sebagai backup ringan jika websocket terputus)
     const pollInterval = setInterval(() => {
       checkCloudBroadcasts();
-    }, 5000);
+    }, 45000);
 
     return () => {
       unsubAnnouncements();

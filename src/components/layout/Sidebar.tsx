@@ -31,8 +31,7 @@ export type NavItem =
   | 'results'
   | 'statistics'
   | 'documents'
-  | 'settings'
-  | 'assignments';
+  | 'settings';
 
 interface SidebarProps {
   currentNav: NavItem;
@@ -277,24 +276,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
             {t.systemGroup}
           </span>
           <div className="space-y-0.5">
-            {/* Menu Baru: Penugasan Mengajar (Mata Pelajaran & Rombel Kelas) */}
-            <button
-              onClick={() => handleNavSelect('assignments')}
-              className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl font-medium transition ${
-                currentNav === 'assignments'
-                  ? 'bg-violet-50 dark:bg-violet-950/40 text-violet-700 dark:text-violet-300 font-semibold'
-                  : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-slate-100'
-              }`}
-            >
-              <div className="flex items-center gap-2.5">
-                <BookOpen className="w-4 h-4 text-violet-600 dark:text-violet-400" />
-                <span>Penugasan Mengajar</span>
-              </div>
-              <span className="px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-violet-100 dark:bg-violet-900/60 text-violet-700 dark:text-violet-300">
-                Mapel
-              </span>
-            </button>
-
             <button
               onClick={() => handleNavSelect('settings')}
               className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl font-medium transition ${
@@ -327,9 +308,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
       <div className="p-3.5 border-t border-slate-100 dark:border-slate-800/60 bg-slate-50/50 dark:bg-slate-950/40">
         <div className="flex items-center justify-between gap-2.5">
           <div
-            onClick={() => handleNavSelect('assignments')}
+            onClick={() => handleNavSelect('settings')}
             className="flex items-center gap-2.5 min-w-0 cursor-pointer hover:opacity-85 transition group"
-            title="Klik untuk Kelola Penugasan Mapel & Rombel Kelas"
+            title="Klik untuk Buka Pengaturan"
           >
             <div
               className={`w-8 h-8 rounded-full ${

@@ -32,6 +32,7 @@ import {
   BookOpen,
   UserCheck,
   ShieldCheck,
+  Settings,
   Layers,
   Menu
 } from 'lucide-react';
@@ -285,25 +286,6 @@ export const Navbar: React.FC<NavbarProps> = ({
             )}
           </div>
         )}
-        {/* Tombol Akses Cepat: Kelola Penugasan Mengajar */}
-        {currentTeacher && (
-          <button
-            type="button"
-            onClick={() => onSelectNav?.('assignments')}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl border border-violet-200 dark:border-violet-800 bg-violet-50/80 dark:bg-violet-950/50 text-xs font-bold text-violet-700 dark:text-violet-300 hover:bg-violet-100 dark:hover:bg-violet-900 transition shadow-2xs cursor-pointer shrink-0"
-            title="Kelola Mata Pelajaran & Rombel Kelas yang Diampu"
-          >
-            <BookOpen className="w-3.5 h-3.5 text-violet-600 dark:text-violet-400 shrink-0" />
-            <span className="hidden md:inline max-w-[130px] truncate">
-              {activeAssignmentSubject || currentTeacher.subject || 'Penugasan Mengajar'}
-            </span>
-            <span className="inline md:hidden text-[11px] font-bold">Mapel</span>
-            <span className="hidden lg:inline text-[9px] bg-violet-200 dark:bg-violet-900 text-violet-800 dark:text-violet-200 px-1.5 py-0.5 rounded font-bold">
-              Ubah Mapel/Kelas
-            </span>
-          </button>
-        )}
-
         {/* Toggle Language ID / EN */}
         <button
           onClick={toggleLanguage}
@@ -842,17 +824,17 @@ export const Navbar: React.FC<NavbarProps> = ({
                       </div>
                     )}
 
-                    {/* TOMBOL UTAMA: KELOLA PENUGASAN MENGAJAR */}
+                    {/* Tombol Menuju Pengaturan */}
                     <button
                       type="button"
                       onClick={() => {
                         setShowTeachersModal(false);
-                        onSelectNav?.('assignments');
+                        onSelectNav?.('settings');
                       }}
                       className="w-full mt-2 py-2.5 px-4 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-bold text-xs shadow-md shadow-violet-600/20 transition flex items-center justify-center gap-2 cursor-pointer"
                     >
-                      <BookOpen className="w-4 h-4" />
-                      <span>⚙️ Kelola Penugasan Mengajar (Mata Pelajaran & Rombel Kelas)</span>
+                      <Settings className="w-4 h-4" />
+                      <span>Buka Menu Pengaturan & Penugasan</span>
                     </button>
                   </div>
                 )}

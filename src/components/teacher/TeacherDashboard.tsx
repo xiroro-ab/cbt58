@@ -269,13 +269,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   const [customSubjectInputs, setCustomSubjectInputs] = useState<Record<number, string>>({});
   const [isAssignmentSectionOpen, setIsAssignmentSectionOpen] = useState(true);
 
-  useEffect(() => {
-    if (currentNav === 'assignments') {
-      setIsAssignmentSectionOpen(true);
-    }
-  }, [currentNav]);
-
-    // Sinkronisasi form saat guru target berubah
+  // Sinkronisasi form saat guru target berubah
   useEffect(() => {
     if (targetAssignmentTeacher) {
       if (targetAssignmentTeacher.assignments && targetAssignmentTeacher.assignments.length > 0) {
@@ -6876,26 +6870,16 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
       {/* ============================================================== */}
       {/* 6. TAMPILAN SETTINGS / SUPABASE INTEGRASI & PENGATURAN TTE      */}
       {/* ============================================================== */}
-      {(currentNav === 'settings' || currentNav === 'assignments') && (
+      {currentNav === 'settings' && (
         <div className="space-y-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
               <h3 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                {currentNav === 'assignments' ? (
-                  <BookOpen className="w-5 h-5 text-violet-600" />
-                ) : (
-                  <Sliders className="w-5 h-5 text-violet-600" />
-                )}
-                <span>
-                  {currentNav === 'assignments'
-                    ? 'Kelola Penugasan Mengajar (Mata Pelajaran & Rombel Kelas)'
-                    : `${t.navSettings} & Konfigurasi Dokumen`}
-                </span>
+                <Sliders className="w-5 h-5 text-violet-600" />
+                <span>{t.navSettings} & Konfigurasi Dokumen</span>
               </h3>
               <p className="text-xs text-slate-400 dark:text-slate-500">
-                {currentNav === 'assignments'
-                  ? 'Atur atau ubah mata pelajaran dan rombel kelas yang Anda ampu tanpa risiko kehilangan bank soal.'
-                  : 'Atur identitas pejabat penandatangan, tanda tangan elektronik (TTE barcode/QR), serta status server cloud.'}
+                Atur penugasan mengajar dewan guru, identitas pejabat penandatangan, tanda tangan elektronik (TTE barcode/QR), serta status server cloud.
               </p>
             </div>
 
@@ -7223,8 +7207,6 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
             )}
           </div>
 
-          {currentNav !== 'assignments' && (
-            <>
           {/* ============================================================== */}
           {/* SECTION 0: IDENTITAS KOP SURAT RESMI SEKOLAH (SESUAI GAMBAR)    */}
           {/* ============================================================== */}
@@ -8125,27 +8107,6 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
               </div>
             </div>
           </div>
-            </>
-          )}
-
-          {/* JIKA DI MENU PENUGASAN: TAMPILKAN TOMBOL KEMBALI KE PENGATURAN UMUM */}
-          {currentNav === 'assignments' && (
-            <div className="p-5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
-              <div className="flex items-center gap-2.5">
-                <Sliders className="w-4 h-4 text-violet-500 shrink-0" />
-                <span className="text-slate-600 dark:text-slate-300">
-                  Butuh mengatur Kop Surat Dinas, Identitas Kepala Sekolah, atau Tanda Tangan Elektronik (TTE Barcode/QR)?
-                </span>
-              </div>
-              <button
-                type="button"
-                onClick={() => onSelectNav?.('settings')}
-                className="px-4 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 hover:border-violet-400 font-bold text-slate-700 dark:text-slate-200 transition cursor-pointer shrink-0"
-              >
-                Buka Pengaturan Dokumen & Kop Surat →
-              </button>
-            </div>
-          )}
         </div>
       )}
 

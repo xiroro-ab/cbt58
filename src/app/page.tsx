@@ -377,22 +377,27 @@ export default function Home() {
           setSubject(activeSub);
           // Siswa wajib memilih kelas & memasukkan token sendiri (tanpa prefill)
 
-          // Muat seluruh bank soal untuk semua mapel guru agar tidak saling me-reset jadi 0
-          const allQList = await fetchAllQuestions();
-          if (allQList && allQList.length > 0) {
-            setQuestions(allQList);
-          } else {
-            const qList = await fetchQuestionsBySubject(activeSub.id);
-            setQuestions(qList || []);
-          }
+          // Muat seluruh bank soal & database nilai HANYA jika yang membuka adalah Guru yang terautentikasi.
+          // OPTIMASI SKALA 300 SISWA: Mencegah 300 siswa serentak menembak ribuan kueri bank soal dan database nilai saat membuka halaman login.
+          if (savedTeacher) {
+            const allQList = await fetchAllQuestions();
+            if (allQList && allQList.length > 0) {
+              setQuestions(allQList);
+            } else {
+              const qList = await fetchQuestionsBySubject(activeSub.id);
+              setQuestions(qList || []);
+            }
 
-          // Muat seluruh hasil ujian dari semua mapel agar Database Nilai & Dashboard lengkap
-          const allResList = await fetchAllExamResults();
-          if (allResList && allResList.length > 0) {
-            setResults(allResList);
+            const allResList = await fetchAllExamResults();
+            if (allResList && allResList.length > 0) {
+              setResults(allResList);
+            } else {
+              const resList = await fetchExamResults(activeSub.id);
+              setResults(resList || []);
+            }
           } else {
-            const resList = await fetchExamResults(activeSub.id);
-            setResults(resList || []);
+            setQuestions([]);
+            setResults([]);
           }
         } else {
           activeSub = {
@@ -838,6 +843,14 @@ export default function Home() {
             const otherResults = prev.filter(r => r.subjectId && r.subjectId !== matchedSub.id);
             return [...(resList || []), ...otherResults];
           });
+
+          // Muat seluruh bank soal & database nilai secara asinkron di latar belakang khusus untuk sesi guru
+          fetchAllQuestions().then(allQ => {
+            if (allQ && allQ.length > 0) setQuestions(allQ);
+          }).catch(() => {});
+          fetchAllExamResults().then(allR => {
+            if (allR && allR.length > 0) setResults(allR);
+          }).catch(() => {});
         }
       }
     } catch (err) {
@@ -1118,8 +1131,14 @@ export default function Home() {
         } catch {}
       }
 
+      // 4b. KEAMANAN UJIAN: Sterilisasi kunci jawaban agar tidak dapat diintip siswa lewat LocalStorage / DevTools
+      const sanitizedLoaded = loadedQuestions.map(q => {
+        const { answer, ...cleanQ } = q;
+        return cleanQ as Question;
+      });
+
       if (finalQuestions.length === 0) {
-        finalQuestions = shuffleQuestionsGroupedByType(loadedQuestions);
+        finalQuestions = shuffleQuestionsGroupedByType(sanitizedLoaded);
         if (typeof window !== 'undefined') {
           try {
             localStorage.setItem(questionsStorageKey, JSON.stringify(finalQuestions));

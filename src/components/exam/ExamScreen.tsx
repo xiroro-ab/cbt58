@@ -360,14 +360,14 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
     });
   }, [studentName, subject.id, studentActualClass, questions.length]);
 
-  // 2. LIVE MONITORING HEARTBEAT & BROADCAST TO PROCTOR (EVERY 1.5 SECONDS)
+  // 2. LIVE MONITORING HEARTBEAT & BROADCAST TO PROCTOR (EVERY 5 SECONDS - OPTIMIZED FOR 300 STUDENTS)
   useEffect(() => {
     if (isExamCompleted) return;
 
     sendDirectHeartbeat();
     const interval = setInterval(() => {
       sendDirectHeartbeat();
-    }, 1500);
+    }, 5000);
 
     return () => {
       clearInterval(interval);
@@ -1023,11 +1023,40 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
     setShowConfirmSubmit(false);
     setShowWarningModal(false);
 
-    // Evaluasi lembar ujian lengkap
-    const evaluation = evaluateFullExam(questions, answers, subject.scoringRules);
+    // 1. Evaluasi & simpan nilai terverifikasi via Serverless Endpoint (Mencegah manipulasi client-side)
+    let evaluation: any = null;
+    let serverResult: any = null;
+
+    try {
+      const res = await fetch('/api/exam/submit-score', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          subjectId: subject.id,
+          studentName,
+          className: studentActualClass,
+          answers,
+          violationCount
+        })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data?.evaluation) {
+          evaluation = data.evaluation;
+          serverResult = data.result;
+        }
+      }
+    } catch (serverErr) {
+      console.warn('Server score submission fallback to client:', serverErr);
+    }
+
+    // 2. Fail-safe fallback evaluasi lokal jika server offline
+    if (!evaluation) {
+      evaluation = evaluateFullExam(questions, answers, subject.scoringRules);
+    }
 
     const currentClass = studentActualClass;
-    const payload = {
+    const payload = serverResult || {
       studentName,
       className: currentClass,
       score: evaluation.finalScore,

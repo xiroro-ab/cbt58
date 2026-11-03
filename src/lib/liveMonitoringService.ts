@@ -93,6 +93,11 @@ function initSupabaseChannel() {
       // Pasang listeners broadcast sebelum memanggil .subscribe()
       sharedSupaChannel
         .on('broadcast', { event: 'session_heartbeat' }, (payload: any) => {
+          // OPTIMASI SKALABILITAS 300 SISWA:
+          // Jika client ini bukan pengawas (tidak ada listener liveSessionListeners aktif),
+          // abaikan detak jantung siswa lain dan jangan tulis ke localStorage untuk menghemat 100% CPU HP siswa!
+          if (liveSessionListeners.size === 0) return;
+
           const session: ExamSession = payload.payload;
           if (session && session.studentName) {
             const cleanName = session.studentName.toLowerCase().trim();
@@ -108,6 +113,8 @@ function initSupabaseChannel() {
           }
         })
         .on('broadcast', { event: 'session_removed' }, (payload: any) => {
+          if (liveSessionListeners.size === 0) return;
+
           const { studentName, subjectId } = payload.payload || {};
           if (studentName) {
             const cleanName = studentName.toLowerCase().trim();

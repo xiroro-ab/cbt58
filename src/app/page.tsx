@@ -347,8 +347,11 @@ export default function Home() {
                 savedTeacher.photoUrl = photo;
                 savedTeacher.avatar = photo;
               }
+              savedTeacher.status = 'Aktif Mengawas';
+              savedTeacher.lastLogin = new Date().toISOString();
               setCurrentTeacher(savedTeacher);
               setViewMode('teacher');
+              updateTeacherStatusInSupabase(savedTeacher.id, 'Aktif Mengawas').catch(() => {});
             }
           }
         }
@@ -551,6 +554,49 @@ export default function Home() {
         });
       } catch {}
     }, 4000);
+
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [viewMode]);
+
+  // 2c. Heartbeat keaktifan mengawas guru ke Supabase Cloud setiap 30 detik
+  useEffect(() => {
+    if (!currentTeacher?.id || viewMode !== 'teacher') return;
+
+    const pingActivity = () => {
+      updateTeacherStatusInSupabase(currentTeacher.id, 'Aktif Mengawas').catch(() => {});
+    };
+
+    pingActivity();
+    const interval = setInterval(pingActivity, 30000);
+
+    return () => clearInterval(interval);
+  }, [currentTeacher?.id, viewMode]);
+
+  // 2d. Auto-sync status keaktifan dewan guru dari Supabase Cloud setiap 6 detik
+  // Memastikan jika ada guru lain login di perangkat/browser lain, statusnya seketika tampil "Aktif Mengawas"
+  useEffect(() => {
+    if (viewMode !== 'teacher') return;
+
+    let isMounted = true;
+    const interval = setInterval(async () => {
+      try {
+        const cloudTeachers = await fetchTeachers();
+        if (!isMounted || !cloudTeachers || cloudTeachers.length === 0) return;
+
+        setTeachers(prev => {
+          const hasChanges = cloudTeachers.some(ct => {
+            const existing = prev.find(p => p.id === ct.id);
+            if (!existing) return true;
+            return existing.status !== ct.status || existing.lastLogin !== ct.lastLogin;
+          });
+          if (!hasChanges) return prev;
+          return cloudTeachers;
+        });
+      } catch {}
+    }, 6000);
 
     return () => {
       isMounted = false;
@@ -1379,6 +1425,32 @@ export default function Home() {
     return questions.filter(q => q.subjectId && mySubjectIds.has(q.subjectId)).length;
   }, [questions, subjects, currentTeacher, teacherCreatedSubjectIds]);
 
+  // Hitung jumlah lembar nilai hasil ujian (Database Nilai) riil yang berhak diakses guru / pengawas
+  const teacherResultsCount = useMemo(() => {
+    if (!currentTeacher || currentTeacher.role === 'admin' || currentTeacher.role === 'pengawas') {
+      return results.length;
+    }
+    const mySubjectIds = new Set(
+      subjects
+        .filter(s => isSubjectBelongToTeacher(s, currentTeacher, teacherCreatedSubjectIds))
+        .map(s => s.id)
+    );
+    const allowedSubjectNames = [
+      currentTeacher.subject,
+      ...(currentTeacher.assignments?.map(a => a.subject) || [])
+    ].filter(Boolean).map(s => s.toLowerCase().trim());
+
+    return results.filter(r => {
+      if (r.subjectId && mySubjectIds.has(r.subjectId)) return true;
+      const subTitle = (r.subjectTitle || '').toLowerCase().trim();
+      return allowedSubjectNames.some(as => {
+        if (subTitle.includes(as) || as.includes(subTitle)) return true;
+        const keywords = as.split(/[\s&,/()-]+/).map(w => w.trim()).filter(w => w.length >= 3 && !GENERIC_SUBJECT_STOP_WORDS.has(w));
+        return keywords.length > 0 && keywords.some(kw => subTitle.includes(kw));
+      });
+    }).length;
+  }, [results, subjects, currentTeacher, teacherCreatedSubjectIds]);
+
   // =========================================================================
   // VIEW 0: LAYAR LOGIN GURU & PENGAWAS (PORTAL RESMI & PENDAFTARAN AKUN GURU)
   // =========================================================================
@@ -1838,7 +1910,7 @@ export default function Home() {
         examsCount={teacherExamsCount}
         questionsCount={teacherQuestionsCount}
         studentsCount={students.length}
-        resultsCount={results.length}
+        resultsCount={teacherResultsCount}
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
         onOpenHelp={() => setIsHelpModalOpen(true)}
@@ -1873,6 +1945,14 @@ export default function Home() {
           onSelectNav={setCurrentNav}
           onLogoutTeacher={handleTeacherLogout}
           onSwitchTeacher={handleSwitchTeacher}
+          onRefreshTeachers={async () => {
+            try {
+              const freshTeachers = await fetchTeachers();
+              if (freshTeachers && freshTeachers.length > 0) {
+                setTeachers(freshTeachers);
+              }
+            } catch {}
+          }}
         />
 
         {/* DASHBOARD CONTENT BODY */}

@@ -59,6 +59,7 @@ interface NavbarProps {
   onLogoutTeacher?: () => void;
   onSwitchTeacher?: (teacher: Teacher) => void;
   onToggleMobileSidebar?: () => void;
+  onRefreshTeachers?: () => void;
 }
 
 // Icon Bendera Vektor SVG Murni (100% Tajam di Seluruh Perangkat: PC, Laptop Windows, Mac, Android & iOS)
@@ -105,7 +106,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   onSelectNav,
   onLogoutTeacher,
   onSwitchTeacher,
-  onToggleMobileSidebar
+  onToggleMobileSidebar,
+  onRefreshTeachers
 }) => {
   const { theme, toggleTheme } = useTheme();
   const { language, toggleLanguage, t } = useLanguage();
@@ -670,7 +672,10 @@ export const Navbar: React.FC<NavbarProps> = ({
 
         {/* Profil Akun Guru / Pengawas yang Sedang Login & Avatar Stack Guru Terdaftar */}
         <button
-          onClick={() => setShowTeachersModal(true)}
+          onClick={() => {
+            onRefreshTeachers?.();
+            setShowTeachersModal(true);
+          }}
           className="flex items-center gap-1 sm:gap-1.5 p-0.5 sm:p-1 rounded-2xl hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer shrink-0"
           title="Profil Pengguna & Direktori Akun Guru Terdaftar"
         >
@@ -856,7 +861,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                       const isRecentlyActive = !isCurrent && tea.status === 'Aktif Mengawas' && (() => {
                         if (!tea.lastLogin) return false;
                         const diffMs = Date.now() - new Date(tea.lastLogin).getTime();
-                        return diffMs >= 0 && diffMs < 15 * 60 * 1000;
+                        return diffMs >= 0 && diffMs < 5 * 60 * 1000;
                       })();
                       return (
                         <div

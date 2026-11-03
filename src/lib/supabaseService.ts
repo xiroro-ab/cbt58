@@ -2079,6 +2079,7 @@ export async function saveSchoolSettingsToSupabase(settings: SchoolSettings): Pr
         enable_tte: settings.enableTTE !== false,
         tte_type: settings.tteType || 'qrcode',
         isolate_teacher_dossier: settings.isolateTeacherDossier !== false,
+        teacher_registration_passcode: settings.teacherRegistrationPasscode || 'GURU58',
         updated_at: new Date().toISOString()
       }, { onConflict: 'id' });
 

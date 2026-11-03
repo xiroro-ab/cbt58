@@ -13,6 +13,20 @@ export async function POST(req: NextRequest) {
 
     if (!expectedPasscode) {
       try {
+        const { data: directData } = await supabase
+          .from('school_settings')
+          .select('teacher_registration_passcode')
+          .eq('id', 'default')
+          .maybeSingle();
+
+        if (directData?.teacher_registration_passcode && typeof directData.teacher_registration_passcode === 'string') {
+          expectedPasscode = directData.teacher_registration_passcode.trim();
+        }
+      } catch {}
+    }
+
+    if (!expectedPasscode) {
+      try {
         const { data } = await supabase
           .from('teachers')
           .select('assignments')

@@ -18,6 +18,7 @@ import { broadcastAnnouncementToStudents } from '@/lib/liveMonitoringService';
 import {
   fetchActiveSubject,
   fetchAllSubjects,
+  fetchSubjectByToken,
   fetchQuestionsBySubject,
   fetchAllQuestions,
   insertQuestion,
@@ -303,12 +304,33 @@ export default function Home() {
     );
   }, [classStudents, students, studentName]);
 
-  // Auto-deteksi mata pelajaran dari token yang dimasukkan siswa
-  const detectedSubject = useMemo(() => {
-    if (!inputToken.trim()) return null;
+  // Auto-deteksi mata pelajaran secara aman (verifikasi cloud jika token disembunyikan dari browser siswa)
+  const [tokenVerifiedSubject, setTokenVerifiedSubject] = useState<Subject | null>(null);
+
+  useEffect(() => {
     const clean = inputToken.trim().toUpperCase();
-    return subjects.find(s => s.token.trim().toUpperCase() === clean) || null;
+    if (!clean || clean.length < 3) {
+      setTokenVerifiedSubject(null);
+      return;
+    }
+
+    const localMatched = subjects.find(s => s.token && s.token.trim().toUpperCase() === clean);
+    if (localMatched) {
+      setTokenVerifiedSubject(localMatched);
+      return;
+    }
+
+    let isMounted = true;
+    fetchSubjectByToken(clean).then(sub => {
+      if (isMounted && sub) {
+        setTokenVerifiedSubject(sub);
+      }
+    }).catch(() => {});
+
+    return () => { isMounted = false; };
   }, [inputToken, subjects]);
+
+  const detectedSubject = tokenVerifiedSubject;
 
   // Prefetch butir soal di latar belakang segera setelah token mapel valid & aktif terdeteksi (0ms saat Mulai Ujian)
   useEffect(() => {
@@ -361,7 +383,11 @@ export default function Home() {
         let activeSub: Subject;
 
         if (allSubs && allSubs.length > 0) {
-          setSubjects(allSubs);
+          // KEAMANAN TOKEN: Jika belum ada guru login, sterilkan properti 'token' agar siswa tidak bisa mengintip token mapel lain lewat DevTools/Console
+          const publicSubs = savedTeacher
+            ? allSubs
+            : allSubs.map(s => ({ ...s, token: '' }));
+          setSubjects(publicSubs);
 
           if (savedTeacher) {
             const firstAsg = savedTeacher.assignments?.[0];
@@ -1013,10 +1039,14 @@ export default function Home() {
     }
 
     const cleanToken = inputToken.trim().toUpperCase();
-    // 1. Auto-deteksi mata pelajaran berdasarkan token yang dimasukkan siswa
-    const matchedSub = subjects.find(
-      s => s.token.trim().toUpperCase() === cleanToken
+    // 1. Auto-deteksi mata pelajaran berdasarkan token yang dimasukkan siswa (Lokal atau Cloud Database)
+    let matchedSub = tokenVerifiedSubject || subjects.find(
+      s => s.token && s.token.trim().toUpperCase() === cleanToken
     );
+
+    if (!matchedSub) {
+      matchedSub = (await fetchSubjectByToken(cleanToken)) || undefined;
+    }
 
     if (!matchedSub) {
       setLoginError(
@@ -1065,8 +1095,8 @@ export default function Home() {
       // 3. Verifikasi Paralel Cepat (Cek Status Aktif Realtime di Supabase, Anti Re-Login, Anti-Cheat Lock & Muat Butir Soal serentak)
       const [liveIsActive, submissionStatus, lockStatus, loadedQuestions] = await Promise.all([
         checkSubjectIsActive(matchedSub.id),
-        checkStudentExamSubmission(matchedSub.id, studentName),
-        checkStudentLockStatus(matchedSub.id, studentName, matchedSub.violationLimit || 3),
+        checkStudentExamSubmission(matchedSub.id, studentName, selectedStudentClass),
+        checkStudentLockStatus(matchedSub.id, studentName, matchedSub.violationLimit || 3, selectedStudentClass),
         fetchQuestionsBySubject(matchedSub.id).catch(err => {
           console.warn('Gagal memuat soal ujian:', err);
           return [] as Question[];
@@ -1112,12 +1142,15 @@ export default function Home() {
 
       // 4. Persistensi Susunan Butir Soal Siswa (Cegah reshuffle jika siswa melanjutkan ujian di tengah jalan setelah HP lag/kill task)
       const cleanName = studentName.toLowerCase().trim();
-      const questionsStorageKey = `cbt_exam_questions_${matchedSub.id}_${cleanName}`;
+      const cleanClass = selectedStudentClass ? selectedStudentClass.toLowerCase().trim() : '';
+      const questionsStorageKey = cleanClass
+        ? `cbt_exam_questions_${matchedSub.id}_${cleanClass}_${cleanName}`
+        : `cbt_exam_questions_${matchedSub.id}_${cleanName}`;
       let finalQuestions: Question[] = [];
 
       if (typeof window !== 'undefined') {
         try {
-          const savedQ = localStorage.getItem(questionsStorageKey);
+          const savedQ = localStorage.getItem(questionsStorageKey) || localStorage.getItem(`cbt_exam_questions_${matchedSub.id}_${cleanName}`);
           if (savedQ) {
             const parsed: Question[] = JSON.parse(savedQ);
             if (Array.isArray(parsed) && parsed.length === loadedQuestions.length) {

@@ -528,21 +528,29 @@ export async function saveOrUpdateExamResult(result: ExamResult): Promise<boolea
  */
 export async function checkStudentExamSubmission(
   subjectId: string,
-  studentName: string
+  studentName: string,
+  className?: string
 ): Promise<{ isSubmitted: boolean; score?: number; submittedAt?: string }> {
   if (!subjectId || !studentName) {
     return { isSubmitted: false };
   }
 
   const cleanName = studentName.toLowerCase().trim();
+  const cleanClass = (className || '').toLowerCase().trim();
 
   // 1. PRIORITAS UTAMA: Periksa database Supabase Cloud (Single Source of Truth)
   try {
-    const { data, error } = await supabase
+    let query = supabase
       .from('exam_results')
-      .select('id, score, submitted_at, student_name')
+      .select('id, score, submitted_at, student_name, class_name')
       .eq('subject_id', subjectId)
-      .ilike('student_name', studentName.trim())
+      .ilike('student_name', studentName.trim());
+
+    if (cleanClass) {
+      query = query.ilike('class_name', cleanClass);
+    }
+
+    const { data, error } = await query
       .order('submitted_at', { ascending: false })
       .limit(1);
 
@@ -557,6 +565,12 @@ export async function checkStudentExamSubmission(
         // Perbarui flag di memori perangkat
         if (typeof window !== 'undefined') {
           try {
+            if (cleanClass) {
+              localStorage.setItem(`cbt_submitted_${subjectId}_${cleanClass}_${cleanName}`, JSON.stringify({
+                score: Number(item.score),
+                submittedAt: submittedAtFormatted
+              }));
+            }
             localStorage.setItem(`cbt_submitted_${subjectId}_${cleanName}`, JSON.stringify({
               score: Number(item.score),
               submittedAt: submittedAtFormatted
@@ -571,10 +585,11 @@ export async function checkStudentExamSubmission(
         };
       } else {
         // Di database Supabase TIDAK ADA hasil ujian final untuk siswa ini (belum mengumpulkan atau baru di-reset oleh guru)
-        // HANYA bersihkan flag submitted lokal (jika pernah ada submit usang).
-        // JANGAN PERNAH menghapus cbt_exam_state atau cbt_answers karena siswa mungkin sedang melanjutkan ujian aktif yang belum selesai!
         if (typeof window !== 'undefined') {
           try {
+            if (cleanClass) {
+              localStorage.removeItem(`cbt_submitted_${subjectId}_${cleanClass}_${cleanName}`);
+            }
             localStorage.removeItem(`cbt_submitted_${subjectId}_${cleanName}`);
           } catch {}
         }
@@ -585,16 +600,27 @@ export async function checkStudentExamSubmission(
     console.warn('Gagal cek status submit siswa ke Supabase, fallback ke local storage:', err);
   }
 
-  // 2. Fallback HANYA jika Supabase offline / tidak dapat dihubungi
+  // 2. Fail-safe Lokal Perangkat Siswa
   if (typeof window !== 'undefined') {
     try {
-      const flag = localStorage.getItem(`cbt_submitted_${subjectId}_${cleanName}`);
-      if (flag) {
-        const parsed = JSON.parse(flag);
+      if (cleanClass) {
+        const rawClass = localStorage.getItem(`cbt_submitted_${subjectId}_${cleanClass}_${cleanName}`);
+        if (rawClass) {
+          const parsed = JSON.parse(rawClass);
+          return {
+            isSubmitted: true,
+            score: parsed?.score,
+            submittedAt: parsed?.submittedAt || 'Sesi Sebelumnya'
+          };
+        }
+      }
+      const raw = localStorage.getItem(`cbt_submitted_${subjectId}_${cleanName}`);
+      if (raw) {
+        const parsed = JSON.parse(raw);
         return {
           isSubmitted: true,
-          score: parsed.score,
-          submittedAt: parsed.submittedAt
+          score: parsed?.score,
+          submittedAt: parsed?.submittedAt || 'Sesi Sebelumnya'
         };
       }
     } catch {}
@@ -1054,17 +1080,20 @@ export function subscribeToExamResults(
 
 /**
  * Memeriksa apakah siswa sedang terkunci/diblokir oleh sistem anti-cheat (di database Supabase & memori sesi)
+ * Dilengkapi isolasi rombel kelas agar dua siswa bernama sama di kelas berbeda tidak saling mengunci.
  */
 export async function checkStudentLockStatus(
   subjectId: string,
   studentName: string,
-  violationLimit: number = 3
+  violationLimit: number = 3,
+  className?: string
 ): Promise<{ isBlocked: boolean; violationCount: number; reason?: string }> {
   const cleanName = studentName.toLowerCase().trim();
+  const cleanClass = (className || '').toLowerCase().trim();
 
   // 1. PRIORITAS UTAMA: Periksa database Supabase Cloud (Single Source of Truth)
   try {
-    // A. Satu query gabungan untuk seluruh notifikasi pelanggaran & autolock siswa ini (Lebih Cepat & Efisien)
+    // Satu query gabungan untuk seluruh notifikasi pelanggaran & autolock siswa ini
     const { data: notifications, error } = await supabase
       .from('exam_notifications')
       .select('id, type, message, created_at')
@@ -1075,7 +1104,13 @@ export async function checkStudentLockStatus(
       .order('created_at', { ascending: false });
 
     if (!error) {
-      const notifList = notifications || [];
+      // Jika ada kelas, filter notifikasi yang sesuai kelas siswa
+      const notifList = (notifications || []).filter(n => {
+        if (!cleanClass || !n.message) return true;
+        const msgLower = n.message.toLowerCase();
+        return msgLower.includes(`(${cleanClass})`) || msgLower.includes(cleanClass);
+      });
+
       const autolocks = notifList.filter(n => n.type === 'autolock');
       const cloudViolationCount = notifList.length;
       const isCloudBlocked = (autolocks.length > 0) || (cloudViolationCount >= violationLimit);
@@ -1087,7 +1122,8 @@ export async function checkStudentLockStatus(
 
       if (typeof window !== 'undefined') {
         try {
-          const blockedFlag = localStorage.getItem(`cbt_blocked_${subjectId}_${cleanName}`);
+          const classBlockedKey = cleanClass ? `cbt_blocked_${subjectId}_${cleanClass}_${cleanName}` : null;
+          const blockedFlag = (classBlockedKey && localStorage.getItem(classBlockedKey)) || localStorage.getItem(`cbt_blocked_${subjectId}_${cleanName}`);
           if (blockedFlag) {
             const parsed = JSON.parse(blockedFlag);
             if (parsed.isBlocked) {
@@ -1095,8 +1131,8 @@ export async function checkStudentLockStatus(
               localViolationCount = parsed.violationCount || violationLimit;
             }
           }
-          const stateKey = `cbt_exam_state_${subjectId}_${cleanName}`;
-          const saved = localStorage.getItem(stateKey);
+          const classStateKey = cleanClass ? `cbt_exam_state_${subjectId}_${cleanClass}_${cleanName}` : null;
+          const saved = (classStateKey && localStorage.getItem(classStateKey)) || localStorage.getItem(`cbt_exam_state_${subjectId}_${cleanName}`);
           if (saved) {
             const parsed = JSON.parse(saved);
             localViolationCount = Math.max(localViolationCount, parsed.violationCount || 0);
@@ -1114,19 +1150,15 @@ export async function checkStudentLockStatus(
       if (isCloudBlocked || localIsBlocked || finalViolationCount >= violationLimit) {
         if (typeof window !== 'undefined') {
           try {
-            localStorage.setItem(`cbt_blocked_${subjectId}_${cleanName}`, JSON.stringify({
+            const payloadStr = JSON.stringify({
               isBlocked: true,
               violationCount: finalViolationCount,
               lockedAt: Date.now()
-            }));
-            const stateKey = `cbt_exam_state_${subjectId}_${cleanName}`;
-            const saved = localStorage.getItem(stateKey);
-            if (saved) {
-              const parsed = JSON.parse(saved);
-              parsed.isLocked = true;
-              parsed.violationCount = finalViolationCount;
-              localStorage.setItem(stateKey, JSON.stringify(parsed));
+            });
+            if (cleanClass) {
+              localStorage.setItem(`cbt_blocked_${subjectId}_${cleanClass}_${cleanName}`, payloadStr);
             }
+            localStorage.setItem(`cbt_blocked_${subjectId}_${cleanName}`, payloadStr);
           } catch {}
         }
         return {
@@ -1135,18 +1167,12 @@ export async function checkStudentLockStatus(
           reason: autolocks?.[0]?.message || localReason || `Terkunci karena telah melakukan ${finalViolationCount} kali pelanggaran anti-cheat.`
         };
       } else {
-        // Siswa tidak terblokir, tapi JANGAN PERNAH mereset violationCount ke 0 jika siswa memang sudah punya pelanggaran!
         if (typeof window !== 'undefined') {
           try {
-            localStorage.removeItem(`cbt_blocked_${subjectId}_${cleanName}`);
-            const stateKey = `cbt_exam_state_${subjectId}_${cleanName}`;
-            const saved = localStorage.getItem(stateKey);
-            if (saved) {
-              const parsed = JSON.parse(saved);
-              parsed.isLocked = false;
-              parsed.violationCount = finalViolationCount;
-              localStorage.setItem(stateKey, JSON.stringify(parsed));
+            if (cleanClass) {
+              localStorage.removeItem(`cbt_blocked_${subjectId}_${cleanClass}_${cleanName}`);
             }
+            localStorage.removeItem(`cbt_blocked_${subjectId}_${cleanName}`);
           } catch {}
         }
         return {
@@ -1159,29 +1185,18 @@ export async function checkStudentLockStatus(
     console.warn('Gagal cek status lock siswa di Supabase, fallback ke local storage:', err);
   }
 
-  // 2. Fallback hanya jika jaringan Supabase benar-benar tidak terjangkau (Offline)
+  // 2. Fallback jika offline
   if (typeof window !== 'undefined') {
     try {
-      const blockedFlag = localStorage.getItem(`cbt_blocked_${subjectId}_${cleanName}`);
+      const classBlockedKey = cleanClass ? `cbt_blocked_${subjectId}_${cleanClass}_${cleanName}` : null;
+      const blockedFlag = (classBlockedKey && localStorage.getItem(classBlockedKey)) || localStorage.getItem(`cbt_blocked_${subjectId}_${cleanName}`);
       if (blockedFlag) {
         const parsed = JSON.parse(blockedFlag);
         if (parsed.isBlocked) {
           return {
             isBlocked: true,
             violationCount: parsed.violationCount || violationLimit,
-            reason: 'Terkunci karena melampaui batas pelanggaran di perangkat ini.'
-          };
-        }
-      }
-
-      const examState = localStorage.getItem(`cbt_exam_state_${subjectId}_${cleanName}`);
-      if (examState) {
-        const parsed = JSON.parse(examState);
-        if (parsed.isLocked || (parsed.violationCount && parsed.violationCount >= violationLimit)) {
-          return {
-            isBlocked: true,
-            violationCount: parsed.violationCount,
-            reason: parsed.lastViolationReason || 'Terkunci karena pelanggaran anti-cheat.'
+            reason: 'Terkunci karena batas pelanggaran anti-cheat.'
           };
         }
       }
@@ -1189,6 +1204,42 @@ export async function checkStudentLockStatus(
   }
 
   return { isBlocked: false, violationCount: 0 };
+}
+
+/**
+ * Memverifikasi dan mengambil data mata pelajaran berdasarkan token resmi ujian
+ */
+export async function fetchSubjectByToken(token: string): Promise<Subject | null> {
+  const clean = token.trim().toUpperCase();
+  if (!clean) return null;
+
+  try {
+    const { data, error } = await supabase
+      .from('subjects')
+      .select('*')
+      .ilike('token', clean)
+      .limit(1);
+
+    if (!error && data && data.length > 0) {
+      const d = data[0];
+      return {
+        id: d.id,
+        title: d.title,
+        className: d.class_name,
+        durationMinutes: d.duration_minutes,
+        violationLimit: d.violation_limit,
+        scoringRules: d.scoring_rules || {},
+        token: d.token,
+        isActive: d.is_active,
+        scheduleStart: d.schedule_start,
+        examDate: d.exam_date
+      };
+    }
+  } catch (err) {
+    console.error('Error fetchSubjectByToken:', err);
+  }
+
+  return null;
 }
 
 /**

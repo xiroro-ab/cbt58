@@ -72,14 +72,21 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
     return resolveStudentSingleClass(studentName, studentClass);
   }, [studentName, studentClass]);
 
-  const stateKey = `cbt_exam_state_${subject.id}_${studentName.toLowerCase().trim()}`;
-  const blockedKey = `cbt_blocked_${subject.id}_${studentName.toLowerCase().trim()}`;
+  const cleanName = studentName.toLowerCase().trim();
+  const cleanClass = studentActualClass.toLowerCase().trim();
+  // Kunci persistensi terisolasi per rombel kelas (mencegah bentrok jika ada nama siswa kembar di kelas berbeda)
+  const stateKey = cleanClass
+    ? `cbt_exam_state_${subject.id}_${cleanClass}_${cleanName}`
+    : `cbt_exam_state_${subject.id}_${cleanName}`;
+  const blockedKey = cleanClass
+    ? `cbt_blocked_${subject.id}_${cleanClass}_${cleanName}`
+    : `cbt_blocked_${subject.id}_${cleanName}`;
 
   // Baca status simpanan lokal jika siswa me-refresh browser saat ujian berlangsung
   const [savedLocalState] = useState(() => {
     if (typeof window === 'undefined') return null;
     try {
-      const raw = localStorage.getItem(stateKey);
+      const raw = localStorage.getItem(stateKey) || localStorage.getItem(`cbt_exam_state_${subject.id}_${cleanName}`);
       if (raw) return JSON.parse(raw);
     } catch {}
     return null;
@@ -88,7 +95,7 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
   const [isInitiallyBlocked] = useState(() => {
     if (typeof window === 'undefined') return false;
     try {
-      const raw = localStorage.getItem(blockedKey);
+      const raw = localStorage.getItem(blockedKey) || localStorage.getItem(`cbt_blocked_${subject.id}_${cleanName}`);
       if (raw) {
         const parsed = JSON.parse(raw);
         if (parsed.isBlocked) return true;

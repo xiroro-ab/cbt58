@@ -1983,7 +1983,8 @@ export const defaultSchoolSettings: SchoolSettings = {
   city: 'Palembang',
   enableTTE: true,
   tteType: 'qrcode',
-  isolateTeacherDossier: true
+  isolateTeacherDossier: true,
+  teacherRegistrationPasscode: 'GURU58'
 };
 
 /**
@@ -2017,7 +2018,8 @@ export async function fetchSchoolSettingsFromSupabase(): Promise<SchoolSettings 
           city: directData.city || defaultSchoolSettings.city,
           enableTTE: directData.enable_tte !== false,
           tteType: (directData.tte_type === 'barcode' ? 'barcode' : 'qrcode'),
-          isolateTeacherDossier: directData.isolate_teacher_dossier !== false
+          isolateTeacherDossier: directData.isolate_teacher_dossier !== false,
+          teacherRegistrationPasscode: directData.teacher_registration_passcode || directData.teacherRegistrationPasscode || defaultSchoolSettings.teacherRegistrationPasscode
         };
       }
     } catch {}

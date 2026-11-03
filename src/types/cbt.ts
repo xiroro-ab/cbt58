@@ -135,6 +135,9 @@ export interface SchoolSettings {
 
   // Privasi Multi-Guru: Isolasi Lembar Dossier berdasarkan akun login
   isolateTeacherDossier?: boolean;
+
+  // Keamanan Otorisasi Pendaftaran Dewan Guru (Server-Side Secret)
+  teacherRegistrationPasscode?: string;
 }
 
 export interface QuestionScoreDetail {

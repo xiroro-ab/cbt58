@@ -270,11 +270,6 @@ export const TeacherLogin: React.FC<TeacherLoginProps> = ({
       return;
     }
 
-    if (cleanSchoolPasscode !== 'GURU58') {
-      setRegError('Kode Otorisasi Dewan Guru salah! Akses pendaftaran ini dilindungi khusus bagi dewan guru resmi SMPN 58 Palembang.');
-      return;
-    }
-
     if (!cleanName || !cleanNip || !cleanEmail) {
       setRegError('Nama, NIP, dan Email wajib diisi.');
       return;
@@ -304,17 +299,6 @@ export const TeacherLogin: React.FC<TeacherLoginProps> = ({
       return;
     }
 
-    // Cek NIP atau Email ganda
-    if (teachers.some(t => t.nip === cleanNip)) {
-      setRegError(`NIP ${cleanNip} sudah terdaftar di sistem. Silakan masuk via Login.`);
-      return;
-    }
-
-    if (teachers.some(t => t.email.toLowerCase() === cleanEmail)) {
-      setRegError(`Email ${cleanEmail} sudah terdaftar di sistem.`);
-      return;
-    }
-
     setIsSubmitting(true);
 
     const finalAssignments: TeacherAssignment[] = assignments.map(a => ({
@@ -339,13 +323,38 @@ export const TeacherLogin: React.FC<TeacherLoginProps> = ({
     };
 
     try {
-      await onRegisterTeacher(newTeacher);
-      setRegSuccess('Pendaftaran akun guru berhasil! Mengalihkan ke dashboard...');
+      // Panggil verifikasi & pendaftaran aman via Server API (Backend)
+      // Kode otorisasi diperiksa di server sehingga 100% aman dari DevTools browser F12
+      const res = await fetch('/api/auth/register-teacher', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          passcode: cleanSchoolPasscode,
+          teacher: newTeacher
+        })
+      });
+
+      const data = await res.json();
+
+      if (!res.ok || !data.success) {
+        setRegError(data.message || 'Pendaftaran gagal diverifikasi oleh server.');
+        setIsSubmitting(false);
+        return;
+      }
+
+      const verifiedTeacher: Teacher = data.teacher || newTeacher;
+
+      // Update state lokal dan cache aplikasi
+      await onRegisterTeacher(verifiedTeacher);
+
+      setRegSuccess('Pendaftaran akun dewan guru resmi berhasil! Mengalihkan ke dashboard...');
       setTimeout(() => {
-        onLoginSuccess(newTeacher);
+        onLoginSuccess(verifiedTeacher);
       }, 700);
     } catch (err) {
-      setRegError('Terjadi kesalahan saat menyimpan akun. Silakan coba lagi.');
+      setRegError('Terjadi kesalahan koneksi saat verifikasi akun ke server. Silakan coba lagi.');
     } finally {
       setIsSubmitting(false);
     }

@@ -236,7 +236,8 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
       city: schoolSettings?.city || 'Palembang',
       enableTTE: schoolSettings?.enableTTE !== false,
       tteType: schoolSettings?.tteType || 'qrcode',
-      isolateTeacherDossier: schoolSettings?.isolateTeacherDossier !== false
+      isolateTeacherDossier: schoolSettings?.isolateTeacherDossier !== false,
+      teacherRegistrationPasscode: schoolSettings?.teacherRegistrationPasscode || 'GURU58'
     };
   }, [schoolSettings, currentTeacher]);
 
@@ -7092,6 +7093,31 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                       />
                       <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-violet-600"></div>
                     </label>
+                  </div>
+                </div>
+
+                {/* 5. KEAMANAN OTORISASI PENDAFTARAN DEWAN GURU */}
+                <div className="p-4 sm:p-5 rounded-2xl bg-amber-50/50 dark:bg-amber-950/20 border border-amber-200/80 dark:border-amber-800/60 space-y-2">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="space-y-0.5">
+                      <span className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                        <ShieldCheck className="w-4 h-4 text-amber-600" />
+                        <span>Kode Otorisasi Pendaftaran Dewan Guru</span>
+                      </span>
+                      <p className="text-[11px] text-slate-600 dark:text-slate-400 leading-relaxed">
+                        Kode rahasia yang wajib dimasukkan guru saat membuat akun baru agar siswa tidak dapat mendaftar sendiri sebagai guru. Kode ini divalidasi langsung di sisi server (backend) sehingga 100% aman dan tidak terlihat di Inspect DevTools browser.
+                      </p>
+                    </div>
+
+                    <div className="w-full sm:w-56 shrink-0">
+                      <input
+                        type="text"
+                        value={localSettingsForm.teacherRegistrationPasscode || 'GURU58'}
+                        onChange={e => setLocalSettingsForm(prev => ({ ...prev, teacherRegistrationPasscode: e.target.value.toUpperCase() }))}
+                        placeholder="Contoh: GURU58"
+                        className="w-full px-3.5 py-2 rounded-xl bg-white dark:bg-slate-900 border border-amber-300 dark:border-amber-700 text-slate-900 dark:text-white uppercase font-mono font-bold text-xs tracking-wider focus:outline-none focus:ring-2 focus:ring-amber-500 shadow-2xs"
+                      />
+                    </div>
                   </div>
                 </div>
 

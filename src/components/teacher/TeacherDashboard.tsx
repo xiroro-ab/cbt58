@@ -1071,6 +1071,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   }, [students]);
 
 // Filter Multidimensi Database Nilai (Mapel, Jenjang, Rombel, Status KKM)
+  const isSuperAdmin = currentTeacher?.role === 'admin' || currentTeacher?.role === 'pengawas';
   const [resultsSubjectFilter, setResultsSubjectFilter] = useState<string>('ALL');
   const [resultsGradeFilter, setResultsGradeFilter] = useState<string>('ALL');
   const [resultsClassFilter, setResultsClassFilter] = useState<string>('ALL');
@@ -1195,6 +1196,47 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
 
     return all.filter(s => isSubjectBelongToTeacher(s, currentTeacher, createdSubjectIds));
   }, [allSubjects, subject, currentTeacher, deletedSubjectIds, createdSubjectIds]);
+
+  // Daftar mapel yang ditampilkan pada dropdown filter Database Nilai
+  // Jika isolasi aktif & mode kunci mapel aktif: HANYA tampilkan mapel yang diampu oleh guru yang sedang login
+  const filterSubjectsForResults = useMemo(() => {
+    if (!isSuperAdmin && effectiveSchoolSettings.isolateTeacherDossier !== false && onlyMyAssignedSubjects && currentTeacher) {
+      return accessibleSubjects;
+    }
+    return (allSubjects || []).filter(s => s && s.id && !deletedSubjectIds.includes(s.id));
+  }, [allSubjects, accessibleSubjects, isSuperAdmin, effectiveSchoolSettings.isolateTeacherDossier, onlyMyAssignedSubjects, currentTeacher, deletedSubjectIds]);
+
+  // Hitung total siswa relevan untuk opsi "Semua Mapel" di Database Nilai
+  const totalStudentsForResults = useMemo(() => {
+    if (!isSuperAdmin && effectiveSchoolSettings.isolateTeacherDossier !== false && onlyMyAssignedSubjects && currentTeacher) {
+      const allowedSubjectIds = new Set(accessibleSubjects.map(s => s.id));
+      const allowedSubjectNames = [
+        currentTeacher.subject,
+        ...(currentTeacher.assignments?.map(a => a.subject) || [])
+      ].filter(Boolean).map(s => s.toLowerCase().trim());
+
+      return results.filter(r => {
+        if (allowedSubjectIds.has(r.subjectId)) return true;
+        const subTitle = (r.subjectTitle || '').toLowerCase().trim();
+        return allowedSubjectNames.some(as => {
+          if (subTitle.includes(as) || as.includes(subTitle)) return true;
+          const keywords = as.split(/[\s&,/()-]+/).map(w => w.trim()).filter(w => w.length >= 3 && !GENERIC_SUBJECT_STOP_WORDS.has(w));
+          return keywords.length > 0 && keywords.some(kw => subTitle.includes(kw));
+        });
+      }).length;
+    }
+    return results.length;
+  }, [results, isSuperAdmin, effectiveSchoolSettings.isolateTeacherDossier, onlyMyAssignedSubjects, currentTeacher, accessibleSubjects]);
+
+  // Reset resultsSubjectFilter jika mapel yang dipilih tidak ada di daftar mapel yang dapat diakses
+  useEffect(() => {
+    if (resultsSubjectFilter !== 'ALL') {
+      const exists = filterSubjectsForResults.some(s => s.id === resultsSubjectFilter);
+      if (!exists) {
+        setResultsSubjectFilter('ALL');
+      }
+    }
+  }, [resultsSubjectFilter, filterSubjectsForResults]);
 
   // Sinkronkan selectedBankSubjectId jika belum ada di accessibleSubjects
   useEffect(() => {
@@ -4165,8 +4207,17 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                   onChange={e => setResultsSubjectFilter(e.target.value)}
                   className="bg-white dark:bg-slate-900 text-xs font-semibold text-slate-800 dark:text-slate-100 focus:outline-none cursor-pointer pr-1 [color-scheme:light] dark:[color-scheme:dark] [&>option]:bg-white [&>option]:text-slate-900 [&>option]:dark:bg-slate-900 [&>option]:dark:text-slate-100"
                 >
-                  <option value="ALL">Semua Mapel (1 Sekolah) • {results.length} Siswa</option>
-                  {(allSubjects || []).map(s => {
+                  <option value="ALL">
+                    {!isSuperAdmin && onlyMyAssignedSubjects && effectiveSchoolSettings.isolateTeacherDossier !== false
+                      ? `Semua Mapel Saya • ${totalStudentsForResults} Siswa`
+                      : `Semua Mapel (1 Sekolah) • ${totalStudentsForResults} Siswa`}
+                  </option>
+                  {filterSubjectsForResults.length === 0 && !isSuperAdmin && onlyMyAssignedSubjects && (
+                    <option value="" disabled>
+                      (Belum ada ujian untuk mapel Anda)
+                    </option>
+                  )}
+                  {filterSubjectsForResults.map(s => {
                     const count = results.filter(r => r.subjectId === s.id).length;
                     return (
                       <option key={s.id} value={s.id}>

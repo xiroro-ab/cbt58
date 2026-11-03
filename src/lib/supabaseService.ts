@@ -1738,7 +1738,7 @@ export async function insertTeacher(t: Teacher): Promise<boolean> {
       role: t.role || 'guru_mapel',
       pin: t.pin || '123456',
       avatar_color: t.avatarColor || 'bg-violet-600',
-      status: t.status || 'Aktif Mengawas'
+      status: t.status || 'Offline'
     });
 
     if (error) {

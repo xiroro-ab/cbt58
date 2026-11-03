@@ -15,7 +15,7 @@ export const initialTeachers: Teacher[] = [
     role: 'admin',
     pin: 'admin123',
     avatarColor: 'bg-violet-900',
-    status: 'Aktif Mengawas'
+    status: 'Offline'
   },
   {
     id: 'pengawas-utama',
@@ -27,7 +27,7 @@ export const initialTeachers: Teacher[] = [
     role: 'pengawas',
     pin: 'pengawas123',
     avatarColor: 'bg-amber-700',
-    status: 'Aktif Mengawas'
+    status: 'Offline'
   },
   {
     id: 'tea-1793370367297',
@@ -46,6 +46,6 @@ export const initialTeachers: Teacher[] = [
     role: 'guru_mapel',
     pin: 'palembang58',
     avatarColor: 'bg-violet-600',
-    status: 'Aktif Mengawas'
+    status: 'Offline'
   }
 ];

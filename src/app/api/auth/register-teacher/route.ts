@@ -135,7 +135,7 @@ export async function POST(req: NextRequest) {
       role: teacher.role || 'guru_mapel',
       pin: cleanPin,
       avatar_color: teacher.avatarColor || 'bg-violet-600',
-      status: 'Aktif Mengawas'
+      status: 'Offline'
     };
 
     const { error: insertErr } = await supabase
@@ -164,7 +164,7 @@ export async function POST(req: NextRequest) {
         role: teacher.role || 'guru_mapel',
         pin: cleanPin,
         avatarColor: teacher.avatarColor || 'bg-violet-600',
-        status: 'Aktif Mengawas',
+        status: 'Offline',
         lastLogin: new Date().toISOString()
       }
     });

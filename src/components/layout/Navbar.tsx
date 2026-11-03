@@ -852,6 +852,12 @@ export const Navbar: React.FC<NavbarProps> = ({
                   <div className="space-y-2 max-h-[30vh] overflow-y-auto pr-1">
                     {realTeachers.map((tea) => {
                       const teaPhoto = getTeacherPhoto(tea);
+                      const isCurrent = tea.id === currentTeacher?.id;
+                      const isRecentlyActive = !isCurrent && tea.status === 'Aktif Mengawas' && (() => {
+                        if (!tea.lastLogin) return false;
+                        const diffMs = Date.now() - new Date(tea.lastLogin).getTime();
+                        return diffMs >= 0 && diffMs < 15 * 60 * 1000;
+                      })();
                       return (
                         <div
                           key={tea.id}
@@ -888,14 +894,14 @@ export const Navbar: React.FC<NavbarProps> = ({
 
                           <span
                             className={`text-[10px] font-bold px-2 py-0.5 rounded-full flex-shrink-0 ${
-                              tea.id === currentTeacher?.id
-                                ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 font-extrabold'
-                                : tea.status?.includes('Mengawas')
+                              isCurrent
+                                ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 font-extrabold ring-1 ring-emerald-500/30'
+                                : isRecentlyActive
                                 ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300'
-                                : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+                                : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'
                             }`}
                           >
-                            {tea.id === currentTeacher?.id ? '● Sedang Aktif' : (tea.status || 'Offline')}
+                            {isCurrent ? '● Sedang Aktif' : isRecentlyActive ? 'Aktif Mengawas' : 'Offline'}
                           </span>
                         </div>
                       );

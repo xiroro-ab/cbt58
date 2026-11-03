@@ -741,7 +741,20 @@ export default function Home() {
       }
       localStorage.setItem('cbt_logged_teacher_id', teacher.id);
     }
-    setCurrentTeacher(teacher);
+    if (currentTeacher?.id && currentTeacher.id !== teacher.id) {
+      updateTeacherStatusInSupabase(currentTeacher.id, 'Offline').catch(() => {});
+    }
+    const loggedInTeacher: Teacher = {
+      ...teacher,
+      status: 'Aktif Mengawas',
+      lastLogin: new Date().toISOString()
+    };
+    setCurrentTeacher(loggedInTeacher);
+    setTeachers(prev => prev.map(t => {
+      if (t.id === teacher.id) return loggedInTeacher;
+      if (currentTeacher?.id && t.id === currentTeacher.id) return { ...t, status: 'Offline' };
+      return t;
+    }));
     setViewMode('teacher');
 
     const firstAsg = teacher.assignments && teacher.assignments.length > 0
@@ -829,6 +842,11 @@ export default function Home() {
   };
 
   const handleTeacherLogout = () => {
+    if (currentTeacher?.id) {
+      const loggingOutId = currentTeacher.id;
+      updateTeacherStatusInSupabase(loggingOutId, 'Offline').catch(() => {});
+      setTeachers(prev => prev.map(t => t.id === loggingOutId ? { ...t, status: 'Offline' } : t));
+    }
     setCurrentTeacher(null);
     if (typeof window !== 'undefined') {
       localStorage.removeItem('cbt_logged_teacher_id');

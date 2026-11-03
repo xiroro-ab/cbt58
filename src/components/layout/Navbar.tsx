@@ -6,6 +6,7 @@ import { useLanguage } from '@/context/LanguageContext';
 import { ExamNotification, ExamMessage, Teacher, Subject } from '@/types/cbt';
 import { initialTeachers } from '@/lib/rosterTeachers';
 import { resolveStudentSingleClass } from '@/lib/rosterStudents';
+import { NavItem } from './Sidebar';
 import {
   Sun,
   Moon,
@@ -52,6 +53,7 @@ interface NavbarProps {
   allSubjects?: Subject[];
   activeAssignmentSubject?: string;
   onSelectAssignment?: (subjectName: string) => void;
+  onSelectNav?: (nav: NavItem) => void;
   onLogoutTeacher?: () => void;
   onSwitchTeacher?: (teacher: Teacher) => void;
   onToggleMobileSidebar?: () => void;
@@ -98,6 +100,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   allSubjects,
   activeAssignmentSubject,
   onSelectAssignment,
+  onSelectNav,
   onLogoutTeacher,
   onSwitchTeacher,
   onToggleMobileSidebar
@@ -276,6 +279,25 @@ export const Navbar: React.FC<NavbarProps> = ({
             )}
           </div>
         )}
+        {/* Tombol Akses Cepat: Kelola Penugasan Mengajar */}
+        {currentTeacher && (
+          <button
+            type="button"
+            onClick={() => onSelectNav?.('assignments')}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl border border-violet-200 dark:border-violet-800 bg-violet-50/80 dark:bg-violet-950/50 text-xs font-bold text-violet-700 dark:text-violet-300 hover:bg-violet-100 dark:hover:bg-violet-900 transition shadow-2xs cursor-pointer shrink-0"
+            title="Kelola Mata Pelajaran & Rombel Kelas yang Diampu"
+          >
+            <BookOpen className="w-3.5 h-3.5 text-violet-600 dark:text-violet-400 shrink-0" />
+            <span className="hidden md:inline max-w-[130px] truncate">
+              {activeAssignmentSubject || currentTeacher.subject || 'Penugasan Mengajar'}
+            </span>
+            <span className="inline md:hidden text-[11px] font-bold">Mapel</span>
+            <span className="hidden lg:inline text-[9px] bg-violet-200 dark:bg-violet-900 text-violet-800 dark:text-violet-200 px-1.5 py-0.5 rounded font-bold">
+              Ubah Mapel/Kelas
+            </span>
+          </button>
+        )}
+
         {/* Toggle Language ID / EN */}
         <button
           onClick={toggleLanguage}
@@ -720,9 +742,10 @@ export const Navbar: React.FC<NavbarProps> = ({
 
         {/* Modal Profil Pengguna & Direktori Guru */}
         {showTeachersModal && (
-          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-lg w-full max-h-[85vh] overflow-y-auto p-6 space-y-4 shadow-2xl animate-in zoom-in-95">
-              <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-in fade-in">
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-lg w-full max-h-[88vh] flex flex-col shadow-2xl animate-in zoom-in-95 overflow-hidden">
+              {/* FIXED HEADER */}
+              <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 p-4 sm:p-5 shrink-0 bg-slate-50/50 dark:bg-slate-900/50">
                 <div className="flex items-center gap-2.5">
                   <div className="w-9 h-9 rounded-xl bg-violet-100 dark:bg-violet-950/60 text-violet-600 dark:text-violet-400 flex items-center justify-center font-bold">
                     <Users className="w-5 h-5" />
@@ -742,130 +765,158 @@ export const Navbar: React.FC<NavbarProps> = ({
                 </button>
               </div>
 
-              {/* Status Akun Aktif & Tombol Logout / Ganti Akun */}
-              {currentTeacher && (
-                <div className="p-4 rounded-2xl bg-violet-50 dark:bg-violet-950/40 border border-violet-200/80 dark:border-violet-800/60 flex items-center justify-between gap-3 text-xs">
-                  <div className="flex items-center gap-3">
-                    <div
-                      className={`w-11 h-11 rounded-2xl ${
-                        currentTeacher.avatarColor || 'bg-violet-600'
-                      } text-white font-bold text-sm flex items-center justify-center shadow-xs flex-shrink-0 overflow-hidden`}
-                    >
-                      {getTeacherPhoto(currentTeacher) ? (
-                        <img src={getTeacherPhoto(currentTeacher)!} alt={currentTeacher.name} className="w-full h-full object-cover" />
-                      ) : (
-                        currentTeacher.name.charAt(0)
+              {/* SCROLLABLE BODY */}
+              <div className="p-4 sm:p-6 overflow-y-auto space-y-4 flex-1">
+                {/* Status Akun Aktif & Tombol Logout / Ganti Akun */}
+                {currentTeacher && (
+                  <div className="p-4 rounded-2xl bg-violet-50/70 dark:bg-violet-950/40 border border-violet-200/80 dark:border-violet-800/60 space-y-3 text-xs">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        <div
+                          className={`w-11 h-11 rounded-2xl ${
+                            currentTeacher.avatarColor || 'bg-violet-600'
+                          } text-white font-bold text-sm flex items-center justify-center shadow-xs flex-shrink-0 overflow-hidden`}
+                        >
+                          {getTeacherPhoto(currentTeacher) ? (
+                            <img src={getTeacherPhoto(currentTeacher)!} alt={currentTeacher.name} className="w-full h-full object-cover" />
+                          ) : (
+                            currentTeacher.name.charAt(0)
+                          )}
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-1.5">
+                            <p className="font-bold text-slate-900 dark:text-white text-sm">{currentTeacher.name}</p>
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-violet-200 dark:bg-violet-900 text-violet-800 dark:text-violet-200">
+                              {currentTeacher.role === 'admin'
+                                ? 'Superadmin'
+                                : currentTeacher.role === 'pengawas'
+                                ? 'Pengawas'
+                                : 'Guru Mapel'}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                            NIP: {currentTeacher.nip} • {currentTeacher.subject}
+                          </p>
+                        </div>
+                      </div>
+
+                      {onLogoutTeacher && (
+                        <button
+                          onClick={() => {
+                            setShowTeachersModal(false);
+                            onLogoutTeacher();
+                          }}
+                          className="px-3 py-1.5 rounded-xl bg-rose-50 dark:bg-rose-950/50 hover:bg-rose-100 dark:hover:bg-rose-900 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer flex-shrink-0 shadow-xs"
+                        >
+                          <LogOut className="w-3.5 h-3.5" />
+                          <span>Ganti Akun</span>
+                        </button>
                       )}
                     </div>
-                    <div>
-                      <div className="flex items-center gap-1.5">
-                        <p className="font-bold text-slate-900 dark:text-white text-sm">{currentTeacher.name}</p>
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-violet-200 dark:bg-violet-900 text-violet-800 dark:text-violet-200">
-                          {currentTeacher.role === 'admin'
-                            ? 'Superadmin'
-                            : currentTeacher.role === 'pengawas'
-                            ? 'Pengawas'
-                            : 'Guru Mapel'}
+
+                    {/* Rincian Rombel & Mapel Diampu */}
+                    {currentTeacher.assignments && currentTeacher.assignments.length > 0 && (
+                      <div className="pt-2 border-t border-violet-200/60 dark:border-violet-800/40">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-violet-600 dark:text-violet-400 block mb-1">
+                          Penugasan Mengajar Aktif ({currentTeacher.assignments.length} Mapel):
                         </span>
-                      </div>
-                      <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                        NIP: {currentTeacher.nip} • {currentTeacher.subject}
-                      </p>
-                      {currentTeacher.assignments && currentTeacher.assignments.length > 0 && (
-                        <div className="mt-1.5 flex flex-wrap gap-1">
+                        <div className="flex flex-wrap gap-1.5">
                           {currentTeacher.assignments.map((a, i) => (
-                            <span key={i} className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
-                              📚 {a.subject} ({a.classes?.length ? a.classes.join(', ') : 'Semua Kelas'})
+                            <span key={i} className="text-[11px] font-semibold px-2.5 py-1 rounded-xl bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 border border-violet-200 dark:border-violet-800 shadow-2xs">
+                              📚 {a.subject} <strong className="text-violet-600 dark:text-violet-400 font-bold">({a.classes?.length ? a.classes.join(', ') : 'Semua Kelas'})</strong>
                             </span>
                           ))}
                         </div>
-                      )}
-                    </div>
-                  </div>
+                      </div>
+                    )}
 
-                  {onLogoutTeacher && (
+                    {/* TOMBOL UTAMA: KELOLA PENUGASAN MENGAJAR */}
                     <button
+                      type="button"
                       onClick={() => {
                         setShowTeachersModal(false);
-                        onLogoutTeacher();
+                        onSelectNav?.('assignments');
                       }}
-                      className="px-3.5 py-2 rounded-xl bg-rose-50 dark:bg-rose-950/50 hover:bg-rose-100 dark:hover:bg-rose-900 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer flex-shrink-0 shadow-xs"
+                      className="w-full mt-2 py-2.5 px-4 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-bold text-xs shadow-md shadow-violet-600/20 transition flex items-center justify-center gap-2 cursor-pointer"
                     >
-                      <LogOut className="w-3.5 h-3.5" />
-                      <span>Ganti Akun</span>
+                      <BookOpen className="w-4 h-4" />
+                      <span>⚙️ Kelola Penugasan Mengajar (Mata Pelajaran & Rombel Kelas)</span>
                     </button>
-                  )}
+                  </div>
+                )}
+
+                {/* Petunjuk Autentikasi Resmi */}
+                <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700/60 text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed">
+                  🔒 <strong>Keamanan Akun:</strong> Untuk berganti peran sebagai <strong>Pengawas</strong> atau guru lainnya, silakan klik tombol <strong>"Ganti Akun"</strong> di atas, lalu masuk menggunakan NIP dan PIN resmi akun tersebut.
                 </div>
-              )}
 
-              {/* Petunjuk Autentikasi Resmi */}
-              <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700/60 text-[11px] text-slate-600 dark:text-slate-300">
-                🔒 <strong>Keamanan Akun:</strong> Untuk berganti peran sebagai <strong>Pengawas</strong> atau guru lainnya, silakan klik tombol <strong>"Ganti Akun"</strong> di atas, lalu masuk menggunakan NIP dan PIN resmi akun tersebut.
-              </div>
-
-              {/* Direktori Informasi Guru & Pengawas */}
-              <div className="space-y-1.5 pt-1">
-                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
-                  Direktori Dewan Guru & Pengawas ({realTeachers.length})
-                </span>
-                <div className="space-y-2 max-h-[35vh] overflow-y-auto pr-1">
-                  {realTeachers.map((tea) => {
-                    const teaPhoto = getTeacherPhoto(tea);
-                    return (
-                      <div
-                        key={tea.id}
-                        className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 flex items-center justify-between gap-3 text-xs"
-                      >
-                        <div className="flex items-center gap-2.5">
-                          <div
-                            className={`w-8 h-8 rounded-full ${
-                              tea.avatarColor || 'bg-violet-600'
-                            } text-white font-bold text-[11px] flex items-center justify-center flex-shrink-0 overflow-hidden ring-1 ring-slate-200 dark:ring-slate-700`}
-                          >
-                            {teaPhoto ? (
-                              <img src={teaPhoto} alt={tea.name} className="w-full h-full object-cover" />
-                            ) : (
-                              tea.name.charAt(0)
-                            )}
-                          </div>
-                          <div>
-                            <div className="flex items-center gap-1.5">
-                              <p className="font-bold text-slate-900 dark:text-white">{tea.name}</p>
-                              <span className="text-[9px] font-bold px-1.5 py-0.2 rounded-md bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300">
-                                {tea.role === 'admin'
-                                  ? 'Superadmin'
-                                  : tea.role === 'pengawas'
-                                  ? 'Pengawas'
-                                  : 'Guru'}
-                              </span>
-                            </div>
-                            <p className="text-[11px] text-slate-400">
-                              {tea.subject} • NIP: {tea.nip}
-                            </p>
-                          </div>
-                        </div>
-
-                        <span
-                          className={`text-[10px] font-bold px-2 py-0.5 rounded-full flex-shrink-0 ${
-                            tea.id === currentTeacher?.id
-                              ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 font-extrabold'
-                              : tea.status?.includes('Mengawas')
-                              ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300'
-                              : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
-                          }`}
+                {/* Direktori Informasi Guru & Pengawas */}
+                <div className="space-y-1.5 pt-1">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
+                    Direktori Dewan Guru & Pengawas ({realTeachers.length})
+                  </span>
+                  <div className="space-y-2 max-h-[30vh] overflow-y-auto pr-1">
+                    {realTeachers.map((tea) => {
+                      const teaPhoto = getTeacherPhoto(tea);
+                      return (
+                        <div
+                          key={tea.id}
+                          className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 flex items-center justify-between gap-3 text-xs"
                         >
-                          {tea.id === currentTeacher?.id ? '● Sedang Aktif' : (tea.status || 'Offline')}
-                        </span>
-                      </div>
-                    );
-                  })}
+                          <div className="flex items-center gap-2.5">
+                            <div
+                              className={`w-8 h-8 rounded-full ${
+                                tea.avatarColor || 'bg-violet-600'
+                              } text-white font-bold text-[11px] flex items-center justify-center flex-shrink-0 overflow-hidden ring-1 ring-slate-200 dark:ring-slate-700`}
+                            >
+                              {teaPhoto ? (
+                                <img src={teaPhoto} alt={tea.name} className="w-full h-full object-cover" />
+                              ) : (
+                                tea.name.charAt(0)
+                              )}
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-1.5">
+                                <p className="font-bold text-slate-900 dark:text-white">{tea.name}</p>
+                                <span className="text-[9px] font-bold px-1.5 py-0.2 rounded-md bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300">
+                                  {tea.role === 'admin'
+                                    ? 'Superadmin'
+                                    : tea.role === 'pengawas'
+                                    ? 'Pengawas'
+                                    : 'Guru'}
+                                </span>
+                              </div>
+                              <p className="text-[11px] text-slate-400">
+                                {tea.subject} • NIP: {tea.nip}
+                              </p>
+                            </div>
+                          </div>
+
+                          <span
+                            className={`text-[10px] font-bold px-2 py-0.5 rounded-full flex-shrink-0 ${
+                              tea.id === currentTeacher?.id
+                                ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 font-extrabold'
+                                : tea.status?.includes('Mengawas')
+                                ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300'
+                                : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+                            }`}
+                          >
+                            {tea.id === currentTeacher?.id ? '● Sedang Aktif' : (tea.status || 'Offline')}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
 
-              <div className="flex justify-end pt-2">
+              {/* FIXED FOOTER */}
+              <div className="p-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-3 bg-slate-50/50 dark:bg-slate-900/50 shrink-0">
+                <span className="text-[11px] text-slate-400">SMPN 58 Palembang CBT</span>
                 <button
+                  type="button"
                   onClick={() => setShowTeachersModal(false)}
-                  className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold text-xs cursor-pointer"
+                  className="px-5 py-2 rounded-xl bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-bold text-xs transition cursor-pointer"
                 >
                   {t.close}
                 </button>

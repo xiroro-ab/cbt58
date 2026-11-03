@@ -31,7 +31,8 @@ export type NavItem =
   | 'results'
   | 'statistics'
   | 'documents'
-  | 'settings';
+  | 'settings'
+  | 'assignments';
 
 interface SidebarProps {
   currentNav: NavItem;
@@ -276,6 +277,24 @@ export const Sidebar: React.FC<SidebarProps> = ({
             {t.systemGroup}
           </span>
           <div className="space-y-0.5">
+            {/* Menu Baru: Penugasan Mengajar (Mata Pelajaran & Rombel Kelas) */}
+            <button
+              onClick={() => handleNavSelect('assignments')}
+              className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl font-medium transition ${
+                currentNav === 'assignments'
+                  ? 'bg-violet-50 dark:bg-violet-950/40 text-violet-700 dark:text-violet-300 font-semibold'
+                  : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-slate-100'
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <BookOpen className="w-4 h-4 text-violet-600 dark:text-violet-400" />
+                <span>Penugasan Mengajar</span>
+              </div>
+              <span className="px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-violet-100 dark:bg-violet-900/60 text-violet-700 dark:text-violet-300">
+                Mapel
+              </span>
+            </button>
+
             <button
               onClick={() => handleNavSelect('settings')}
               className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl font-medium transition ${
@@ -307,11 +326,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
       {/* 4. FOOTER INFO AKUN YANG SEDANG LOGIN */}
       <div className="p-3.5 border-t border-slate-100 dark:border-slate-800/60 bg-slate-50/50 dark:bg-slate-950/40">
         <div className="flex items-center justify-between gap-2.5">
-          <div className="flex items-center gap-2.5 min-w-0">
+          <div
+            onClick={() => handleNavSelect('assignments')}
+            className="flex items-center gap-2.5 min-w-0 cursor-pointer hover:opacity-85 transition group"
+            title="Klik untuk Kelola Penugasan Mapel & Rombel Kelas"
+          >
             <div
               className={`w-8 h-8 rounded-full ${
                 currentTeacher?.avatarColor || 'bg-violet-600'
-              } text-white font-bold flex items-center justify-center text-xs flex-shrink-0 shadow-xs`}
+              } text-white font-bold flex items-center justify-center text-xs flex-shrink-0 shadow-xs group-hover:ring-2 ring-violet-500`}
             >
               {currentTeacher
                 ? currentTeacher.name
@@ -325,7 +348,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </div>
             <div className="truncate">
               <p
-                className="text-xs font-bold text-slate-900 dark:text-slate-100 truncate"
+                className="text-xs font-bold text-slate-900 dark:text-slate-100 truncate group-hover:text-violet-600 dark:group-hover:text-violet-400"
                 title={currentTeacher?.name || 'Pak Guru'}
               >
                 {currentTeacher?.name || 'Pak Guru'}

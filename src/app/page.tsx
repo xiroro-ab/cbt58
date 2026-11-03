@@ -1852,6 +1852,7 @@ export default function Home() {
           allSubjects={subjects}
           activeAssignmentSubject={activeAssignmentSubject || currentTeacher?.subject}
           onSelectAssignment={handleSelectAssignment}
+          onSelectNav={setCurrentNav}
           onLogoutTeacher={handleTeacherLogout}
           onSwitchTeacher={handleSwitchTeacher}
         />

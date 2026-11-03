@@ -7,23 +7,9 @@ export async function POST(req: NextRequest) {
     const { passcode, teacher } = body;
 
     // 1. Verifikasi Kode Otorisasi Dewan Guru di Sisi Server (Backend)
-    // Server memprioritaskan Environment Variable, lalu konfigurasi database Supabase, lalu fallback 'GURU58'.
+    // Server memprioritaskan Environment Variable, lalu konfigurasi database Supabase (teachers row __cbt_school_settings__), lalu fallback 'GURU58'.
     // Kode ini TIDAK PERNAH dikirim ke client/frontend bundle, sehingga aman 100% dari Inspect DevTools browser.
     let expectedPasscode = process.env.TEACHER_REGISTRATION_PASSCODE?.trim();
-
-    if (!expectedPasscode) {
-      try {
-        const { data: directData } = await supabase
-          .from('school_settings')
-          .select('teacher_registration_passcode')
-          .eq('id', 'default')
-          .maybeSingle();
-
-        if (directData?.teacher_registration_passcode && typeof directData.teacher_registration_passcode === 'string') {
-          expectedPasscode = directData.teacher_registration_passcode.trim();
-        }
-      } catch {}
-    }
 
     if (!expectedPasscode) {
       try {
@@ -40,8 +26,22 @@ export async function POST(req: NextRequest) {
           }
         }
       } catch (err) {
-        console.warn('Gagal membaca passcode dari Supabase config:', err);
+        console.warn('Gagal membaca passcode dari Supabase config row teachers:', err);
       }
+    }
+
+    if (!expectedPasscode) {
+      try {
+        const { data: directData } = await supabase
+          .from('school_settings')
+          .select('*')
+          .eq('id', 'default')
+          .maybeSingle();
+
+        if (directData?.teacher_registration_passcode && typeof directData.teacher_registration_passcode === 'string') {
+          expectedPasscode = directData.teacher_registration_passcode.trim();
+        }
+      } catch {}
     }
 
     // Default fallback jika belum dikonfigurasi di cloud/env

@@ -7607,7 +7607,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                       <div className="flex items-center gap-2 w-full sm:w-auto shrink-0">
                         <input
                           type="text"
-                          value={localSettingsForm.teacherRegistrationPasscode || 'GURU58'}
+                          value={localSettingsForm.teacherRegistrationPasscode ?? ''}
                           onChange={e => setLocalSettingsForm(prev => ({ ...prev, teacherRegistrationPasscode: e.target.value.toUpperCase() }))}
                           placeholder="Contoh: GURU58"
                           className="w-full sm:w-44 px-3.5 py-2 rounded-xl bg-white dark:bg-slate-900 border border-amber-300 dark:border-amber-700 text-slate-900 dark:text-white uppercase font-mono font-bold text-xs tracking-wider focus:outline-none focus:ring-2 focus:ring-amber-500 shadow-2xs"
@@ -7615,11 +7615,14 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                         <button
                           type="button"
                           onClick={() => {
-                            onUpdateSchoolSettings?.(localSettingsForm);
+                            const codeToSave = (localSettingsForm.teacherRegistrationPasscode || '').trim() || 'GURU58';
+                            const updated = { ...localSettingsForm, teacherRegistrationPasscode: codeToSave };
+                            setLocalSettingsForm(updated);
+                            onUpdateSchoolSettings?.(updated);
                             setSettingsSavedToast(true);
                             showThemedAlert(
                               'Kode Otorisasi Berhasil Diperbarui',
-                              `Kode otorisasi pendaftaran dewan guru berhasil disimpan dengan kode "${localSettingsForm.teacherRegistrationPasscode || 'GURU58'}". Tersinkronisasi permanen ke Server & Supabase Cloud.`,
+                              `Kode otorisasi pendaftaran dewan guru berhasil disimpan dengan kode "${codeToSave}". Tersinkronisasi permanen ke Server & Supabase Cloud.`,
                               'info'
                             );
                             setTimeout(() => setSettingsSavedToast(false), 3000);

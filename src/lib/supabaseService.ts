@@ -2019,58 +2019,74 @@ export const defaultSchoolSettings: SchoolSettings = {
 
 /**
  * Mengambil Pengaturan Satuan Pendidikan, Kop Surat & Pejabat dari Database Supabase
- * Memeriksa tabel `school_settings`, lalu fallback ke row `__cbt_school_settings__` di tabel `teachers`.
+ * Menggabungkan tabel `school_settings` dan row `__cbt_school_settings__` di tabel `teachers`.
  */
 export async function fetchSchoolSettingsFromSupabase(): Promise<SchoolSettings | null> {
   try {
-    // 1. Coba baca dari tabel school_settings jika sudah dibuat
-    try {
-      const { data: directData, error: directErr } = await supabase
-        .from('school_settings')
-        .select('*')
-        .eq('id', 'default')
-        .maybeSingle();
+    const [directRes, teacherCfgRes] = await Promise.all([
+      (async () => {
+        try {
+          return await supabase.from('school_settings').select('*').eq('id', 'default').maybeSingle();
+        } catch {
+          return { data: null, error: null };
+        }
+      })(),
+      (async () => {
+        try {
+          return await supabase.from('teachers').select('assignments').eq('id', '__cbt_school_settings__').maybeSingle();
+        } catch {
+          return { data: null, error: null };
+        }
+      })()
+    ]);
 
-      if (!directErr && directData) {
-        return {
-          institution1: directData.institution1 || defaultSchoolSettings.institution1,
-          institution2: directData.institution2 || defaultSchoolSettings.institution2,
-          schoolName: directData.school_name || defaultSchoolSettings.schoolName,
-          schoolAddress: directData.school_address || defaultSchoolSettings.schoolAddress,
-          schoolContact: directData.school_contact || defaultSchoolSettings.schoolContact,
-          logoLeft: directData.logo_left || defaultSchoolSettings.logoLeft,
-          logoRight: directData.logo_right || defaultSchoolSettings.logoRight,
-          principalName: directData.principal_name || defaultSchoolSettings.principalName,
-          principalNip: directData.principal_nip || defaultSchoolSettings.principalNip,
-          principalPhoto: directData.principal_photo || '',
-          teacherName: directData.teacher_name || defaultSchoolSettings.teacherName,
-          teacherNip: directData.teacher_nip || defaultSchoolSettings.teacherNip,
-          city: directData.city || defaultSchoolSettings.city,
-          enableTTE: directData.enable_tte !== false,
-          tteType: (directData.tte_type === 'barcode' ? 'barcode' : 'qrcode'),
-          isolateTeacherDossier: directData.isolate_teacher_dossier !== false,
-          teacherRegistrationPasscode: directData.teacher_registration_passcode || directData.teacherRegistrationPasscode || defaultSchoolSettings.teacherRegistrationPasscode
-        };
-      }
-    } catch {}
+    const directData = directRes?.data;
+    const teacherAssignments = (teacherCfgRes?.data?.assignments && typeof teacherCfgRes.data.assignments === 'object')
+      ? (teacherCfgRes.data.assignments as Record<string, any>)
+      : null;
 
-    // 2. Fallback: Baca dari row config di tabel teachers (langsung berfungsi tanpa perlu modifikasi skema manual)
-    const { data: teacherCfg, error: cfgErr } = await supabase
-      .from('teachers')
-      .select('assignments')
-      .eq('id', '__cbt_school_settings__')
-      .maybeSingle();
+    if (!directData && !teacherAssignments) {
+      return null;
+    }
 
-    if (!cfgErr && teacherCfg && teacherCfg.assignments && typeof teacherCfg.assignments === 'object') {
-      const cfg = teacherCfg.assignments as Partial<SchoolSettings>;
-      if (cfg && (cfg.schoolName || cfg.principalName)) {
-        return {
-          ...defaultSchoolSettings,
-          ...cfg,
-          logoLeft: cfg.logoLeft || defaultSchoolSettings.logoLeft,
-          logoRight: cfg.logoRight || defaultSchoolSettings.logoRight
-        };
-      }
+    // Ambil passcode dari config guru (JSONB persisten), atau directData jika ada, atau default
+    const resolvedPasscode =
+      teacherAssignments?.teacherRegistrationPasscode ||
+      directData?.teacher_registration_passcode ||
+      directData?.teacherRegistrationPasscode ||
+      defaultSchoolSettings.teacherRegistrationPasscode;
+
+    if (directData) {
+      return {
+        institution1: directData.institution1 || teacherAssignments?.institution1 || defaultSchoolSettings.institution1,
+        institution2: directData.institution2 || teacherAssignments?.institution2 || defaultSchoolSettings.institution2,
+        schoolName: directData.school_name || teacherAssignments?.schoolName || defaultSchoolSettings.schoolName,
+        schoolAddress: directData.school_address || teacherAssignments?.schoolAddress || defaultSchoolSettings.schoolAddress,
+        schoolContact: directData.school_contact || teacherAssignments?.schoolContact || defaultSchoolSettings.schoolContact,
+        logoLeft: directData.logo_left || teacherAssignments?.logoLeft || defaultSchoolSettings.logoLeft,
+        logoRight: directData.logo_right || teacherAssignments?.logoRight || defaultSchoolSettings.logoRight,
+        principalName: directData.principal_name || teacherAssignments?.principalName || defaultSchoolSettings.principalName,
+        principalNip: directData.principal_nip || teacherAssignments?.principalNip || defaultSchoolSettings.principalNip,
+        principalTitle: teacherAssignments?.principalTitle || defaultSchoolSettings.principalTitle,
+        principalPhoto: directData.principal_photo || teacherAssignments?.principalPhoto || '',
+        teacherName: directData.teacher_name || teacherAssignments?.teacherName || defaultSchoolSettings.teacherName,
+        teacherNip: directData.teacher_nip || teacherAssignments?.teacherNip || defaultSchoolSettings.teacherNip,
+        city: directData.city || teacherAssignments?.city || defaultSchoolSettings.city,
+        enableTTE: directData.enable_tte !== undefined ? directData.enable_tte !== false : (teacherAssignments?.enableTTE !== false),
+        tteType: (directData.tte_type === 'barcode' || teacherAssignments?.tteType === 'barcode') ? 'barcode' : 'qrcode',
+        isolateTeacherDossier: directData.isolate_teacher_dossier !== undefined ? directData.isolate_teacher_dossier !== false : (teacherAssignments?.isolateTeacherDossier !== false),
+        teacherRegistrationPasscode: resolvedPasscode
+      };
+    }
+
+    if (teacherAssignments) {
+      return {
+        ...defaultSchoolSettings,
+        ...teacherAssignments,
+        teacherRegistrationPasscode: resolvedPasscode,
+        logoLeft: teacherAssignments.logoLeft || defaultSchoolSettings.logoLeft,
+        logoRight: teacherAssignments.logoRight || defaultSchoolSettings.logoRight
+      };
     }
 
     return null;
@@ -2087,40 +2103,43 @@ export async function fetchSchoolSettingsFromSupabase(): Promise<SchoolSettings 
 export async function saveSchoolSettingsToSupabase(settings: SchoolSettings): Promise<{ success: boolean; error?: string }> {
   let savedToDirect = false;
 
-  // 1. Coba simpan ke tabel school_settings jika tersedia
+  // 1. Coba simpan ke tabel school_settings (hanya kolom-kolom yang valid di skema tabel)
   try {
+    const directPayload: Record<string, any> = {
+      id: 'default',
+      institution1: settings.institution1 || defaultSchoolSettings.institution1,
+      institution2: settings.institution2 || defaultSchoolSettings.institution2,
+      school_name: settings.schoolName || defaultSchoolSettings.schoolName,
+      school_address: settings.schoolAddress || defaultSchoolSettings.schoolAddress,
+      school_contact: settings.schoolContact || defaultSchoolSettings.schoolContact,
+      logo_left: settings.logoLeft || defaultSchoolSettings.logoLeft,
+      logo_right: settings.logoRight || defaultSchoolSettings.logoRight,
+      principal_name: settings.principalName || defaultSchoolSettings.principalName,
+      principal_nip: settings.principalNip || defaultSchoolSettings.principalNip,
+      principal_photo: settings.principalPhoto || '',
+      teacher_name: settings.teacherName || defaultSchoolSettings.teacherName,
+      teacher_nip: settings.teacherNip || defaultSchoolSettings.teacherNip,
+      city: settings.city || defaultSchoolSettings.city,
+      enable_tte: settings.enableTTE !== false,
+      tte_type: settings.tteType || 'qrcode',
+      isolate_teacher_dossier: settings.isolateTeacherDossier !== false,
+      updated_at: new Date().toISOString()
+    };
+
     const { error: directError } = await supabase
       .from('school_settings')
-      .upsert({
-        id: 'default',
-        institution1: settings.institution1 || defaultSchoolSettings.institution1,
-        institution2: settings.institution2 || defaultSchoolSettings.institution2,
-        school_name: settings.schoolName || defaultSchoolSettings.schoolName,
-        school_address: settings.schoolAddress || defaultSchoolSettings.schoolAddress,
-        school_contact: settings.schoolContact || defaultSchoolSettings.schoolContact,
-        logo_left: settings.logoLeft || defaultSchoolSettings.logoLeft,
-        logo_right: settings.logoRight || defaultSchoolSettings.logoRight,
-        principal_name: settings.principalName || defaultSchoolSettings.principalName,
-        principal_nip: settings.principalNip || defaultSchoolSettings.principalNip,
-        principal_photo: settings.principalPhoto || '',
-        teacher_name: settings.teacherName || defaultSchoolSettings.teacherName,
-        teacher_nip: settings.teacherNip || defaultSchoolSettings.teacherNip,
-        city: settings.city || defaultSchoolSettings.city,
-        enable_tte: settings.enableTTE !== false,
-        tte_type: settings.tteType || 'qrcode',
-        isolate_teacher_dossier: settings.isolateTeacherDossier !== false,
-        teacher_registration_passcode: settings.teacherRegistrationPasscode || 'GURU58',
-        updated_at: new Date().toISOString()
-      }, { onConflict: 'id' });
+      .upsert(directPayload, { onConflict: 'id' });
 
     if (!directError) {
       savedToDirect = true;
+    } else {
+      console.warn('Peringatan upsert school_settings:', directError.message);
     }
   } catch (e: any) {
-    // school_settings mungkin belum dibuat di Supabase
+    // school_settings mungkin belum dibuat atau ada kendala koneksi
   }
 
-  // 2. Selalu simpan juga ke config row di tabel teachers sebagai penyimpanan persisten cloud yang pasti ada
+  // 2. Selalu simpan seluruh data (termasuk teacherRegistrationPasscode) ke row config di tabel teachers
   try {
     const { error: teacherError } = await supabase
       .from('teachers')

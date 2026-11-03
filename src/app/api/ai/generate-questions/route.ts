@@ -43,7 +43,7 @@ export async function POST(req: NextRequest) {
       counts = { pg: 5, pgk: 2, bs: 2, jodoh: 1, isian: 0, esai: 0 },
       customInstructions = '',
       apiKey: clientApiKey = '',
-      model: clientModel = 'gemini-1.5-flash'
+      model: clientModel = ''
     } = body;
 
     // Prioritas Kunci API: 1. Input pribadi guru -> 2. Environment Vercel server sekolah
@@ -94,7 +94,8 @@ export async function POST(req: NextRequest) {
     });
 
     // Sanitasi nama model yang dipilih guru (bersihkan spasi dan prefix 'models/' jika ada)
-    const rawModel = (clientModel || 'gemini-1.5-flash').trim();
+    const defaultModel = process.env.NEXT_PUBLIC_GEMINI_MODEL || process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+    const rawModel = (clientModel?.trim() || defaultModel).trim();
     const selectedModel = rawModel.replace(/^models\//i, '');
     const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
       selectedModel

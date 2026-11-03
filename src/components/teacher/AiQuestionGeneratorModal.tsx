@@ -109,7 +109,7 @@ export function AiQuestionGeneratorModal({
   });
 
   // 4. MODEL GEMINI & KUNCI API KESUKAAN GURU
-  const [modelName, setModelName] = useState<string>('gemini-1.5-flash');
+  const [modelName, setModelName] = useState<string>('');
   const [apiKey, setApiKey] = useState('');
   const [showApiKeyInput, setShowApiKeyInput] = useState(false);
   const [isApiKeySaved, setIsApiKeySaved] = useState(false);
@@ -238,7 +238,7 @@ export function AiQuestionGeneratorModal({
     }
   };
 
-  const activeModelId = modelName.trim() || 'gemini-1.5-flash';
+  const activeModelId = modelName.trim() || 'gemini-2.5-flash';
 
   // Salin prompt untuk dipakai di gemini.google.com
   const handleCopyPrompt = () => {
@@ -896,11 +896,11 @@ export function AiQuestionGeneratorModal({
                               localStorage.setItem('cbt_gemini_model', val.trim());
                             }
                           }}
-                          placeholder="Masukkan nama model (contoh: gemini-1.5-flash, gemini-2.5-flash, gemini-3.0-flash)"
+                          placeholder="gemini-2.5-flash (Kosongkan jika menggunakan bawaan website)"
                           className="w-full text-xs font-mono px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500"
                         />
                         <p className="text-[10px] text-slate-400 mt-1">
-                          Ketik kode model yang aktif dari Google AI Studio (misal: <code className="text-violet-600 dark:text-violet-400 font-bold">gemini-1.5-flash</code> atau model lainnya).
+                          Ketik kode model yang aktif dari Google AI Studio (misal: <code className="text-violet-600 dark:text-violet-400 font-bold">gemini-2.5-flash</code> atau model lainnya). Kosongkan untuk model default website.
                         </p>
                       </div>
 

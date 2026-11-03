@@ -15,6 +15,15 @@ function getServerGeminiApiKey(): string {
   ).trim();
 }
 
+export async function GET() {
+  const serverKey = getServerGeminiApiKey();
+  return NextResponse.json({
+    status: 'ready',
+    hasServerKey: !!serverKey,
+    defaultModel: 'gemini-2.5-flash'
+  });
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
@@ -26,10 +35,11 @@ export async function POST(req: NextRequest) {
       subjectTitle = 'Mata Pelajaran',
       className = 'Kelas VIII',
       apiKey: clientApiKey = '',
-      model: clientModel = 'gemini-1.5-flash'
+      model: clientModel = ''
     } = body;
 
     const serverKey = getServerGeminiApiKey();
+    // Prioritas API Key: Input pribadi guru -> Kunci server bawaan website
     const apiKey = clientApiKey?.trim() || serverKey;
 
     if (!apiKey) {
@@ -43,7 +53,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    if (!fileBase64 && !rawText.trim()) {
+    if (!fileBase64 && !rawText?.trim()) {
       return NextResponse.json(
         {
           error: 'EMPTY_INPUT',
@@ -124,7 +134,7 @@ WAJIB: Hasilkan HANYA kode JSON murni tanpa pengantar obrolan, tanpa blok markdo
     }
 
     // Jika ada teks naskah (rawText)
-    if (rawText.trim()) {
+    if (rawText?.trim()) {
       parts.push({
         text: `--- NASKAH SOAL YANG HARUS DIEKSTRAK ---\n${rawText.trim()}\n--- AKHIR NASKAH SOAL ---`
       });
@@ -135,7 +145,9 @@ WAJIB: Hasilkan HANYA kode JSON murni tanpa pengantar obrolan, tanpa blok markdo
       text: extractionInstruction
     });
 
-    const rawModel = (clientModel || 'gemini-1.5-flash').trim();
+    // Default model: gemini-2.5-flash
+    const defaultModel = process.env.NEXT_PUBLIC_GEMINI_MODEL || process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+    const rawModel = (clientModel?.trim() || defaultModel).trim();
     const selectedModel = rawModel.replace(/^models\//i, '');
     const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
       selectedModel
@@ -169,29 +181,46 @@ WAJIB: Hasilkan HANYA kode JSON murni tanpa pengantar obrolan, tanpa blok markdo
 
       const msg =
         errJson?.error?.message ||
-        `Gagal memproses dokumen dengan model Gemini "${selectedModel}" (Status ${geminiRes.status})`;
+        `Gagal menghubungi Gemini API dengan model "${selectedModel}" (Status ${geminiRes.status})`;
+
+      console.error('Gemini Import API Error:', msg, errJson);
       return NextResponse.json(
-        { error: 'GEMINI_API_ERROR', message: msg, rawError: errJson },
+        {
+          error: 'GEMINI_API_ERROR',
+          message: msg,
+          details: errJson
+        },
         { status: geminiRes.status }
       );
     }
 
-    const geminiData = await geminiRes.json();
-    const rawOutputText = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text;
+    const data = await geminiRes.json();
+    const rawOutputText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
 
     if (!rawOutputText) {
       return NextResponse.json(
         {
           error: 'NO_RESPONSE',
-          message: 'Model AI tidak memberikan teks hasil ekstraksi yang dapat dibaca.'
+          message: `Model Gemini ${selectedModel} tidak memberikan respons teks yang valid.`
         },
-        { status: 500 }
+        { status: 502 }
       );
     }
 
+    // Parse output JSON
     let parsedQuestions: any[] = [];
     try {
-      parsedQuestions = sanitizeAndParseAiJson(rawOutputText);
+      const parsed = sanitizeAndParseAiJson(rawOutputText);
+      if (Array.isArray(parsed)) {
+        parsedQuestions = parsed;
+      } else if (parsed && typeof parsed === 'object') {
+        const potentialArray = Object.values(parsed).find(v => Array.isArray(v));
+        if (potentialArray) {
+          parsedQuestions = potentialArray as any[];
+        } else {
+          parsedQuestions = [parsed];
+        }
+      }
     } catch (parseErr: any) {
       console.error('Error parsing imported questions JSON:', parseErr, rawOutputText);
       return NextResponse.json(
@@ -212,7 +241,8 @@ WAJIB: Hasilkan HANYA kode JSON murni tanpa pengantar obrolan, tanpa blok markdo
         totalExtracted: parsedQuestions.length,
         fileName,
         subjectTitle,
-        model: selectedModel
+        model: selectedModel,
+        usedKeyType: clientApiKey?.trim() ? 'custom' : (serverKey ? 'server' : 'none')
       }
     });
   } catch (error: any) {

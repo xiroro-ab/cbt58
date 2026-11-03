@@ -11,17 +11,15 @@ import {
   AlertCircle,
   HelpCircle,
   Trash2,
-  Edit2,
   Check,
-  Eye,
   Sliders,
   RefreshCw,
-  BookOpen,
-  ArrowRight,
-  Layers,
-  FileSpreadsheet
+  Cpu,
+  KeyRound,
+  RotateCcw,
+  ExternalLink
 } from 'lucide-react';
-import { Question, QuestionType, Subject, OptionItem } from '@/types/cbt';
+import { Question, Subject, OptionItem } from '@/types/cbt';
 import { validateAndConvertRawQuestions } from '@/lib/aiQuestionGenerator';
 import { parseQuestionsFromRawText } from '@/lib/documentQuestionParser';
 
@@ -32,6 +30,8 @@ interface ImportQuestionsModalProps {
   existingQuestionsCount?: number;
   onSaveQuestions: (newQuestions: Question[]) => void;
 }
+
+const DEFAULT_MODEL = 'gemini-2.5-flash';
 
 export const ImportQuestionsModal: React.FC<ImportQuestionsModalProps> = ({
   isOpen,
@@ -44,11 +44,12 @@ export const ImportQuestionsModal: React.FC<ImportQuestionsModalProps> = ({
   const [currentStep, setCurrentStep] = useState<'input' | 'preview'>('input');
   const [inputTab, setInputTab] = useState<'upload' | 'paste'>('upload');
 
-  // File Upload State
+  // File Upload State & Drag Drop
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [fileBase64, setFileBase64] = useState<string>('');
   const [fileError, setFileError] = useState<string | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
 
   // Paste Text State
   const [rawText, setRawText] = useState<string>('');
@@ -63,39 +64,62 @@ export const ImportQuestionsModal: React.FC<ImportQuestionsModalProps> = ({
   const [selectedQuestionIds, setSelectedQuestionIds] = useState<Set<string>>(new Set());
   const [previewTypeFilter, setPreviewTypeFilter] = useState<string>('ALL');
 
-  // AI Configuration State
+  // AI Configuration State (Model & API Key)
   const [apiKey, setApiKey] = useState('');
+  const [modelName, setModelName] = useState<string>('');
   const [showApiKeyInput, setShowApiKeyInput] = useState(false);
   const [isApiKeySaved, setIsApiKeySaved] = useState(false);
+  const [saveSuccessMessage, setSaveSuccessMessage] = useState(false);
   const [hasServerKey, setHasServerKey] = useState<boolean | null>(null);
-  const [modelName, setModelName] = useState<string>('gemini-1.5-flash');
 
-  // Load Saved API Key
+  // Load Saved API Key & Model dari localStorage saat modal dibuka
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const savedKey = localStorage.getItem('cbt_gemini_api_key') || '';
       if (savedKey) {
         setApiKey(savedKey);
         setIsApiKeySaved(true);
+      } else {
+        setApiKey('');
+        setIsApiKeySaved(false);
       }
+
       const savedModel = localStorage.getItem('cbt_gemini_model') || '';
       if (savedModel) {
         setModelName(savedModel);
+      } else {
+        setModelName('');
       }
     }
 
-    // Cek apakah server Vercel memiliki key default
-    fetch('/api/ai/generate-questions')
+    // Periksa apakah server Vercel sudah terpasang API Key default
+    fetch('/api/ai/import-questions')
       .then(r => r.json())
       .then(d => {
         if (d && typeof d.hasServerKey === 'boolean') {
           setHasServerKey(d.hasServerKey);
         }
       })
-      .catch(() => {});
-  }, []);
+      .catch(() => {
+        // Fallback cek endpoint generator
+        fetch('/api/ai/generate-questions')
+          .then(r => r.json())
+          .then(d => {
+            if (d && typeof d.hasServerKey === 'boolean') {
+              setHasServerKey(d.hasServerKey);
+            }
+          })
+          .catch(() => {});
+      });
+  }, [isOpen]);
 
-  const handleSaveApiKey = () => {
+  // Model yang aktif digunakan (jika kosong, gunakan DEFAULT_MODEL)
+  const activeModelId = modelName.trim() || DEFAULT_MODEL;
+  const isUsingCustomModel = Boolean(modelName.trim());
+  const isUsingCustomKey = Boolean(apiKey.trim());
+
+  // Simpan Pengaturan Gemini (Model & API Key)
+  const handleSaveSettings = () => {
     if (typeof window !== 'undefined') {
       if (apiKey.trim()) {
         localStorage.setItem('cbt_gemini_api_key', apiKey.trim());
@@ -104,8 +128,28 @@ export const ImportQuestionsModal: React.FC<ImportQuestionsModalProps> = ({
         localStorage.removeItem('cbt_gemini_api_key');
         setIsApiKeySaved(false);
       }
-      localStorage.setItem('cbt_gemini_model', modelName);
-      setShowApiKeyInput(false);
+
+      if (modelName.trim()) {
+        localStorage.setItem('cbt_gemini_model', modelName.trim());
+      } else {
+        localStorage.removeItem('cbt_gemini_model');
+      }
+
+      setSaveSuccessMessage(true);
+      setTimeout(() => setSaveSuccessMessage(false), 2500);
+    }
+  };
+
+  // Reset Pengaturan ke Bawaan Default Website
+  const handleResetToDefault = () => {
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('cbt_gemini_api_key');
+      localStorage.removeItem('cbt_gemini_model');
+      setApiKey('');
+      setModelName('');
+      setIsApiKeySaved(false);
+      setSaveSuccessMessage(true);
+      setTimeout(() => setSaveSuccessMessage(false), 2500);
     }
   };
 
@@ -120,35 +164,85 @@ export const ImportQuestionsModal: React.FC<ImportQuestionsModalProps> = ({
       setErrorMessage(null);
       setExtractedQuestions([]);
       setSelectedQuestionIds(new Set());
+      setIsDragging(false);
     }
   }, [isOpen]);
 
   if (!isOpen) return null;
 
-  // Handle File Selection
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Handler Pemrosesan File Berkas Terpilih (dari file input atau drop event)
+  const processFile = (file: File) => {
     setFileError(null);
-    const file = e.target.files?.[0];
     if (!file) return;
 
-    // Maksimal 15 MB
-    if (file.size > 15 * 1024 * 1024) {
-      setFileError('Ukuran file terlalu besar (maksimal 15 MB).');
+    // Maksimal 20 MB
+    if (file.size > 20 * 1024 * 1024) {
+      setFileError('Ukuran berkas terlalu besar (maksimal 20 MB).');
+      return;
+    }
+
+    // Validasi ekstensi yang diizinkan
+    const validExtensions = ['.pdf', '.txt', '.doc', '.docx', '.png', '.jpg', '.jpeg'];
+    const fileNameLower = file.name.toLowerCase();
+    const hasValidExt = validExtensions.some(ext => fileNameLower.endsWith(ext));
+
+    if (!hasValidExt && file.type !== 'application/pdf' && !file.type.startsWith('image/')) {
+      setFileError('Format berkas tidak didukung. Harap unggah naskah soal berformat PDF, Dokumen Teks/Word, atau Gambar.');
       return;
     }
 
     setSelectedFile(file);
 
-    // Baca ke Base64
+    // Baca ke Base64 untuk dikirim ke AI
     const reader = new FileReader();
     reader.onload = () => {
       const base64 = reader.result as string;
       setFileBase64(base64);
     };
     reader.onerror = () => {
-      setFileError('Gagal membaca berkas dokumen.');
+      setFileError('Gagal membaca berkas dokumen yang dipilih.');
     };
     reader.readAsDataURL(file);
+  };
+
+  // Handle Drag & Drop Events
+  const handleDragEnter = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = 'copy';
+    if (!isDragging) setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+
+    const droppedFile = e.dataTransfer.files?.[0];
+    if (droppedFile) {
+      processFile(droppedFile);
+    }
+  };
+
+  // Handle Manual File Input Selection
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      processFile(file);
+    }
   };
 
   // AI Extraction Handler (PDF / Word / Teks via Gemini)
@@ -156,18 +250,20 @@ export const ImportQuestionsModal: React.FC<ImportQuestionsModalProps> = ({
     try {
       setIsLoading(true);
       setErrorMessage(null);
-      setLoadingStatus('Mengunggah naskah & membaca dokumen...');
+
+      const activeKeyDesc = isUsingCustomKey ? 'Kunci Pribadi Guru' : 'Bawaan Website';
+      setLoadingStatus(`Menghubungkan ke Gemini (${activeModelId} • ${activeKeyDesc})...`);
 
       const timer1 = setTimeout(() => {
-        setLoadingStatus('AI Gemini sedang membaca teks & struktur butir soal...');
-      }, 3000);
+        setLoadingStatus('Membaca naskah soal & memindai struktur teks...');
+      }, 2500);
 
       const timer2 = setTimeout(() => {
-        setLoadingStatus('Menganalisis tipe soal, opsi pilihan ganda & kunci jawaban...');
-      }, 7000);
+        setLoadingStatus('Menganalisis butir soal, opsi jawaban (A, B, C, D) & kunci jawaban...');
+      }, 6500);
 
       const timer3 = setTimeout(() => {
-        setLoadingStatus('Menyusun format CBT 58 dan memverifikasi kelengkapan...');
+        setLoadingStatus('Menyusun butir soal dan memverifikasi kelengkapan format CBT...');
       }, 12000);
 
       const payload: Record<string, any> = {
@@ -176,12 +272,12 @@ export const ImportQuestionsModal: React.FC<ImportQuestionsModalProps> = ({
         fileName: selectedFile?.name || 'naskah_soal.pdf',
         mimeType: selectedFile?.type || 'application/pdf',
         apiKey: apiKey.trim(),
-        model: modelName
+        model: modelName.trim()
       };
 
       if (inputTab === 'upload') {
         if (!fileBase64) {
-          throw new Error('Silakan pilih file PDF atau dokumen terlebih dahulu.');
+          throw new Error('Silakan pilih atau seret file PDF naskah soal terlebih dahulu.');
         }
         payload.fileBase64 = fileBase64;
       } else {
@@ -211,7 +307,7 @@ export const ImportQuestionsModal: React.FC<ImportQuestionsModalProps> = ({
       }
 
       if (!data.questions || !Array.isArray(data.questions) || data.questions.length === 0) {
-        throw new Error('Tidak ada butir soal yang berhasil diekstrak dari dokumen. Pastikan naskah memuat teks pertanyaan.');
+        throw new Error('Tidak ada butir soal yang berhasil diekstrak dari dokumen. Pastikan dokumen memuat butir pertanyaan.');
       }
 
       // Validasi dan konversi ke struktur Question CBT
@@ -259,7 +355,7 @@ export const ImportQuestionsModal: React.FC<ImportQuestionsModalProps> = ({
       setExtractedQuestions(parsed);
       setSelectedQuestionIds(new Set(parsed.map(q => q.id)));
       setCurrentStep('preview');
-    } catch (err: any) {
+    } catch {
       setErrorMessage('Gagal memproses teks naskah soal secara lokal.');
     }
   };
@@ -322,16 +418,19 @@ export const ImportQuestionsModal: React.FC<ImportQuestionsModalProps> = ({
               <FileUp className="w-5 h-5" />
             </div>
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <h3 className="font-bold text-slate-900 dark:text-white text-base">
                   Import Naskah Soal Otomatis
                 </h3>
                 <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">
                   PDF & Dokumen
                 </span>
+                <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-violet-100 dark:bg-violet-950 text-violet-700 dark:text-violet-300 border border-violet-200 dark:border-violet-800">
+                  {activeModelId}
+                </span>
               </div>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                Target: <strong>{currentSubject.title}</strong> ({currentSubject.className})
+                Target Mata Pelajaran: <strong>{currentSubject.title}</strong> ({currentSubject.className})
               </p>
             </div>
           </div>
@@ -351,15 +450,15 @@ export const ImportQuestionsModal: React.FC<ImportQuestionsModalProps> = ({
           {currentStep === 'input' && (
             <div className="space-y-5">
               
-              {/* Petunjuk Penggunaan */}
+              {/* Petunjuk Singkat Penggunaan */}
               <div className="p-4 rounded-2xl bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200/80 dark:border-emerald-800/60 text-xs text-emerald-900 dark:text-emerald-300 flex items-start gap-3">
                 <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
                 <div className="space-y-1">
                   <p className="font-bold text-emerald-950 dark:text-emerald-200">
-                    Sistem Deteksi Otomatis Siap Pakai
+                    Deteksi & Ekstraksi Naskah Soal Siap Pakai
                   </p>
                   <p className="text-[11px] text-emerald-800 dark:text-emerald-300 leading-relaxed">
-                    Unggah naskah ujian dalam bentuk <strong>PDF, Word, atau teks copy-paste</strong>. Kecerdasan Buatan (AI) akan secara otomatis memisahkan nomor soal, mendeteksi opsi pilihan ganda A, B, C, D, mencari kunci jawaban, dan mengonversinya langsung ke format CBT sekolah Anda.
+                    Unggah naskah ujian dalam bentuk <strong>PDF, Word, atau teks copy-paste</strong>. AI Gemini akan membaca butir soal, pilihan ganda A-D, kunci jawaban, dan langsung mengonversinya ke format CBT Bank Soal sekolah.
                   </p>
                 </div>
               </div>
@@ -393,38 +492,70 @@ export const ImportQuestionsModal: React.FC<ImportQuestionsModalProps> = ({
                 </button>
               </div>
 
-              {/* TAB 1: UPLOAD DOKUMEN (PDF, WORD, GAMBAR) */}
+              {/* TAB 1: UPLOAD DOKUMEN DENGAN DRAG AND DROP AKTIF */}
               {inputTab === 'upload' && (
                 <div className="space-y-4">
                   <input
                     type="file"
                     ref={fileInputRef}
                     onChange={handleFileChange}
-                    accept=".pdf,.png,.jpg,.jpeg,.txt,.doc,.docx"
+                    accept=".pdf,.png,.jpg,.jpeg,.txt,.doc,.docx,application/pdf"
                     className="hidden"
                   />
 
+                  {/* AREA DRAG AND DROP DENGAN EVENT LISTENER LENGKAP */}
                   <div
+                    onDragEnter={handleDragEnter}
+                    onDragOver={handleDragOver}
+                    onDragLeave={handleDragLeave}
+                    onDrop={handleDrop}
                     onClick={() => fileInputRef.current?.click()}
-                    className="border-2 border-dashed border-emerald-300 dark:border-emerald-800/80 hover:border-emerald-500 dark:hover:border-emerald-600 rounded-3xl p-8 sm:p-10 text-center cursor-pointer transition bg-emerald-50/20 dark:bg-emerald-950/10 hover:bg-emerald-50/50 dark:hover:bg-emerald-950/20 flex flex-col items-center justify-center gap-3 group"
+                    className={`border-2 border-dashed rounded-3xl p-8 sm:p-10 text-center cursor-pointer transition flex flex-col items-center justify-center gap-3 group relative select-none ${
+                      isDragging
+                        ? 'border-emerald-500 bg-emerald-100/70 dark:bg-emerald-950/60 ring-4 ring-emerald-500/20 scale-[1.01]'
+                        : 'border-emerald-300 dark:border-emerald-800/80 hover:border-emerald-500 dark:hover:border-emerald-600 bg-emerald-50/20 dark:bg-emerald-950/10 hover:bg-emerald-50/50 dark:hover:bg-emerald-950/20'
+                    }`}
                   >
-                    <div className="w-16 h-16 rounded-2xl bg-emerald-100 dark:bg-emerald-900/50 text-emerald-600 dark:text-emerald-400 flex items-center justify-center group-hover:scale-105 transition shadow-sm">
+                    <div className={`w-16 h-16 rounded-2xl flex items-center justify-center transition shadow-sm ${
+                      isDragging
+                        ? 'bg-emerald-600 text-white scale-110 animate-bounce'
+                        : 'bg-emerald-100 dark:bg-emerald-900/50 text-emerald-600 dark:text-emerald-400 group-hover:scale-105'
+                    }`}>
                       <FileUp className="w-8 h-8" />
                     </div>
 
                     <div>
                       <p className="font-bold text-slate-900 dark:text-white text-sm">
-                        {selectedFile ? selectedFile.name : 'Klik untuk Memilih File atau Drag & Drop'}
+                        {isDragging
+                          ? 'Lepaskan File Dokumen di Sini...'
+                          : selectedFile
+                          ? selectedFile.name
+                          : 'Tarik & Letakkan File di Sini, atau Klik untuk Memilih'}
                       </p>
                       <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                        Mendukung dokumen <strong>PDF (Sangat Direkomendasikan)</strong>, TXT, DOCX, dan Foto Naskah
+                        Format yang didukung: <strong>PDF (Sangat Direkomendasikan)</strong>, TXT, DOCX, dan Foto Naskah (Maks. 20 MB)
                       </p>
                     </div>
 
                     {selectedFile && (
-                      <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 text-xs font-semibold border border-emerald-300 dark:border-emerald-800">
-                        <Check className="w-3.5 h-3.5" />
-                        <span>File Terpilih: {(selectedFile.size / 1024).toFixed(1)} KB</span>
+                      <div className="flex items-center gap-2 mt-1">
+                        <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 text-xs font-semibold border border-emerald-300 dark:border-emerald-800">
+                          <Check className="w-3.5 h-3.5" />
+                          <span>File Terpilih: {selectedFile.name} ({(selectedFile.size / 1024).toFixed(1)} KB)</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedFile(null);
+                            setFileBase64('');
+                            if (fileInputRef.current) fileInputRef.current.value = '';
+                          }}
+                          className="p-1 rounded-full bg-slate-200 dark:bg-slate-700 hover:bg-rose-100 hover:text-rose-600 text-slate-600 transition cursor-pointer"
+                          title="Hapus / ganti berkas"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
                       </div>
                     )}
                   </div>
@@ -450,8 +581,8 @@ export const ImportQuestionsModal: React.FC<ImportQuestionsModalProps> = ({
                         </>
                       ) : (
                         <>
-                          <Sparkles className="w-4 h-4" />
-                          <span>Mulai Deteksi & Ekstrak Soal Otomatis (Gemini AI)</span>
+                          <Sparkles className="w-4.5 h-4.5" />
+                          <span>Deteksi & Ekstrak Soal dengan AI ({activeModelId})</span>
                         </>
                       )}
                     </button>
@@ -459,12 +590,12 @@ export const ImportQuestionsModal: React.FC<ImportQuestionsModalProps> = ({
                 </div>
               )}
 
-              {/* TAB 2: TEMPEL TEKS (COPY-PASTE DARI WORD / WHATSAPP) */}
+              {/* TAB 2: COPY-PASTE TEKS NASKAH SOAL */}
               {inputTab === 'paste' && (
                 <div className="space-y-4">
                   <div>
-                    <label className="text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5 block">
-                      Tempelkan Teks Naskah Soal Anda di Bawah Ini:
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                      Tempelkan Teks Naskah Ujian di Sini:
                     </label>
                     <textarea
                       value={rawText}
@@ -483,7 +614,7 @@ export const ImportQuestionsModal: React.FC<ImportQuestionsModalProps> = ({
                       className="py-2.5 px-4 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:opacity-95 text-white font-bold text-xs shadow-md shadow-emerald-600/20 transition cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
                     >
                       <Sparkles className="w-3.5 h-3.5" />
-                      <span>Deteksi Cerdas dengan AI (Gemini)</span>
+                      <span>Deteksi Cerdas AI ({activeModelId})</span>
                     </button>
 
                     <button
@@ -510,76 +641,159 @@ export const ImportQuestionsModal: React.FC<ImportQuestionsModalProps> = ({
                 </div>
               )}
 
-              {/* PENGATURAN API KEY GEMINI (COLLAPSIBLE) */}
-              <div className="pt-3 border-t border-slate-100 dark:border-slate-800">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                      Status AI:
-                    </span>
-                    {hasServerKey && !apiKey && (
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 flex items-center gap-1">
-                        <Check className="w-3 h-3" /> Server Sekolah Siap
+              {/* STATUS AI & PENGATURAN MODEL + API KEY */}
+              <div className="pt-3 border-t border-slate-100 dark:border-slate-800 space-y-3">
+                <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-800 space-y-2.5">
+                  
+                  {/* BARIS KETERANGAN STATUS AI LENGKAP */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <div className="flex items-center gap-1.5">
+                        <Cpu className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                        <span className="text-xs font-bold text-slate-900 dark:text-white">
+                          Status AI:
+                        </span>
+                      </div>
+
+                      {/* Keterangan Model Aktif */}
+                      <span className="text-[11px] font-mono font-bold px-2.5 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 flex items-center gap-1">
+                        <span>Model: {activeModelId}</span>
+                        <span className="text-[9px] font-normal opacity-80">
+                          ({isUsingCustomModel ? 'Kustom Guru' : 'Bawaan Website'})
+                        </span>
                       </span>
-                    )}
-                    {isApiKeySaved && apiKey && (
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 border border-blue-300 dark:border-blue-800 flex items-center gap-1">
-                        <Check className="w-3 h-3" /> Kunci Pribadi Guru
-                      </span>
-                    )}
-                    {!hasServerKey && !apiKey && (
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-800 flex items-center gap-1">
-                        <AlertCircle className="w-3 h-3" /> Perlu API Key
-                      </span>
-                    )}
+
+                      {/* Keterangan Kunci API yang Digunakan */}
+                      {isUsingCustomKey ? (
+                        <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 border border-blue-300 dark:border-blue-800 flex items-center gap-1">
+                          <KeyRound className="w-3 h-3 text-blue-600 shrink-0" />
+                          <span>API Key: Pribadi Guru</span>
+                        </span>
+                      ) : hasServerKey ? (
+                        <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 flex items-center gap-1">
+                          <Check className="w-3 h-3 text-emerald-600 shrink-0" />
+                          <span>API Key: Bawaan Website (Server Sekolah)</span>
+                        </span>
+                      ) : (
+                        <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-800 flex items-center gap-1">
+                          <AlertCircle className="w-3 h-3 text-amber-600 shrink-0" />
+                          <span>API Key: Perlu Diisi</span>
+                        </span>
+                      )}
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => setShowApiKeyInput(!showApiKeyInput)}
+                      className="text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:underline cursor-pointer flex items-center gap-1 shrink-0 self-start sm:self-auto"
+                    >
+                      <Sliders className="w-3.5 h-3.5" />
+                      <span>{showApiKeyInput ? 'Tutup Pengaturan' : 'Atur Model & API Key'}</span>
+                    </button>
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={() => setShowApiKeyInput(!showApiKeyInput)}
-                    className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 hover:underline cursor-pointer flex items-center gap-1"
-                  >
-                    <Sliders className="w-3.5 h-3.5" />
-                    <span>{showApiKeyInput ? 'Tutup Pengaturan API' : 'Atur Kunci Gemini AI'}</span>
-                  </button>
-                </div>
+                  {/* PESAN NOTIFIKASI TERSIMPAN */}
+                  {saveSuccessMessage && (
+                    <div className="p-2 rounded-xl bg-emerald-100 dark:bg-emerald-950/80 border border-emerald-300 dark:border-emerald-800 text-[11px] font-bold text-emerald-800 dark:text-emerald-200 flex items-center gap-1.5 animate-fade-in">
+                      <Check className="w-3.5 h-3.5 text-emerald-600" />
+                      <span>Pengaturan AI berhasil diperbarui!</span>
+                    </div>
+                  )}
 
-                {showApiKeyInput && (
-                  <div className="mt-3 p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 space-y-3 animate-fade-in text-xs">
-                    <div>
-                      <div className="flex items-center justify-between mb-1">
-                        <label className="font-bold text-slate-700 dark:text-slate-300">
-                          Google Gemini API Key (Gratis)
+                  {/* FORM PENGATURAN MANUAL MODEL & API KEY (MURNI INPUT MANUAL GURU) */}
+                  {showApiKeyInput && (
+                    <div className="pt-3 border-t border-slate-200 dark:border-slate-700 space-y-4 animate-fade-in text-xs">
+                      
+                      {/* 1. Pengaturan Nama Model Gemini AI (Input Manual Bebas Tanpa Chips/Dropdown) */}
+                      <div>
+                        <label className="font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5 mb-1">
+                          <Cpu className="w-3.5 h-3.5 text-emerald-600" />
+                          <span>Nama Model Gemini AI (Ketik Manual):</span>
                         </label>
-                        <a
-                          href="https://aistudio.google.com/app/apikey"
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 hover:underline"
-                        >
-                          Dapatkan Kunci Gratis ↗
-                        </a>
+                        <input
+                          type="text"
+                          value={modelName}
+                          onChange={e => setModelName(e.target.value)}
+                          placeholder="gemini-2.5-flash (Kosongkan jika menggunakan bawaan website)"
+                          className="w-full text-xs font-mono px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                        />
+                        <p className="text-[10px] text-slate-400 mt-1">
+                          {modelName.trim() ? (
+                            <span className="text-emerald-600 dark:text-emerald-400 font-semibold">
+                              ✨ Menggunakan model inputan Anda: <code>{modelName.trim()}</code>
+                            </span>
+                          ) : (
+                            <span>
+                              ℹ️ Kosong = Menggunakan model default website (<code>{DEFAULT_MODEL}</code>).
+                            </span>
+                          )}
+                        </p>
                       </div>
-                      <div className="flex gap-2">
+
+                      {/* 2. Pengaturan API Key Gemini AI */}
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                            <KeyRound className="w-3.5 h-3.5 text-emerald-600" />
+                            <span>Kunci Google Gemini API (Opsional):</span>
+                          </label>
+                          <a
+                            href="https://aistudio.google.com/app/apikey"
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 hover:underline flex items-center gap-1"
+                          >
+                            <span>Dapatkan API Key Gratis</span>
+                            <ExternalLink className="w-3 h-3" />
+                          </a>
+                        </div>
                         <input
                           type="password"
                           value={apiKey}
                           onChange={e => setApiKey(e.target.value)}
-                          placeholder="AIzaSy... (Masukkan kunci API Gemini Anda)"
-                          className="flex-1 px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 font-mono text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                          placeholder="AIzaSy... (Kosongkan jika menggunakan API Key bawaan website)"
+                          className="w-full text-xs font-mono px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
                         />
+                        <p className="text-[10px] text-slate-400 mt-1">
+                          {apiKey.trim() ? (
+                            <span className="text-blue-600 dark:text-blue-400 font-semibold">
+                              🔑 Menggunakan API Key pribadi yang tersimpan di browser ini.
+                            </span>
+                          ) : (
+                            <span>
+                              ℹ️ Kosong = Menggunakan API Key bawaan dari server website sekolah.
+                            </span>
+                          )}
+                        </p>
+                      </div>
+
+                      {/* Tombol Aksi Pengaturan */}
+                      <div className="flex items-center justify-between pt-1">
                         <button
                           type="button"
-                          onClick={handleSaveApiKey}
-                          className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-sm transition cursor-pointer"
+                          onClick={handleResetToDefault}
+                          className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 font-bold text-[11px] transition cursor-pointer"
                         >
-                          Simpan
+                          <RotateCcw className="w-3 h-3" />
+                          <span>Reset ke Default Website</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={handleSaveSettings}
+                          className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-sm transition cursor-pointer"
+                        >
+                          <Check className="w-3.5 h-3.5" />
+                          <span>Simpan Pengaturan</span>
                         </button>
                       </div>
+
                     </div>
-                  </div>
-                )}
+                  )}
+
+                </div>
               </div>
+
             </div>
           )}
 
@@ -598,7 +812,7 @@ export const ImportQuestionsModal: React.FC<ImportQuestionsModalProps> = ({
                       {extractedQuestions.length} Butir Soal Berhasil Dideteksi!
                     </h4>
                     <p className="text-[11px] text-emerald-700 dark:text-emerald-300">
-                      {selectedQuestionIds.size} butir soal dipilih untuk dimasukkan ke Bank Soal
+                      {selectedQuestionIds.size} butir soal dipilih • Model: <strong>{activeModelId}</strong> ({isUsingCustomKey ? 'Kunci Pribadi' : 'Bawaan Website'})
                     </p>
                   </div>
                 </div>
@@ -625,7 +839,7 @@ export const ImportQuestionsModal: React.FC<ImportQuestionsModalProps> = ({
 
               {/* Filter Tipe Soal Terdeteksi */}
               <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs">
-                {['ALL', 'Pilihan Ganda', 'Benar/Salah', 'Esai'].map(t => {
+                {['ALL', 'Pilihan Ganda', 'Pilihan Ganda Kompleks', 'Benar/Salah', 'Menjodohkan', 'Isian Singkat', 'Esai'].map(t => {
                   const count = t === 'ALL'
                     ? extractedQuestions.length
                     : extractedQuestions.filter(q => q.type === t).length;

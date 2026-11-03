@@ -1,5 +1,5 @@
 import { supabase } from './supabaseClient';
-import { Subject, Question, ExamResult, ScoringRules, ExamNotification, ExamMessage, Student, Teacher, SchoolSettings } from '@/types/cbt';
+import { Subject, Question, ExamResult, ScoringRules, ExamNotification, ExamMessage, Student, Teacher, TeacherAssignment, SchoolSettings } from '@/types/cbt';
 import { initialSubject, sampleSubjects, sampleQuestions } from './mockData';
 import { initialStudents } from './rosterStudents';
 import { initialTeachers } from './rosterTeachers';
@@ -1959,6 +1959,36 @@ export async function updateTeacherPhotoInSupabase(
     return true;
   } catch (err) {
     console.warn('updateTeacherPhotoInSupabase exception:', err);
+    return false;
+  }
+}
+
+/**
+ * Memperbarui data penugasan mengajar guru (mapel & rombel kelas) di Cloud Supabase
+ */
+export async function updateTeacherAssignmentsInSupabase(
+  teacherId: string,
+  assignments: TeacherAssignment[],
+  primarySubject: string,
+  primaryClasses: string[]
+): Promise<boolean> {
+  try {
+    const { error } = await supabase
+      .from('teachers')
+      .update({
+        assignments: assignments || [],
+        subject: primarySubject || (assignments[0]?.subject || ''),
+        classes: primaryClasses || (assignments[0]?.classes || [])
+      })
+      .eq('id', teacherId);
+
+    if (error) {
+      console.warn('Gagal updateTeacherAssignmentsInSupabase:', error.message);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error('Exception updateTeacherAssignmentsInSupabase:', err);
     return false;
   }
 }

@@ -58,6 +58,7 @@ import {
   insertTeacher,
   updateTeacherStatusInSupabase,
   updateTeacherPhotoInSupabase,
+  updateTeacherAssignmentsInSupabase,
   mergeTeachers,
   findMatchingSubject,
   checkSubjectIsActive,
@@ -859,18 +860,62 @@ export default function Home() {
   };
 
   const handleUpdateTeacher = (updatedTeacher: Teacher) => {
-    setCurrentTeacher(updatedTeacher);
+    // Jika guru yang diperbarui adalah guru yang sedang login
+    if (currentTeacher?.id === updatedTeacher.id) {
+      setCurrentTeacher(updatedTeacher);
+      // Sinkronkan mapel aktif jika perlu
+      const hasCurrentMapel = updatedTeacher.assignments?.some(a => a.subject === activeAssignmentSubject);
+      if (!hasCurrentMapel) {
+        const nextSubject = updatedTeacher.assignments?.[0]?.subject || updatedTeacher.subject;
+        if (nextSubject) {
+          setActiveAssignmentSubject(nextSubject);
+          const matchedSub = findMatchingSubject(subjects, nextSubject);
+          if (matchedSub) {
+            const asg = updatedTeacher.assignments?.find(a => a.subject === nextSubject);
+            setSubject({
+              ...matchedSub,
+              className: asg?.classes?.length ? asg.classes.join(', ') : matchedSub.className
+            });
+            if (asg?.classes?.length) {
+              setSelectedStudentClass(asg.classes[0]);
+            }
+          }
+        }
+      } else {
+        // Jika masih mengampu mapel aktif yang sama tapi rombel kelasnya berubah
+        const asg = updatedTeacher.assignments?.find(a => a.subject === activeAssignmentSubject);
+        if (asg?.classes?.length) {
+          setSubject(prev => ({
+            ...prev,
+            className: asg.classes.join(', ')
+          }));
+          if (!asg.classes.includes(selectedStudentClass)) {
+            setSelectedStudentClass(asg.classes[0]);
+          }
+        }
+      }
+    }
+
     setTeachers(prev => {
       const updated = prev.map(t => t.id === updatedTeacher.id ? updatedTeacher : t);
       if (typeof window !== 'undefined') {
         try {
           localStorage.setItem('cbt_cached_teachers', JSON.stringify(updated));
-          localStorage.setItem(`cbt_teacher_${updatedTeacher.id}_photo`, updatedTeacher.photoUrl || '');
+          if (updatedTeacher.photoUrl) {
+            localStorage.setItem(`cbt_teacher_${updatedTeacher.id}_photo`, updatedTeacher.photoUrl);
+          }
         } catch (e) {}
       }
       return updated;
     });
+
     updateTeacherPhotoInSupabase(updatedTeacher.id, updatedTeacher.photoUrl || '', updatedTeacher.nip).catch(console.warn);
+    updateTeacherAssignmentsInSupabase(
+      updatedTeacher.id,
+      updatedTeacher.assignments || [],
+      updatedTeacher.subject || '',
+      updatedTeacher.classes || []
+    ).catch(console.warn);
   };
 
   const handleStartExam = async (e: React.FormEvent) => {

@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Teacher, TeacherAssignment } from '@/types/cbt';
+import { Teacher, TeacherAssignment, AVAILABLE_SUBJECTS, AVAILABLE_CLASSES } from '@/types/cbt';
 import { useLanguage } from '@/context/LanguageContext';
 import { useTheme } from '@/context/ThemeContext';
 import { fetchTeachers, mergeTeachers } from '@/lib/supabaseService';
@@ -36,28 +36,6 @@ interface TeacherLoginProps {
   onRegisterTeacher: (newTeacher: Teacher) => Promise<boolean>;
   onSwitchToStudentLogin: () => void;
 }
-
-const AVAILABLE_SUBJECTS = [
-  'Ilmu Pengetahuan Alam (IPA)',
-  'Matematika',
-  'Bahasa Indonesia',
-  'Bahasa Inggris',
-  'Pendidikan Agama Islam (PAI)',
-  'Ilmu Pengetahuan Sosial (IPS)',
-  'Pendidikan Pancasila (PPKn)',
-  'Informatika & TIK',
-  'PJOK (Penjasorkes)',
-  'Seni Budaya',
-  'Prakarya',
-  'Bimbingan Konseling (BK)',
-  'Muatan Lokal / Bahasa Daerah'
-];
-
-const AVAILABLE_CLASSES = [
-  'VII.1', 'VII.2', 'VII.3',
-  'VIII.1', 'VIII.2', 'VIII.3',
-  'IX.1', 'IX.2', 'IX.3', 'IX.4'
-];
 
 interface AssignmentItem {
   id: string;

@@ -85,6 +85,28 @@ export interface Student {
 
 export type TeacherRole = 'admin' | 'guru_mapel' | 'pengawas';
 
+export const AVAILABLE_SUBJECTS: string[] = [
+  'Ilmu Pengetahuan Alam (IPA)',
+  'Matematika',
+  'Bahasa Indonesia',
+  'Bahasa Inggris',
+  'Pendidikan Agama Islam (PAI)',
+  'Ilmu Pengetahuan Sosial (IPS)',
+  'Pendidikan Pancasila (PPKn)',
+  'Informatika & TIK',
+  'PJOK (Penjasorkes)',
+  'Seni Budaya',
+  'Prakarya',
+  'Bimbingan Konseling (BK)',
+  'Muatan Lokal / Bahasa Daerah'
+];
+
+export const AVAILABLE_CLASSES: string[] = [
+  'VII.1', 'VII.2', 'VII.3',
+  'VIII.1', 'VIII.2', 'VIII.3',
+  'IX.1', 'IX.2', 'IX.3', 'IX.4'
+];
+
 export interface TeacherAssignment {
   id?: string;
   subject: string;

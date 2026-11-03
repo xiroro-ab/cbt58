@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { Subject, Question, QuestionType, ExamResult, Student, Teacher, ScoringRules, ExamSession, SchoolSettings } from '@/types/cbt';
+import { Subject, Question, QuestionType, ExamResult, Student, Teacher, TeacherAssignment, ScoringRules, ExamSession, SchoolSettings, AVAILABLE_SUBJECTS, AVAILABLE_CLASSES } from '@/types/cbt';
 import { NavItem } from '../layout/Sidebar';
 import { useLanguage } from '@/context/LanguageContext';
 import { StudentManagement } from './StudentManagement';
@@ -244,6 +244,181 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   const [localSettingsForm, setLocalSettingsForm] = useState<SchoolSettings>(effectiveSchoolSettings);
   const [settingsSavedToast, setSettingsSavedToast] = useState(false);
   const [isKopSettingsOpen, setIsKopSettingsOpen] = useState(true);
+
+  // Penugasan Mengajar (Mapel & Rombel Kelas)
+  const [selectedAssignmentTeacherId, setSelectedAssignmentTeacherId] = useState<string>(currentTeacher?.id || '');
+
+  // Teacher yang sedang dikelola penugasannya (bisa currentTeacher atau dipilih admin)
+  const targetAssignmentTeacher = useMemo(() => {
+    return (teachers || []).find(t => t.id === selectedAssignmentTeacherId) || currentTeacher;
+  }, [selectedAssignmentTeacherId, teachers, currentTeacher]);
+
+  const [assignmentsForm, setAssignmentsForm] = useState<TeacherAssignment[]>(() => {
+    if (targetAssignmentTeacher?.assignments && targetAssignmentTeacher.assignments.length > 0) {
+      return JSON.parse(JSON.stringify(targetAssignmentTeacher.assignments));
+    }
+    return [{
+      id: 'asg-1',
+      subject: targetAssignmentTeacher?.subject || AVAILABLE_SUBJECTS[0],
+      classes: targetAssignmentTeacher?.classes && targetAssignmentTeacher.classes.length > 0
+        ? [...targetAssignmentTeacher.classes]
+        : ['VII.1', 'VII.2']
+    }];
+  });
+
+  const [customSubjectInputs, setCustomSubjectInputs] = useState<Record<number, string>>({});
+  const [isAssignmentSectionOpen, setIsAssignmentSectionOpen] = useState(true);
+
+  // Sinkronisasi form saat guru target berubah
+  useEffect(() => {
+    if (targetAssignmentTeacher) {
+      if (targetAssignmentTeacher.assignments && targetAssignmentTeacher.assignments.length > 0) {
+        setAssignmentsForm(JSON.parse(JSON.stringify(targetAssignmentTeacher.assignments)));
+      } else {
+        setAssignmentsForm([{
+          id: 'asg-1',
+          subject: targetAssignmentTeacher.subject || AVAILABLE_SUBJECTS[0],
+          classes: targetAssignmentTeacher.classes && targetAssignmentTeacher.classes.length > 0
+            ? [...targetAssignmentTeacher.classes]
+            : ['VII.1', 'VII.2']
+        }]);
+      }
+    }
+  }, [targetAssignmentTeacher?.id, targetAssignmentTeacher?.assignments]);
+
+  const handleAddAssignment = () => {
+    const usedSubjects = new Set(assignmentsForm.map(a => a.subject));
+    const nextSub = AVAILABLE_SUBJECTS.find(s => !usedSubjects.has(s)) || AVAILABLE_SUBJECTS[0];
+    setAssignmentsForm(prev => [
+      ...prev,
+      {
+        id: `asg-${Date.now()}`,
+        subject: nextSub,
+        classes: ['VII.1']
+      }
+    ]);
+  };
+
+  const handleRemoveAssignment = (index: number) => {
+    if (assignmentsForm.length <= 1) {
+      showThemedAlert(
+        'Minimal 1 Penugasan',
+        'Setiap dewan guru minimal wajib mengampu 1 mata pelajaran.',
+        'warning'
+      );
+      return;
+    }
+    setAssignmentsForm(prev => prev.filter((_, i) => i !== index));
+    setCustomSubjectInputs(prev => {
+      const next = { ...prev };
+      delete next[index];
+      return next;
+    });
+  };
+
+  const handleToggleClassInAssignment = (index: number, cls: string) => {
+    setAssignmentsForm(prev => {
+      const next = [...prev];
+      const currentClasses = next[index].classes || [];
+      if (currentClasses.includes(cls)) {
+        next[index] = {
+          ...next[index],
+          classes: currentClasses.filter(c => c !== cls)
+        };
+      } else {
+        next[index] = {
+          ...next[index],
+          classes: [...currentClasses, cls]
+        };
+      }
+      return next;
+    });
+  };
+
+  const handleSelectGradeClassesInAssignment = (index: number, gradePrefix: 'VII.' | 'VIII.' | 'IX.') => {
+    const gradeClasses = AVAILABLE_CLASSES.filter(c => c.startsWith(gradePrefix));
+    setAssignmentsForm(prev => {
+      const next = [...prev];
+      const currentSet = new Set(next[index].classes || []);
+      const allSelected = gradeClasses.every(c => currentSet.has(c));
+      if (allSelected) {
+        gradeClasses.forEach(c => currentSet.delete(c));
+      } else {
+        gradeClasses.forEach(c => currentSet.add(c));
+      }
+      next[index] = {
+        ...next[index],
+        classes: Array.from(currentSet)
+      };
+      return next;
+    });
+  };
+
+  const handleSelectAllClassesInAssignment = (index: number) => {
+    setAssignmentsForm(prev => {
+      const next = [...prev];
+      const currentSet = new Set(next[index].classes || []);
+      const allSelected = AVAILABLE_CLASSES.every(c => currentSet.has(c));
+      next[index] = {
+        ...next[index],
+        classes: allSelected ? [] : [...AVAILABLE_CLASSES]
+      };
+      return next;
+    });
+  };
+
+  const handleSaveTeacherAssignments = () => {
+    if (!targetAssignmentTeacher) return;
+
+    for (let i = 0; i < assignmentsForm.length; i++) {
+      const asg = assignmentsForm[i];
+      const subjName = asg.subject?.trim();
+      if (!subjName) {
+        showThemedAlert(
+          'Mata Pelajaran Wajib Diisi',
+          `Harap tentukan nama mata pelajaran pada penugasan #${i + 1}.`,
+          'warning'
+        );
+        return;
+      }
+      if (!asg.classes || asg.classes.length === 0) {
+        showThemedAlert(
+          'Rombel Belum Dipilih',
+          `Harap centang minimal satu rombel kelas untuk mata pelajaran "${subjName}".`,
+          'warning'
+        );
+        return;
+      }
+    }
+
+    const cleanAssignments: TeacherAssignment[] = assignmentsForm.map((a, idx) => ({
+      id: a.id || `asg-${idx + 1}`,
+      subject: a.subject.trim(),
+      classes: [...a.classes]
+    }));
+
+    const primarySubject = cleanAssignments[0].subject;
+    const primaryClasses = cleanAssignments[0].classes;
+
+    const updatedTeacher: Teacher = {
+      ...targetAssignmentTeacher,
+      assignments: cleanAssignments,
+      subject: primarySubject,
+      classes: primaryClasses
+    };
+
+    if (onUpdateTeacher) {
+      onUpdateTeacher(updatedTeacher);
+    }
+
+    setSettingsSavedToast(true);
+    showThemedAlert(
+      'Penugasan Mengajar Berhasil Disimpan',
+      `Penugasan mengajar untuk ${targetAssignmentTeacher.name} (${cleanAssignments.length} mapel, ${cleanAssignments.map(a => a.classes.length).reduce((a, b) => a + b, 0)} rombel) telah berhasil disimpan permanen ke Cloud Database Supabase. Bank soal yang telah dibuat tetap aman dan tidak tertukar.`,
+      'info'
+    );
+    setTimeout(() => setSettingsSavedToast(false), 3000);
+  };
   const fileInputLogoLeftRef = useRef<HTMLInputElement>(null);
   const fileInputLogoRightRef = useRef<HTMLInputElement>(null);
   const fileInputPrincipalPhotoRef = useRef<HTMLInputElement>(null);
@@ -6712,6 +6887,322 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
               <div className="px-4 py-2 rounded-xl bg-emerald-600 text-white font-bold text-xs flex items-center gap-2 animate-in fade-in shadow-md">
                 <CheckCircle2 className="w-4 h-4" />
                 <span>Pengaturan berhasil disimpan!</span>
+              </div>
+            )}
+          </div>
+
+          {/* ============================================================== */}
+          {/* SECTION: KELOLA PENUGASAN MENGAJAR (MAPEL & ROMBEL KELAS)      */}
+          {/* ============================================================== */}
+          <div className="p-5 sm:p-7 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-6">
+            {/* Header Card */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100 dark:border-slate-800">
+              <div className="flex items-start sm:items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-violet-50 dark:bg-violet-950/60 border border-violet-200/60 dark:border-violet-800/60 text-violet-600 dark:text-violet-400 flex items-center justify-center shrink-0">
+                  <BookOpen className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h4 className="font-bold text-slate-900 dark:text-white text-base">
+                      Kelola Penugasan Mengajar (Mata Pelajaran & Rombel)
+                    </h4>
+                    <span className="px-2.5 py-0.5 rounded-full bg-violet-50 dark:bg-violet-950/60 text-violet-700 dark:text-violet-300 text-[10px] font-bold border border-violet-200/60 dark:border-violet-800/60">
+                      Multi-Mapel & Rombel
+                    </span>
+                    <span className="px-2.5 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 text-[10px] font-bold border border-emerald-200/60 dark:border-emerald-800/60 flex items-center gap-1">
+                      <span>☁️</span>
+                      <span>Cloud Database Supabase</span>
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                    Atur atau perbaiki mata pelajaran dan rombel kelas yang diampu. Penambahan mapel atau perubahan rombel tersimpan permanen dan tidak akan menghapus atau membenturkan bank soal yang telah dibuat sebelumnya.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setIsAssignmentSectionOpen(prev => !prev)}
+                  className="px-3.5 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-semibold text-xs transition cursor-pointer flex items-center gap-1.5"
+                >
+                  <span>{isAssignmentSectionOpen ? 'Tutup Formulir' : 'Buka Formulir'}</span>
+                  <span>{isAssignmentSectionOpen ? '▲' : '▼'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleSaveTeacherAssignments}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-bold text-xs shadow-md shadow-violet-600/20 transition cursor-pointer shrink-0"
+                >
+                  <Save className="w-3.5 h-3.5" />
+                  <span>Simpan Penugasan</span>
+                </button>
+              </div>
+            </div>
+
+            {isAssignmentSectionOpen && (
+              <div className="space-y-5">
+                {/* Khusus Admin: Pilihan Guru yang Dikelola */}
+                {currentTeacher?.role === 'admin' && (
+                  <div className="p-4 rounded-2xl bg-amber-50/50 dark:bg-amber-950/20 border border-amber-200/80 dark:border-amber-800/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                      <ShieldCheck className="w-4 h-4 text-amber-600 shrink-0" />
+                      <div>
+                        <span className="text-xs font-bold text-slate-900 dark:text-white">
+                          Mode Superadmin: Pilih Akun Guru yang Ingin Dikelola
+                        </span>
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                          Sebagai Superadmin, Anda dapat memperbaiki penugasan mapel & kelas dewan guru lain jika mereka salah memilih saat registrasi.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="shrink-0 w-full sm:w-auto">
+                      <select
+                        value={selectedAssignmentTeacherId}
+                        onChange={e => setSelectedAssignmentTeacherId(e.target.value)}
+                        className="w-full sm:w-64 px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-amber-300 dark:border-amber-700 text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500 cursor-pointer shadow-xs"
+                      >
+                        {currentTeacher && (
+                          <option value={currentTeacher.id}>
+                            ★ {currentTeacher.name} (Saya Sendiri - {currentTeacher.role})
+                          </option>
+                        )}
+                        {(teachers || [])
+                          .filter(t => t.id !== currentTeacher?.id && t.id !== '__cbt_school_settings__' && !t.id?.match(/^tea-\d{2}$/))
+                          .map(t => (
+                            <option key={t.id} value={t.id}>
+                              {t.name} ({t.subject || 'Guru'} - NIP: {t.nip})
+                            </option>
+                          ))}
+                      </select>
+                    </div>
+                  </div>
+                )}
+
+                {/* Banner Info Guru Aktif yang Sedang Dikelola */}
+                <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-800 flex items-center justify-between gap-3 text-xs">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-violet-600 text-white font-bold flex items-center justify-center shrink-0">
+                      {targetAssignmentTeacher?.name ? targetAssignmentTeacher.name.charAt(0) : 'G'}
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-slate-900 dark:text-white text-sm">
+                          {targetAssignmentTeacher?.name || 'Dewan Guru'}
+                        </span>
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-violet-100 dark:bg-violet-950 text-violet-700 dark:text-violet-300">
+                          NIP: {targetAssignmentTeacher?.nip || '-'}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                        Total {assignmentsForm.length} mata pelajaran aktif diampu • Tersinkron otomatis ke Supabase Cloud
+                      </p>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleAddAssignment}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs transition shadow-xs cursor-pointer shrink-0"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>+ Tambah Mata Pelajaran (Multi-Mapel)</span>
+                  </button>
+                </div>
+
+                {/* List Kartu Penugasan Mapel */}
+                <div className="space-y-4">
+                  {assignmentsForm.map((assignment, index) => {
+                    const isCustom = !AVAILABLE_SUBJECTS.includes(assignment.subject);
+                    const selectedClassesCount = assignment.classes?.length || 0;
+
+                    return (
+                      <div
+                        key={assignment.id || index}
+                        className="p-4 sm:p-5 rounded-2xl bg-slate-50/70 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700/80 space-y-4 relative"
+                      >
+                        {/* Top bar per Assignment */}
+                        <div className="flex items-center justify-between border-b border-slate-200/80 dark:border-slate-700/60 pb-3">
+                          <div className="flex items-center gap-2">
+                            <span className="w-6 h-6 rounded-lg bg-violet-600 text-white text-xs font-bold flex items-center justify-center">
+                              {index + 1}
+                            </span>
+                            <span className="font-bold text-slate-900 dark:text-white text-xs sm:text-sm">
+                              Penugasan #{index + 1}: {assignment.subject || 'Pilih Mata Pelajaran'}
+                            </span>
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300">
+                              {selectedClassesCount} Rombel Terpilih
+                            </span>
+                          </div>
+
+                          {assignmentsForm.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveAssignment(index)}
+                              className="px-2.5 py-1 rounded-xl text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 text-xs font-semibold transition flex items-center gap-1 cursor-pointer"
+                              title="Hapus penugasan mapel ini"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                              <span className="hidden sm:inline">Hapus Mapel</span>
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Input Pemilihan Mata Pelajaran */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                              Pilih Mata Pelajaran Resmi:
+                            </label>
+                            <select
+                              value={isCustom ? '__custom__' : assignment.subject}
+                              onChange={e => {
+                                const val = e.target.value;
+                                setAssignmentsForm(prev => {
+                                  const next = [...prev];
+                                  if (val === '__custom__') {
+                                    next[index] = { ...next[index], subject: customSubjectInputs[index] || 'Mata Pelajaran Kustom' };
+                                  } else {
+                                    next[index] = { ...next[index], subject: val };
+                                  }
+                                  return next;
+                                });
+                              }}
+                              className="w-full px-3.5 py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500 shadow-2xs cursor-pointer"
+                            >
+                              {AVAILABLE_SUBJECTS.map(subj => (
+                                <option key={subj} value={subj}>
+                                  {subj}
+                                </option>
+                              ))}
+                              <option value="__custom__">
+                                ✎ Mapel Kustom / Ketik Manual Lainnya...
+                              </option>
+                            </select>
+                          </div>
+
+                          {/* Jika Kustom, tampilkan input text */}
+                          {isCustom && (
+                            <div>
+                              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                                Masukkan Nama Mapel Kustom:
+                              </label>
+                              <input
+                                type="text"
+                                value={assignment.subject}
+                                onChange={e => {
+                                  const val = e.target.value;
+                                  setCustomSubjectInputs(prev => ({ ...prev, [index]: val }));
+                                  setAssignmentsForm(prev => {
+                                    const next = [...prev];
+                                    next[index] = { ...next[index], subject: val };
+                                    return next;
+                                  });
+                                }}
+                                placeholder="Contoh: Koding & Robotika / Bahasa Arab"
+                                className="w-full px-3.5 py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-violet-400 dark:border-violet-600 text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500 shadow-2xs"
+                              />
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Pemilihan Rombel Kelas */}
+                        <div className="space-y-2 pt-1">
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                            <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                              <span>Pilih Rombongan Belajar (Kelas) yang Anda Ajar untuk Mapel Ini:</span>
+                              <span className="text-[11px] font-normal text-slate-500">
+                                ({selectedClassesCount} kelas dipilih)
+                              </span>
+                            </label>
+
+                            {/* Tombol Aksi Cepat Pilih Kelas */}
+                            <div className="flex items-center gap-1 flex-wrap text-[11px]">
+                              <button
+                                type="button"
+                                onClick={() => handleSelectGradeClassesInAssignment(index, 'VII.')}
+                                className="px-2 py-1 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-violet-400 font-semibold text-slate-700 dark:text-slate-300 transition cursor-pointer"
+                              >
+                                Kelas 7
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleSelectGradeClassesInAssignment(index, 'VIII.')}
+                                className="px-2 py-1 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-violet-400 font-semibold text-slate-700 dark:text-slate-300 transition cursor-pointer"
+                              >
+                                Kelas 8
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleSelectGradeClassesInAssignment(index, 'IX.')}
+                                className="px-2 py-1 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-violet-400 font-semibold text-slate-700 dark:text-slate-300 transition cursor-pointer"
+                              >
+                                Kelas 9
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleSelectAllClassesInAssignment(index)}
+                                className="px-2 py-1 rounded-lg bg-violet-50 dark:bg-violet-950/60 border border-violet-200 dark:border-violet-800 text-violet-700 dark:text-violet-300 font-bold transition cursor-pointer"
+                              >
+                                {AVAILABLE_CLASSES.every(c => (assignment.classes || []).includes(c)) ? 'Kosongkan' : 'Semua'}
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Pills Rombel Kelas */}
+                          <div className="grid grid-cols-2 sm:grid-cols-5 md:grid-cols-10 gap-1.5 pt-1">
+                            {AVAILABLE_CLASSES.map(cls => {
+                              const isSelected = (assignment.classes || []).includes(cls);
+                              return (
+                                <button
+                                  key={cls}
+                                  type="button"
+                                  onClick={() => handleToggleClassInAssignment(index, cls)}
+                                  className={`px-2.5 py-2 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1 cursor-pointer border ${
+                                    isSelected
+                                      ? 'bg-violet-600 text-white border-violet-600 shadow-xs scale-[1.02]'
+                                      : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-violet-400'
+                                  }`}
+                                >
+                                  {isSelected && <Check className="w-3 h-3 shrink-0" />}
+                                  <span>{cls}</span>
+                                </button>
+                              );
+                            })}
+                          </div>
+
+                          {selectedClassesCount === 0 && (
+                            <p className="text-[11px] text-rose-500 font-medium pt-1">
+                              ⚠️ Harap centang minimal satu rombel kelas di atas agar soal Anda dapat diakses oleh siswa di kelas tersebut.
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Info Note Keamanan */}
+                <div className="p-4 rounded-2xl bg-blue-50/60 dark:bg-blue-950/20 border border-blue-200/60 dark:border-blue-800/40 text-[11px] text-blue-800 dark:text-blue-300 leading-relaxed flex items-start gap-2.5">
+                  <span className="text-base shrink-0">💡</span>
+                  <div>
+                    <strong>Keamanan Bank Soal & Privasi:</strong> Mengubah rombel kelas atau menambahkan mata pelajaran baru tidak akan pernah menghapus bank soal yang sudah dibuat sebelumnya. Di CBT 58, soal disimpan mandiri di Supabase Cloud berdasarkan ID mata pelajaran resmi, sehingga tidak akan bentrok atau tertukar dengan dewan guru lainnya.
+                  </div>
+                </div>
+
+                {/* Tombol Simpan di Bawah */}
+                <div className="flex justify-end pt-2">
+                  <button
+                    type="button"
+                    onClick={handleSaveTeacherAssignments}
+                    className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-bold text-xs shadow-md shadow-violet-600/20 transition cursor-pointer"
+                  >
+                    <Save className="w-4 h-4" />
+                    <span>Simpan Penugasan Mengajar ke Cloud</span>
+                  </button>
+                </div>
               </div>
             )}
           </div>

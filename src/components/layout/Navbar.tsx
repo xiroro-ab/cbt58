@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useTheme } from '@/context/ThemeContext';
 import { useLanguage } from '@/context/LanguageContext';
 import { ExamNotification, ExamMessage, Teacher, Subject } from '@/types/cbt';
@@ -107,6 +108,11 @@ export const Navbar: React.FC<NavbarProps> = ({
 }) => {
   const { theme, toggleTheme } = useTheme();
   const { language, toggleLanguage, t } = useLanguage();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   // Dropdown States
   const [showNotifications, setShowNotifications] = useState(false);
@@ -741,9 +747,15 @@ export const Navbar: React.FC<NavbarProps> = ({
         </button>
 
         {/* Modal Profil Pengguna & Direktori Guru */}
-        {showTeachersModal && (
-          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-in fade-in">
-            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-lg w-full max-h-[88vh] flex flex-col shadow-2xl animate-in zoom-in-95 overflow-hidden">
+        {showTeachersModal && mounted && createPortal(
+          <div
+            onClick={() => setShowTeachersModal(false)}
+            className="fixed inset-0 z-[9999] bg-black/75 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-in fade-in"
+          >
+            <div
+              onClick={e => e.stopPropagation()}
+              className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl sm:rounded-3xl max-w-lg w-full max-h-[88vh] flex flex-col shadow-2xl animate-in zoom-in-95 overflow-hidden"
+            >
               {/* FIXED HEADER */}
               <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 p-4 sm:p-5 shrink-0 bg-slate-50/50 dark:bg-slate-900/50">
                 <div className="flex items-center gap-2.5">
@@ -922,7 +934,8 @@ export const Navbar: React.FC<NavbarProps> = ({
                 </button>
               </div>
             </div>
-          </div>
+          </div>,
+          document.body
         )}
 
         {/* Tombol Aksi Cepat: Masuk Mode Ujian Siswa */}

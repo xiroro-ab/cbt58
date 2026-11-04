@@ -722,9 +722,14 @@ export default function Home() {
 
   const handleUpdateResult = async (updatedResult: ExamResult) => {
     const cleanName = updatedResult.studentName.toLowerCase().trim();
+    const cleanClass = (updatedResult.className || '').toLowerCase().trim();
     setResults(prev => {
       const filtered = prev.filter(
-        r => r.id !== updatedResult.id && !(r.studentName.toLowerCase().trim() === cleanName && r.subjectId === updatedResult.subjectId)
+        r => r.id !== updatedResult.id && !(
+          r.studentName.toLowerCase().trim() === cleanName &&
+          r.subjectId === updatedResult.subjectId &&
+          (!cleanClass || !r.className || r.className.toLowerCase().trim() === cleanClass)
+        )
       );
       return [updatedResult, ...filtered];
     });
@@ -735,15 +740,27 @@ export default function Home() {
     }
   };
 
-  const handleDeleteResult = async (resultId: string, subjectId?: string, studentName?: string) => {
+  const handleDeleteResult = async (resultId: string, subjectId?: string, studentName?: string, className?: string) => {
     const cleanName = studentName ? studentName.toLowerCase().trim() : '';
+    const cleanClass = className ? className.toLowerCase().trim() : '';
     setResults(prev =>
       prev.filter(
-        r => r.id !== resultId && !(cleanName && r.studentName.toLowerCase().trim() === cleanName && (!subjectId || r.subjectId === subjectId))
+        r => r.id !== resultId && !(
+          cleanName &&
+          r.studentName.toLowerCase().trim() === cleanName &&
+          (!subjectId || r.subjectId === subjectId) &&
+          (!cleanClass || !r.className || r.className.toLowerCase().trim() === cleanClass)
+        )
       )
     );
     if (cleanName && typeof window !== 'undefined') {
       try {
+        if (cleanClass) {
+          localStorage.removeItem(`cbt_submitted_${subjectId || subject?.id}_${cleanClass}_${cleanName}`);
+          localStorage.removeItem(`cbt_blocked_${subjectId || subject?.id}_${cleanClass}_${cleanName}`);
+          localStorage.removeItem(`cbt_exam_state_${subjectId || subject?.id}_${cleanClass}_${cleanName}`);
+          localStorage.removeItem(`cbt_exam_questions_${subjectId || subject?.id}_${cleanClass}_${cleanName}`);
+        }
         localStorage.removeItem(`cbt_submitted_${subjectId || subject?.id}_${cleanName}`);
         localStorage.removeItem(`cbt_blocked_${subjectId || subject?.id}_${cleanName}`);
         localStorage.removeItem(`cbt_exam_state_${subjectId || subject?.id}_${cleanName}`);
@@ -754,7 +771,7 @@ export default function Home() {
       } catch {}
     }
     try {
-      await deleteExamResult(resultId, subjectId || subject?.id, studentName);
+      await deleteExamResult(resultId, subjectId || subject?.id, studentName, className);
     } catch (err) {
       console.warn('Supabase delete result fallback to local state:', err);
     }
@@ -1180,6 +1197,12 @@ export default function Home() {
             localStorage.setItem(questionsStorageKey, JSON.stringify(finalQuestions));
           } catch {}
         }
+      } else {
+        // Sterilkan juga jika paket soal dipulihkan dari penyimpanan lokal sesi sebelumnya
+        finalQuestions = finalQuestions.map(q => {
+          const { answer, ...cleanQ } = q;
+          return cleanQ as Question;
+        });
       }
 
       // Pasang otomatis mata pelajaran & butir soal yang terdeteksi
@@ -1228,8 +1251,18 @@ export default function Home() {
 
   const handleFinishExam = async (resultData: any) => {
     const cleanName = resultData.studentName.toLowerCase().trim();
+    const finalClass = resolveStudentSingleClass(resultData.studentName, resultData.className || selectedStudentClass);
+    const cleanClass = finalClass.toLowerCase().trim();
+
     if (typeof window !== 'undefined') {
       try {
+        if (cleanClass) {
+          localStorage.setItem(`cbt_submitted_${subject.id}_${cleanClass}_${cleanName}`, JSON.stringify({
+            score: resultData.score,
+            submittedAt: resultData.submittedAt
+          }));
+          localStorage.removeItem(`cbt_exam_questions_${subject.id}_${cleanClass}_${cleanName}`);
+        }
         localStorage.setItem(`cbt_submitted_${subject.id}_${cleanName}`, JSON.stringify({
           score: resultData.score,
           submittedAt: resultData.submittedAt
@@ -1244,7 +1277,7 @@ export default function Home() {
       subjectTitle: subject.title,
       studentId: matchedStudent?.id || `std-${Date.now()}`,
       studentName: resultData.studentName,
-      className: resolveStudentSingleClass(resultData.studentName, resultData.className || selectedStudentClass),
+      className: finalClass,
       score: resultData.score,
       totalEarned: resultData.totalEarned,
       totalMax: resultData.totalMax,
@@ -1256,7 +1289,11 @@ export default function Home() {
 
     setResults(prev => {
       const filtered = prev.filter(
-        r => r.id !== newResult.id && !(r.studentName.toLowerCase().trim() === cleanName && r.subjectId === subject.id)
+        r => r.id !== newResult.id && !(
+          r.studentName.toLowerCase().trim() === cleanName &&
+          r.subjectId === subject.id &&
+          (!cleanClass || !r.className || r.className.toLowerCase().trim() === cleanClass)
+        )
       );
       return [newResult, ...filtered];
     });

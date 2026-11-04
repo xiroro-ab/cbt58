@@ -87,12 +87,18 @@ export async function POST(req: NextRequest) {
 
     // 4. Simpan atau perbarui di database Supabase (exam_results)
     const cleanName = studentName.trim().toLowerCase();
-    const { data: existing } = await supabase
+    const cleanClass = (className || '').trim().toLowerCase();
+    let existingQuery = supabase
       .from('exam_results')
       .select('id')
       .eq('subject_id', subjectId)
-      .ilike('student_name', cleanName)
-      .limit(1);
+      .ilike('student_name', cleanName);
+
+    if (cleanClass) {
+      existingQuery = existingQuery.ilike('class_name', cleanClass);
+    }
+
+    const { data: existing } = await existingQuery.limit(1);
 
     if (existing && existing.length > 0) {
       await supabase

@@ -468,12 +468,17 @@ export async function saveOrUpdateExamResult(result: ExamResult): Promise<boolea
     }
 
     if (!existingId) {
-      const { data: byName } = await supabase
+      let byNameQuery = supabase
         .from('exam_results')
-        .select('id')
+        .select('id, class_name')
         .eq('subject_id', result.subjectId)
-        .ilike('student_name', result.studentName.trim())
-        .order('submitted_at', { ascending: false });
+        .ilike('student_name', result.studentName.trim());
+
+      if (result.className && result.className.trim()) {
+        byNameQuery = byNameQuery.ilike('class_name', result.className.trim());
+      }
+
+      const { data: byName } = await byNameQuery.order('submitted_at', { ascending: false });
       if (byName && byName.length > 0) {
         existingId = byName[0].id;
         // Jika sebelumnya sempat ada baris ganda, bersihkan baris kedua dst secara otomatis
@@ -639,7 +644,12 @@ export async function updateExamResult(result: ExamResult): Promise<boolean> {
 /**
  * Menghapus/mereset hasil ujian siswa agar siswa dapat login dan mengerjakan ulang
  */
-export async function deleteExamResult(resultId: string, subjectId?: string, studentName?: string): Promise<boolean> {
+export async function deleteExamResult(
+  resultId: string,
+  subjectId?: string,
+  studentName?: string,
+  className?: string
+): Promise<boolean> {
   if (typeof window !== 'undefined' && subjectId) {
     try {
       const stored = localStorage.getItem(`cbt_results_${subjectId}`);
@@ -658,6 +668,13 @@ export async function deleteExamResult(resultId: string, subjectId?: string, stu
       }
       if (studentName) {
         const cleanName = studentName.toLowerCase().trim();
+        const cleanClass = (className || '').toLowerCase().trim();
+        if (cleanClass) {
+          localStorage.removeItem(`cbt_submitted_${subjectId}_${cleanClass}_${cleanName}`);
+          localStorage.removeItem(`cbt_blocked_${subjectId}_${cleanClass}_${cleanName}`);
+          localStorage.removeItem(`cbt_exam_state_${subjectId}_${cleanClass}_${cleanName}`);
+          localStorage.removeItem(`cbt_exam_questions_${subjectId}_${cleanClass}_${cleanName}`);
+        }
         localStorage.removeItem(`cbt_answers_${studentName}_${subjectId}`);
         localStorage.removeItem(`cbt_blocked_${subjectId}_${cleanName}`);
         localStorage.removeItem(`cbt_exam_state_${subjectId}_${cleanName}`);
@@ -672,11 +689,17 @@ export async function deleteExamResult(resultId: string, subjectId?: string, stu
       await supabase.from('exam_results').delete().eq('id', resultId);
     }
     if (subjectId && studentName) {
-      await supabase
+      let delQuery = supabase
         .from('exam_results')
         .delete()
         .eq('subject_id', subjectId)
         .ilike('student_name', studentName.trim());
+
+      if (className && className.trim()) {
+        delQuery = delQuery.ilike('class_name', className.trim());
+      }
+
+      await delQuery;
 
       // Otomatis bersihkan notifikasi pelanggaran / autolock jika guru mereset hasil ujian siswa
       await clearStudentAutolockInSupabase(subjectId, studentName);

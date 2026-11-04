@@ -535,7 +535,7 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
     setIsCheckingUnlock(true);
     setUnlockCheckMessage(null);
     try {
-      const lockStatus = await checkStudentLockStatus(subject.id, studentName, subject.violationLimit || 3);
+      const lockStatus = await checkStudentLockStatus(subject.id, studentName, subject.violationLimit || 3, studentActualClass);
       if (!lockStatus.isBlocked) {
         setIsLocked(false);
         setViolationCount(0);
@@ -1031,30 +1031,39 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
     setShowWarningModal(false);
 
     // 1. Evaluasi & simpan nilai terverifikasi via Serverless Endpoint (Mencegah manipulasi client-side)
+    // Dilengkapi retry 3x otomatis untuk mengantisipasi jika sinyal WiFi siswa sempat terputus sesaat saat submit
     let evaluation: any = null;
     let serverResult: any = null;
+    let retries = 3;
 
-    try {
-      const res = await fetch('/api/exam/submit-score', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          subjectId: subject.id,
-          studentName,
-          className: studentActualClass,
-          answers,
-          violationCount
-        })
-      });
-      if (res.ok) {
-        const data = await res.json();
-        if (data?.evaluation) {
-          evaluation = data.evaluation;
-          serverResult = data.result;
+    while (retries > 0 && !evaluation) {
+      try {
+        const res = await fetch('/api/exam/submit-score', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            subjectId: subject.id,
+            studentName,
+            className: studentActualClass,
+            answers,
+            violationCount
+          })
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data?.evaluation) {
+            evaluation = data.evaluation;
+            serverResult = data.result;
+            break;
+          }
         }
+      } catch (serverErr) {
+        console.warn(`Percobaan kirim ujian ke server gagal (sisa percobaan: ${retries - 1}):`, serverErr);
       }
-    } catch (serverErr) {
-      console.warn('Server score submission fallback to client:', serverErr);
+      retries--;
+      if (!evaluation && retries > 0) {
+        await new Promise(r => setTimeout(r, 1000));
+      }
     }
 
     // 2. Fail-safe fallback evaluasi lokal jika server offline
@@ -1084,6 +1093,15 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
     if (typeof window !== 'undefined') {
       try {
         const cleanName = studentName.toLowerCase().trim();
+        const cleanClass = studentActualClass.toLowerCase().trim();
+        if (cleanClass) {
+          localStorage.setItem(`cbt_submitted_${subject.id}_${cleanClass}_${cleanName}`, JSON.stringify({
+            score: evaluation.finalScore,
+            submittedAt: new Date().toLocaleString('id-ID'),
+            reason
+          }));
+          localStorage.removeItem(`cbt_exam_questions_${subject.id}_${cleanClass}_${cleanName}`);
+        }
         localStorage.setItem(`cbt_submitted_${subject.id}_${cleanName}`, JSON.stringify({
           score: evaluation.finalScore,
           submittedAt: new Date().toLocaleString('id-ID'),
@@ -1091,6 +1109,8 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
         }));
         localStorage.removeItem(stateKey);
         localStorage.removeItem(blockedKey);
+        localStorage.removeItem(`cbt_exam_state_${subject.id}_${cleanName}`);
+        localStorage.removeItem(`cbt_blocked_${subject.id}_${cleanName}`);
         localStorage.removeItem(`cbt_exam_questions_${subject.id}_${cleanName}`);
       } catch {}
     }

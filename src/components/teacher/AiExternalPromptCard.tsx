@@ -72,6 +72,7 @@ export const AiExternalPromptCard: React.FC<AiExternalPromptCardProps> = ({
       id: 'deepseek',
       name: 'DeepSeek',
       company: 'DeepSeek AI',
+      url: 'https://chat.deepseek.com',
       badge: 'Gratis',
       icon: (
         <svg className="w-3.5 h-3.5 shrink-0 text-sky-600 dark:text-sky-400" viewBox="0 0 24 24" fill="currentColor">
@@ -83,6 +84,7 @@ export const AiExternalPromptCard: React.FC<AiExternalPromptCardProps> = ({
       id: 'claude',
       name: 'Claude',
       company: 'Anthropic',
+      url: 'https://claude.ai',
       badge: 'Teliti',
       icon: (
         <svg className="w-3.5 h-3.5 shrink-0 text-amber-600 dark:text-amber-400" viewBox="0 0 24 24" fill="currentColor">
@@ -94,6 +96,7 @@ export const AiExternalPromptCard: React.FC<AiExternalPromptCardProps> = ({
       id: 'qwen',
       name: 'Qwen',
       company: 'Alibaba',
+      url: 'https://chat.qwen.ai',
       badge: 'Sains',
       icon: (
         <svg className="w-3.5 h-3.5 shrink-0 text-purple-600 dark:text-purple-400" viewBox="0 0 24 24" fill="currentColor">

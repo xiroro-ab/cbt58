@@ -252,7 +252,13 @@ export const Navbar: React.FC<NavbarProps> = ({
             </button>
 
             {showAssignmentDropdown && (
-              <div className="absolute right-0 mt-2 w-72 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xl p-2 z-50 space-y-1 animate-in fade-in zoom-in-95">
+              <div
+                className="fixed inset-0 z-40 bg-black/40 backdrop-blur-2xs sm:hidden"
+                onClick={() => setShowAssignmentDropdown(false)}
+              />
+            )}
+            {showAssignmentDropdown && (
+              <div className="fixed inset-x-3 top-14 sm:absolute sm:inset-auto sm:right-0 sm:top-full sm:mt-2 w-auto sm:w-72 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xl p-2 z-50 space-y-1 animate-in fade-in zoom-in-95">
                 <div className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
                   <span>Pilih Mapel Aktif ({currentTeacher.assignments.length})</span>
                   <span className="text-[9px] text-violet-600 dark:text-violet-400 font-bold bg-violet-100 dark:bg-violet-950 px-1.5 py-0.5 rounded">
@@ -333,7 +339,13 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           {/* Popover Pesan Kendala & Broadcast */}
           {showMessages && (
-            <div className="absolute right-0 mt-2 w-80 sm:w-[420px] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-2xl p-5 space-y-4 z-50 animate-in fade-in zoom-in-95">
+            <div
+              className="fixed inset-0 z-40 bg-black/40 backdrop-blur-2xs sm:hidden"
+              onClick={() => setShowMessages(false)}
+            />
+          )}
+          {showMessages && (
+            <div className="fixed inset-x-3 top-14 sm:absolute sm:inset-auto sm:right-0 sm:top-full sm:mt-2 w-auto sm:w-[420px] max-w-[calc(100vw-24px)] sm:max-w-none bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl sm:rounded-3xl shadow-2xl p-4 sm:p-5 space-y-4 z-50 animate-in fade-in zoom-in-95 max-h-[85vh] flex flex-col">
               {/* Header Popover */}
               <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
                 <div className="flex items-center gap-2">
@@ -528,16 +540,24 @@ export const Navbar: React.FC<NavbarProps> = ({
             )}
           </button>
 
+          {/* Backdrop di Layar HP */}
+          {showNotifications && (
+            <div
+              className="fixed inset-0 z-40 bg-black/40 backdrop-blur-2xs sm:hidden"
+              onClick={() => setShowNotifications(false)}
+            />
+          )}
+
           {/* Notifikasi Popover */}
           {showNotifications && (
-            <div className="absolute right-0 mt-2 w-80 sm:w-[420px] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-2xl p-5 space-y-3.5 z-50 animate-in fade-in zoom-in-95">
-              <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
-                <div className="flex items-center gap-2.5">
+            <div className="fixed inset-x-3 top-14 sm:absolute sm:inset-auto sm:right-0 sm:top-full sm:mt-2 w-auto sm:w-[420px] max-w-[calc(100vw-24px)] sm:max-w-none bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl sm:rounded-3xl shadow-2xl p-4 sm:p-5 space-y-3.5 z-50 animate-in fade-in zoom-in-95 max-h-[85vh] flex flex-col">
+              <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3 gap-2 shrink-0">
+                <div className="flex items-center gap-2.5 min-w-0">
                   <div className="w-8 h-8 rounded-xl bg-violet-100 dark:bg-violet-950/60 text-violet-600 dark:text-violet-400 flex items-center justify-center font-bold flex-shrink-0">
                     <Bell className="w-4 h-4" />
                   </div>
-                  <div className="flex items-center gap-2">
-                    <h4 className="font-extrabold text-xs sm:text-sm text-slate-900 dark:text-white">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <h4 className="font-extrabold text-xs sm:text-sm text-slate-900 dark:text-white truncate">
                       Notifikasi Aktivitas
                     </h4>
                     {unreadNotifCount > 0 && (
@@ -548,11 +568,11 @@ export const Navbar: React.FC<NavbarProps> = ({
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2.5">
+                <div className="flex items-center gap-2 shrink-0">
                   {unreadNotifCount > 0 && (
                     <button
                       onClick={onMarkAllNotificationsRead}
-                      className="text-[11px] font-bold text-violet-600 dark:text-violet-400 hover:underline cursor-pointer"
+                      className="text-[10px] sm:text-[11px] font-bold text-violet-600 dark:text-violet-400 hover:underline cursor-pointer"
                     >
                       Tandai Dibaca
                     </button>
@@ -560,7 +580,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   {notifications.length > 0 && (
                     <button
                       onClick={onClearAllNotifications}
-                      className="text-[11px] font-bold text-rose-500 hover:text-rose-600 hover:underline cursor-pointer"
+                      className="text-[10px] sm:text-[11px] font-bold text-rose-500 hover:text-rose-600 hover:underline cursor-pointer"
                       title="Hapus seluruh riwayat notifikasi"
                     >
                       Hapus Semua
@@ -568,7 +588,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   )}
                   <button
                     onClick={() => setShowNotifications(false)}
-                    className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
+                    className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
                     title="Tutup Notifikasi"
                   >
                     <X className="w-4 h-4" />
@@ -577,10 +597,10 @@ export const Navbar: React.FC<NavbarProps> = ({
               </div>
 
               {/* Filter Notifikasi */}
-              <div className="flex gap-1.5 text-[11px] font-bold">
+              <div className="flex items-center gap-1.5 text-[11px] font-bold overflow-x-auto pb-1 scrollbar-none whitespace-nowrap shrink-0">
                 <button
                   onClick={() => setNotifFilter('all')}
-                  className={`px-3 py-1.5 rounded-xl transition cursor-pointer ${
+                  className={`px-3 py-1.5 rounded-xl transition cursor-pointer shrink-0 ${
                     notifFilter === 'all'
                       ? 'bg-violet-600 text-white shadow-xs'
                       : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
@@ -590,7 +610,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 </button>
                 <button
                   onClick={() => setNotifFilter('violation')}
-                  className={`px-3 py-1.5 rounded-xl transition cursor-pointer ${
+                  className={`px-3 py-1.5 rounded-xl transition cursor-pointer shrink-0 ${
                     notifFilter === 'violation'
                       ? 'bg-rose-600 text-white shadow-xs'
                       : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
@@ -600,7 +620,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 </button>
                 <button
                   onClick={() => setNotifFilter('submission')}
-                  className={`px-3 py-1.5 rounded-xl transition cursor-pointer ${
+                  className={`px-3 py-1.5 rounded-xl transition cursor-pointer shrink-0 ${
                     notifFilter === 'submission'
                       ? 'bg-emerald-600 text-white shadow-xs'
                       : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
@@ -611,7 +631,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               </div>
 
               {/* Daftar Notifikasi Riil */}
-              <div className="max-h-72 overflow-y-auto space-y-2 text-xs">
+              <div className="max-h-[55vh] sm:max-h-72 overflow-y-auto space-y-2 text-xs flex-1 pr-0.5">
                 {filteredNotifications.length === 0 ? (
                   <div className="py-8 text-center text-slate-400 space-y-1">
                     <CheckCircle2 className="w-6 h-6 text-emerald-500 mx-auto" />

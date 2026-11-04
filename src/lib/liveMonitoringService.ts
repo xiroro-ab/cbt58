@@ -31,6 +31,12 @@ export interface BroadcastAnnouncement {
   timestamp: number;
 }
 
+export interface TeacherStatusPayload {
+  teacherId: string;
+  status: 'Aktif Mengawas' | 'Standby' | 'Offline';
+  lastLogin: string;
+}
+
 export const ANNOUNCEMENT_STORAGE_KEY = 'cbt_active_broadcast';
 
 // Set of listeners for live sessions updates (Teacher View)
@@ -44,6 +50,9 @@ const resultChangeListeners = new Set<(payload: ResultChangePayload) => void>();
 
 // Set of listeners for proctor announcements (Student & Teacher View)
 const announcementListeners = new Set<(announcement: BroadcastAnnouncement) => void>();
+
+// Set of listeners for teacher active status changes (Realtime Presence)
+const teacherStatusListeners = new Set<(payload: TeacherStatusPayload) => void>();
 
 // Singleton BroadcastChannel untuk sinkronisasi antar-tab dalam browser yang sama
 let sharedBc: BroadcastChannel | null = null;
@@ -70,6 +79,10 @@ function getSharedBroadcastChannel(): BroadcastChannel | null {
         } else if (event.data?.type === 'ANNOUNCEMENT_BROADCAST' && event.data.announcement) {
           announcementListeners.forEach(fn => {
             try { fn(event.data.announcement); } catch {}
+          });
+        } else if (event.data?.type === 'TEACHER_STATUS_BROADCAST' && event.data.payload) {
+          teacherStatusListeners.forEach(fn => {
+            try { fn(event.data.payload); } catch {}
           });
         }
       });
@@ -154,6 +167,14 @@ function initSupabaseChannel() {
             }
             announcementListeners.forEach(fn => {
               try { fn(ann); } catch {}
+            });
+          }
+        })
+        .on('broadcast', { event: 'teacher_status_changed' }, (payload: any) => {
+          const data: TeacherStatusPayload = payload.payload;
+          if (data && data.teacherId) {
+            teacherStatusListeners.forEach(fn => {
+              try { fn(data); } catch {}
             });
           }
         })
@@ -456,6 +477,58 @@ export function subscribeToResultChanges(onResultChange: (payload: ResultChangeP
   resultChangeListeners.add(onResultChange);
   return () => {
     resultChangeListeners.delete(onResultChange);
+  };
+}
+
+/**
+ * Menyiarkan pembaruan status dewan guru secara instan lintas jaringan/browser (Realtime Broadcast)
+ */
+export function broadcastTeacherStatus(
+  teacherId: string,
+  status: 'Aktif Mengawas' | 'Standby' | 'Offline',
+  lastLogin?: string
+) {
+  const payload: TeacherStatusPayload = {
+    teacherId,
+    status,
+    lastLogin: lastLogin || new Date().toISOString()
+  };
+
+  // 1. Notifikasi listener lokal internal
+  teacherStatusListeners.forEach(fn => {
+    try { fn(payload); } catch {}
+  });
+
+  // 2. Siarkan via BroadcastChannel lokal (antar-tab browser sama)
+  const bc = getSharedBroadcastChannel();
+  if (bc) {
+    try {
+      bc.postMessage({ type: 'TEACHER_STATUS_BROADCAST', payload });
+    } catch {}
+  }
+
+  // 3. Siarkan via Supabase Realtime Broadcast (sub-detik lintas internet & koneksi berbeda)
+  const supa = initSupabaseChannel();
+  if (supa) {
+    try {
+      supa.send({
+        type: 'broadcast',
+        event: 'teacher_status_changed',
+        payload
+      });
+    } catch {}
+  }
+}
+
+/**
+ * Berlangganan pembaruan status keaktifan dewan guru secara realtime
+ */
+export function subscribeToTeacherStatus(onStatusChange: (payload: TeacherStatusPayload) => void): () => void {
+  teacherStatusListeners.add(onStatusChange);
+  initSupabaseChannel();
+  getSharedBroadcastChannel();
+  return () => {
+    teacherStatusListeners.delete(onStatusChange);
   };
 }
 

@@ -3,7 +3,17 @@ import { Subject, Question, ExamResult, ScoringRules, ExamNotification, ExamMess
 import { initialSubject, sampleSubjects, sampleQuestions } from './mockData';
 import { initialStudents } from './rosterStudents';
 import { initialTeachers } from './rosterTeachers';
-import { notifyResultChanged, subscribeToResultChanges, ResultChangePayload } from './liveMonitoringService';
+import {
+  notifyResultChanged,
+  subscribeToResultChanges,
+  ResultChangePayload,
+  broadcastTeacherStatus,
+  subscribeToTeacherStatus,
+  TeacherStatusPayload
+} from './liveMonitoringService';
+
+export { subscribeToTeacherStatus };
+export type { TeacherStatusPayload };
 
 /**
  * Mengambil seluruh daftar mata pelajaran dari Supabase (fallback ke sampleSubjects)
@@ -1951,15 +1961,18 @@ export async function updateTeacherStatusInSupabase(
   teacherId: string,
   status: 'Aktif Mengawas' | 'Standby' | 'Offline'
 ): Promise<boolean> {
+  const nowIso = new Date().toISOString();
   try {
     const { error } = await supabase
       .from('teachers')
-      .update({ status, last_login: new Date().toISOString() })
+      .update({ status, last_login: nowIso })
       .eq('id', teacherId);
     if (error) {
       console.warn('Gagal updateTeacherStatusInSupabase:', error.message);
       return false;
     }
+    // Siarkan status ke seluruh dewan guru secara instan via Realtime Broadcast
+    broadcastTeacherStatus(teacherId, status, nowIso);
     return true;
   } catch (err) {
     console.error('Exception updateTeacherStatusInSupabase:', err);

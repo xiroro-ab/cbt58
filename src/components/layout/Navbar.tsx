@@ -859,9 +859,11 @@ export const Navbar: React.FC<NavbarProps> = ({
                       const teaPhoto = getTeacherPhoto(tea);
                       const isCurrent = tea.id === currentTeacher?.id;
                       const isRecentlyActive = !isCurrent && tea.status === 'Aktif Mengawas' && (() => {
-                        if (!tea.lastLogin) return false;
+                        if (!tea.lastLogin) return true;
                         const diffMs = Date.now() - new Date(tea.lastLogin).getTime();
-                        return diffMs >= 0 && diffMs < 5 * 60 * 1000;
+                        // Toleransi perbedaan waktu / clock skew antar perangkat (diffMs bisa bernilai negatif jika jam perangkat lain lebih cepat)
+                        // serta batas timeout inaktivitas 15 menit jika browser ditutup tanpa logout
+                        return diffMs > -60 * 60 * 1000 && diffMs < 15 * 60 * 1000;
                       })();
                       return (
                         <div

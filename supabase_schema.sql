@@ -259,6 +259,11 @@ DO $$ BEGIN
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
 
+DO $$ BEGIN
+    ALTER PUBLICATION supabase_realtime ADD TABLE teachers;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
 -- CONTOH DATA AWAL NOTIFIKASI & PESAN
 INSERT INTO exam_notifications (subject_id, student_name, type, title, message, is_read)
 VALUES

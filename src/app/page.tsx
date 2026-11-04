@@ -59,6 +59,7 @@ import {
   fetchTeachers,
   insertTeacher,
   updateTeacherStatusInSupabase,
+  subscribeToTeacherStatus,
   updateTeacherPhotoInSupabase,
   updateTeacherAssignmentsInSupabase,
   mergeTeachers,
@@ -636,6 +637,23 @@ export default function Home() {
       isMounted = false;
       clearInterval(interval);
     };
+  }, [viewMode]);
+
+  // 2e. Realtime listener: Dapatkan update status online/offline guru lain seketika lintas perangkat & jaringan
+  useEffect(() => {
+    if (viewMode !== 'teacher') return;
+
+    const unsub = subscribeToTeacherStatus(payload => {
+      setTeachers(prev =>
+        prev.map(t =>
+          t.id === payload.teacherId
+            ? { ...t, status: payload.status, lastLogin: payload.lastLogin }
+            : t
+        )
+      );
+    });
+
+    return () => unsub();
   }, [viewMode]);
 
   const handleUpdateSubject = async (updated: Subject) => {

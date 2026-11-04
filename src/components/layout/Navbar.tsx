@@ -199,7 +199,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   return (
     <header className="sticky top-0 z-20 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b border-slate-200/80 dark:border-slate-800/80 px-3 sm:px-6 py-2.5 sm:py-4 flex items-center justify-between transition-colors gap-2 print:hidden">
       {/* 1. HAMBURGER (MOBILE) + GREETING & DATE (DESKTOP) */}
-      <div className="flex items-center gap-2 sm:gap-3 min-w-0 shrink-0">
+      <div className="flex items-center gap-2 sm:gap-3 min-w-0">
         {onToggleMobileSidebar && (
           <button
             onClick={onToggleMobileSidebar}

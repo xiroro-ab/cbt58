@@ -2033,7 +2033,7 @@ export default function Home() {
       />
 
       {/* MAIN CONTAINER */}
-      <div className="flex-1 flex flex-col h-screen overflow-y-auto print:h-auto print:overflow-visible print:bg-white print:block">
+      <div className="flex-1 min-w-0 flex flex-col h-screen overflow-y-auto overflow-x-hidden print:h-auto print:overflow-visible print:bg-white print:block">
         {/* NAVBAR HEADER DENGAN NOTIFIKASI & PESAN KENDALA AKTIF (OPSI A) */}
         <Navbar
           onStartStudentExam={() => setViewMode('student_login')}
@@ -2068,7 +2068,7 @@ export default function Home() {
         />
 
         {/* DASHBOARD CONTENT BODY */}
-        <main className={`flex-1 print:h-auto print:overflow-visible print:bg-white ${isCertificatesModalOpen ? 'print:hidden' : ''}`}>
+        <main className={`flex-1 min-w-0 print:h-auto print:overflow-visible print:bg-white ${isCertificatesModalOpen ? 'print:hidden' : ''}`}>
           <ErrorBoundary fallbackTitle="Pemulihan Dashboard Guru">
             <TeacherDashboard
               currentNav={currentNav}

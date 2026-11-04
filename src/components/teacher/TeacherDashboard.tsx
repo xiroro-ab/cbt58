@@ -3239,7 +3239,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                       )}
                     </div>
                   </div>
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-3 min-w-0">
                     <div className="text-right">
                       <span className="text-xs font-black text-violet-700 dark:text-violet-300">
                         {statsHoveredItem.primaryVal}
@@ -3788,7 +3788,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                   >
                     <div className="flex items-center justify-between">
                       <div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
                           <p className="font-extrabold text-sm text-slate-900 dark:text-white">Kelas {cp.className}</p>
                           {isSelected && (
                             <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-md bg-violet-600 text-white">
@@ -4196,7 +4196,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
             {/* Indikator Isolasi Akun Guru */}
             {effectiveSchoolSettings.isolateTeacherDossier && currentTeacher && currentTeacher.role === 'guru_mapel' && (
               <div className="w-full flex items-center justify-between p-2.5 rounded-xl bg-violet-50 dark:bg-violet-950/40 border border-violet-200 dark:border-violet-800 text-xs mb-1">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <Lock className="w-3.5 h-3.5 text-violet-600 dark:text-violet-400 shrink-0" />
                   <span className="text-violet-800 dark:text-violet-300 font-medium">
                     Mode Guru: <strong>{currentTeacher.name}</strong> ({currentTeacher.subject}) • {onlyMyAssignedSubjects ? 'Hanya Menampilkan Nilai Mapel Anda' : 'Menampilkan Semua Mapel Sekolah'}
@@ -4589,7 +4589,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                   </p>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <button
                     type="button"
                     onClick={() => setIsAiModalOpen(true)}
@@ -4692,7 +4692,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                         <div className="space-y-4">
                           {/* Top: Icon & Category */}
                           <div className="flex items-start justify-between gap-3">
-                            <div className="flex items-center gap-3">
+                            <div className="flex items-center gap-3 min-w-0">
                               <div className={`w-11 h-11 rounded-xl ${theme.iconBg} flex items-center justify-center font-bold shadow-xs`}>
                                 <BookOpen className="w-5 h-5" />
                               </div>
@@ -4771,35 +4771,36 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
             /* --- LEVEL 2: DETAIL BUTIR SOAL PER MATA PELAJARAN --- */
             <div className="space-y-4">
               {/* Breadcrumb / Top Bar Navigasi Kembali */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs">
-                <div className="flex items-center gap-3">
+              <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-3.5 p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs">
+                <div className="flex items-center gap-3 min-w-0">
                   <button
                     onClick={() => setBankView('catalog')}
-                    className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-violet-600 hover:text-white text-slate-700 dark:text-slate-300 transition cursor-pointer flex items-center gap-1.5 text-xs font-bold"
+                    className="p-2 sm:px-3 sm:py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-violet-600 hover:text-white text-slate-700 dark:text-slate-300 transition cursor-pointer flex items-center gap-1.5 text-xs font-bold shrink-0"
                   >
                     <ArrowLeft className="w-4 h-4" />
-                    <span>Kembali ke Katalog Mapel</span>
+                    <span className="hidden sm:inline">Kembali ke Katalog Mapel</span>
+                    <span className="sm:hidden">Kembali</span>
                   </button>
 
-                  <div className="h-5 w-[1px] bg-slate-200 dark:bg-slate-700 hidden sm:block"></div>
+                  <div className="h-5 w-[1px] bg-slate-200 dark:bg-slate-700 hidden sm:block shrink-0"></div>
 
-                  <div>
-                    <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                      <span>{formatSubjectTitle(currentBankSubject.title)}</span>
-                      <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-violet-50 dark:bg-violet-950/60 text-violet-700 dark:text-violet-300 border border-violet-200 dark:border-violet-800">
+                  <div className="min-w-0">
+                    <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2 flex-wrap">
+                      <span className="truncate">{formatSubjectTitle(currentBankSubject.title)}</span>
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-violet-50 dark:bg-violet-950/60 text-violet-700 dark:text-violet-300 border border-violet-200 dark:border-violet-800 shrink-0">
                         {currentBankSubject.token}
                       </span>
                     </h3>
-                    <p className="text-[11px] text-slate-400 dark:text-slate-500">
+                    <p className="text-[11px] text-slate-400 dark:text-slate-500 truncate">
                       Kelas: {currentBankSubject.className} • Durasi: {currentBankSubject.durationMinutes} Menit • {bankSubjectQuestions.length} Butir Soal Terdaftar
                     </p>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <button
                     onClick={() => setSubjectToDelete(currentBankSubject)}
-                    className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 border border-rose-200 dark:border-rose-900/40 text-xs font-semibold transition cursor-pointer"
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 border border-rose-200 dark:border-rose-900/40 text-xs font-semibold transition cursor-pointer shrink-0"
                     title="Hapus Paket Mata Pelajaran Ini"
                   >
                     <Trash2 className="w-4 h-4" />
@@ -4809,26 +4810,26 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                   <button
                     type="button"
                     onClick={() => setIsAiModalOpen(true)}
-                    className="flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-gradient-to-r from-violet-600 via-fuchsia-600 to-pink-600 hover:opacity-90 text-white font-semibold text-xs shadow-md shadow-violet-600/20 transition cursor-pointer flex-shrink-0"
+                    className="flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-gradient-to-r from-violet-600 via-fuchsia-600 to-pink-600 hover:opacity-90 text-white font-semibold text-xs shadow-md shadow-violet-600/20 transition cursor-pointer"
                     title="Buat butir soal otomatis dengan Gemini AI"
                   >
                     <Sparkles className="w-4 h-4" />
-                    <span>Buat Soal AI (Gemini)</span>
+                    <span>Buat Soal AI<span className="hidden 2xl:inline"> (Gemini)</span></span>
                   </button>
 
                   <button
                     type="button"
                     onClick={() => setIsImportModalOpen(true)}
-                    className="flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs shadow-md shadow-emerald-600/20 transition cursor-pointer flex-shrink-0"
+                    className="flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs shadow-md shadow-emerald-600/20 transition cursor-pointer"
                     title="Import butir soal dari file PDF, Word, atau teks naskah soal"
                   >
                     <FileUp className="w-4 h-4" />
-                    <span>Import Soal (PDF / Dokumen)</span>
+                    <span>Import Soal<span className="hidden 2xl:inline"> (Dokumen)</span></span>
                   </button>
 
                   <button
                     onClick={onOpenAddModal}
-                    className="flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-semibold text-xs shadow-md shadow-violet-600/20 transition cursor-pointer flex-shrink-0"
+                    className="flex items-center justify-center gap-1.5 px-3.5 sm:px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-semibold text-xs shadow-md shadow-violet-600/20 transition cursor-pointer shrink-0"
                   >
                     <PlusCircle className="w-4 h-4" />
                     <span>{t.addQuestionBtn}</span>
@@ -5195,7 +5196,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
           {selectedDocType === 'bap' && (
             <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-3 print:hidden">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <div className="w-7 h-7 rounded-lg bg-violet-100 dark:bg-violet-900/50 text-violet-600 dark:text-violet-400 flex items-center justify-center">
                     <SlidersHorizontal className="w-4 h-4" />
                   </div>
@@ -5982,7 +5983,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                     .map((std) => (
                       <div key={std.id} className="p-4 border-2 border-slate-900 rounded-xl space-y-3 bg-white text-xs print:break-inside-avoid">
                         <div className="flex items-center justify-between border-b border-slate-900 pb-2">
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 flex-wrap">
                             <div className="w-7 h-7 rounded-full bg-slate-900 text-white font-bold flex items-center justify-center text-[10px]">
                               58
                             </div>
@@ -6310,7 +6311,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                 >
                   {/* Row 1: Header Jadwal & Toggle Status */}
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-4">
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-3 min-w-0">
                       <div className="w-10 h-10 rounded-xl bg-violet-100 dark:bg-violet-950/60 text-violet-600 dark:text-violet-400 flex items-center justify-center font-bold">
                         <BookOpen className="w-5 h-5" />
                       </div>
@@ -6339,7 +6340,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                     </div>
 
                     {/* Toggle Sakelar Status Ujian */}
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-3 min-w-0">
                       <span className={`text-xs font-semibold ${subItem.isActive ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400'}`}>
                         {subItem.isActive ? 'Status: Aktif (Siswa Bisa Ujian)' : 'Status: Non-Aktif (Terkunci)'}
                       </span>
@@ -6431,7 +6432,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
 
                   {/* Row 3: Aksi Manajemen (Edit, Kelola Soal, Hapus) */}
                   <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between flex-wrap gap-2">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <button
                         onClick={() => handleOpenEditSchedule(subItem)}
                         className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-violet-600 hover:text-white text-slate-700 dark:text-slate-300 text-xs font-semibold transition cursor-pointer"
@@ -6516,7 +6517,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
             {/* TOAST AKSI PENGAWAS */}
             {monitoringActionToast && (
               <div className="p-3.5 bg-violet-600 text-white font-bold text-xs rounded-2xl shadow-xl flex items-center justify-between animate-in slide-in-from-top-3">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <Check className="w-4 h-4" />
                   <span>{monitoringActionToast}</span>
                 </div>
@@ -6527,7 +6528,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
             {/* HEADER MONITORING & FILTER MAPEL / KELAS */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-3xl p-6 shadow-xs">
               <div className="space-y-1">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping"></span>
                   <span className="text-[10px] font-black uppercase tracking-widest text-emerald-600 dark:text-emerald-400">
                     Live Proctor Stream Active
@@ -6608,7 +6609,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
             {/* PAPAN PENGUMUMAN & SIARAN LANGSUNG KE SELURUH LAYAR SISWA */}
             <div className="bg-gradient-to-r from-violet-50 via-white to-amber-50 dark:from-slate-900 dark:via-slate-900 dark:to-slate-900 border border-violet-200/80 dark:border-slate-800 rounded-3xl p-5 shadow-xs space-y-3">
               <div className="flex items-center justify-between flex-wrap gap-3">
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 min-w-0">
                   <div className="w-10 h-10 rounded-2xl bg-violet-600 text-white flex items-center justify-center font-bold shadow-md shadow-violet-600/20 flex-shrink-0">
                     <Megaphone className="w-5 h-5 animate-bounce" />
                   </div>
@@ -6732,7 +6733,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                           >
                             {/* NAMA SISWA */}
                             <td className="p-4 font-bold text-slate-900 dark:text-white whitespace-nowrap">
-                              <div className="flex items-center gap-2">
+                              <div className="flex items-center gap-2 flex-wrap">
                                 <span className="w-7 h-7 rounded-lg bg-violet-100 dark:bg-violet-950/60 text-violet-700 dark:text-violet-300 font-bold flex items-center justify-center text-xs">
                                   {s.studentName.charAt(0)}
                                 </span>
@@ -7029,7 +7030,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                 {/* Khusus Admin: Pilihan Guru yang Dikelola */}
                 {currentTeacher?.role === 'admin' && (
                   <div className="p-4 rounded-2xl bg-amber-50/50 dark:bg-amber-950/20 border border-amber-200/80 dark:border-amber-800/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <ShieldCheck className="w-4 h-4 text-amber-600 shrink-0" />
                       <div>
                         <span className="text-xs font-bold text-slate-900 dark:text-white">
@@ -7066,12 +7067,12 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
 
                 {/* Banner Info Guru Aktif yang Sedang Dikelola */}
                 <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-800 flex items-center justify-between gap-3 text-xs">
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-3 min-w-0">
                     <div className="w-9 h-9 rounded-xl bg-violet-600 text-white font-bold flex items-center justify-center shrink-0">
                       {targetAssignmentTeacher?.name ? targetAssignmentTeacher.name.charAt(0) : 'G'}
                     </div>
                     <div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-bold text-slate-900 dark:text-white text-sm">
                           {targetAssignmentTeacher?.name || 'Dewan Guru'}
                         </span>
@@ -7108,7 +7109,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                       >
                         {/* Top bar per Assignment */}
                         <div className="flex items-center justify-between border-b border-slate-200/80 dark:border-slate-700/60 pb-3">
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 flex-wrap">
                             <span className="w-6 h-6 rounded-lg bg-violet-600 text-white text-xs font-bold flex items-center justify-center">
                               {index + 1}
                             </span>
@@ -7844,7 +7845,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                 {/* Bagian A: Kepala Sekolah (Untuk Sertifikat Siswa) */}
                 <div className="pt-2 border-t border-slate-100 dark:border-slate-800 space-y-3">
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <span className="w-2 h-2 rounded-full bg-violet-600 inline-block"></span>
                       <h5 className="font-bold text-xs text-slate-800 dark:text-slate-200">
                         1. Data Kepala Sekolah
@@ -7906,13 +7907,13 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                 {/* Bagian B: Guru Pengampu / Proktor (Untuk Dossier Rekap Nilai Siswa) */}
                 <div className="pt-3 border-t border-slate-100 dark:border-slate-800 space-y-3">
                   <div className="flex items-center justify-between flex-wrap gap-2">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <span className="w-2 h-2 rounded-full bg-emerald-600 inline-block"></span>
                       <h5 className="font-bold text-xs text-slate-800 dark:text-slate-200">
                         2. Data Guru Pengampu / Proktor
                       </h5>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       {currentTeacher && (
                         <button
                           type="button"
@@ -8174,19 +8175,19 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
               </div>
 
               <div className="space-y-2 text-slate-600 dark:text-slate-300">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <CheckCircle2 className="w-4 h-4 text-emerald-500" />
                   <span>Deteksi perpindahan tab browser (Window Blur event)</span>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <CheckCircle2 className="w-4 h-4 text-emerald-500" />
                   <span>Blokir klik kanan (Context Menu) saat ujian</span>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <CheckCircle2 className="w-4 h-4 text-emerald-500" />
                   <span>Toleransi maksimal 3x sebelum lembar jawaban terkunci otomatis</span>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <CheckCircle2 className="w-4 h-4 text-emerald-500" />
                   <span>Penyimpanan jawaban lokal realtime (Anti-Hilang bila koneksi putus)</span>
                 </div>
@@ -8227,7 +8228,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
 
             {!editingQuestion && (
               <div className="p-3 rounded-xl bg-gradient-to-r from-violet-500/10 via-fuchsia-500/10 to-transparent border border-violet-200 dark:border-violet-800/60 flex items-center justify-between gap-3">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <Sparkles className="w-4 h-4 text-violet-600 dark:text-violet-400 shrink-0" />
                   <p className="text-[11px] text-slate-600 dark:text-slate-300">
                     Ingin membuat paket butir soal otomatis berstandar <strong>AKM, PISA, & TKA</strong>?
@@ -8603,7 +8604,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                       </p>
                       {bsStatements.map((stmt, sIdx) => (
                         <div key={sIdx} className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 space-y-2">
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 flex-wrap">
                             <span className="font-bold text-violet-600">{sIdx + 1}.</span>
                             <input
                               type="text"
@@ -9171,7 +9172,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                       className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/40 print:bg-white border border-slate-200 dark:border-slate-700/80 print:border-slate-300 text-xs space-y-2.5 print:break-inside-avoid print:shadow-none"
                     >
                       <div className="flex items-center justify-between flex-wrap gap-2">
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-extrabold text-violet-600 dark:text-violet-400 print:text-slate-900 text-sm">
                             Soal #{qIdx + 1}
                           </span>
@@ -9407,7 +9408,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
               {/* PENGATURAN PENANDATANGAN TTE DOSSIER (KHUSUS TAMPILAN LAYAR SEBELUM CETAK) */}
               <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 space-y-3 print:hidden">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
                     <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
                       Pengaturan Penandatangan Dokumen & TTE Dossier:

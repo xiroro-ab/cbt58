@@ -31,7 +31,7 @@ interface ImportQuestionsModalProps {
   onSaveQuestions: (newQuestions: Question[]) => void;
 }
 
-const DEFAULT_MODEL = 'gemini-1.5-flash';
+const DEFAULT_MODEL = 'gemini-3.5-flash';
 
 export const ImportQuestionsModal: React.FC<ImportQuestionsModalProps> = ({
   isOpen,
@@ -91,9 +91,29 @@ Ekstrak seluruh butir soal tanpa terlewat, lalu berikan hasilnya HANYA berupa ko
   },
   {
     "type": "Benar/Salah",
-    "questionText": "Tuliskan pernyataan yang perlu ditentukan apakah Benar atau Salah",
+    "questionText": "Tentukan status Benar atau Salah pada setiap butir pernyataan berikut:",
+    "options": [
+      { "text": "Isi pernyataan 1 / pernyataan a" },
+      { "text": "Isi pernyataan 2 / pernyataan b" }
+    ],
+    "answer": ["Salah", "Benar"]
+  },
+  {
+    "type": "Benar/Salah",
+    "questionText": "Tuliskan isi pernyataan tunggal yang perlu dinilai",
     "options": [],
     "answer": "Benar"
+  },
+  {
+    "type": "Pilihan Ganda Kompleks",
+    "questionText": "Tuliskan pertanyaan dengan pilihan jawaban lebih dari satu",
+    "options": [
+      { "text": "Opsi pilihan A" },
+      { "text": "Opsi pilihan B" },
+      { "text": "Opsi pilihan C" },
+      { "text": "Opsi pilihan D" }
+    ],
+    "answer": ["A", "C"]
   },
   {
     "type": "Esai",
@@ -104,10 +124,12 @@ Ekstrak seluruh butir soal tanpa terlewat, lalu berikan hasilnya HANYA berupa ko
 ]
 
 Aturan:
-1. Hasilkan HANYA kode JSON murni [ ... ] tanpa teks obrolan pembuka atau penutup.
-2. Bersihkan nomor soal ("1.", "2.") dari questionText.
-3. Untuk Pilihan Ganda, hilangkan awalan 'A.', 'B.', 'C.', 'D.' dari teks options.
-4. Untuk Benar/Salah tunggal, kosongkan options [] dan isi answer dengan string "Benar" atau "Salah".`;
+1. Hasilkan HANYA kode JSON murni [ ... ] tanpa teks pembuka obrolan dan tanpa blok kutipan markdown.
+2. Bersihkan nomor butir soal ("1.", "18.", dll) dari questionText.
+3. Untuk Benar/Salah yang memiliki beberapa pernyataan dalam 1 nomor (misal pernyataan a, b, c atau baris tabel asesmen): masukkan setiap pernyataan ke dalam "options": [{ "text": "..." }], dan kunci jawabannya ke dalam array "answer": ["Salah", "Benar"].
+4. Untuk Benar/Salah 1 pernyataan tunggal: kosongkan "options": [] dan isi "answer": "Benar" (atau "Salah").
+5. Untuk Pilihan Ganda, hilangkan awalan 'A.', 'B.', 'C.', 'D.' dari teks options.
+6. Jika naskah belum memiliki kunci jawaban tertulis (misal masih kotak kosong "a. [ ]  b. [ ]"), analisis pernyataan dan tentukan kunci yang paling tepat secara akademis.`;
 
   const handleCopyPrompt = () => {
     if (typeof navigator !== 'undefined' && navigator.clipboard) {
@@ -802,7 +824,7 @@ Aturan:
                           type="text"
                           value={modelName}
                           onChange={e => setModelName(e.target.value)}
-                          placeholder="gemini-2.5-flash (Kosongkan jika menggunakan bawaan website)"
+                          placeholder="gemini-3.5-flash (Kosongkan jika menggunakan bawaan website)"
                           className="w-full text-xs font-mono px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
                         />
                         <p className="text-[10px] text-slate-400 mt-1">
@@ -996,41 +1018,91 @@ Aturan:
                         {q.questionText}
                       </div>
 
-                      {/* Opsi Pilihan Ganda Jika Ada */}
-                      {Array.isArray(q.options) && q.options.length > 0 && (
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pl-6 pt-1">
-                          {(q.options as OptionItem[]).map((opt, optIdx) => {
-                            const optLetter = String.fromCharCode(65 + optIdx);
-                            const isCorrect = q.answer === optLetter || q.answer === opt.text;
+                      {/* A. Opsi Pilihan Ganda / Pilihan Ganda Kompleks */}
+                      {(q.type === 'Pilihan Ganda' || q.type === 'Pilihan Ganda Kompleks') &&
+                        Array.isArray(q.options) &&
+                        q.options.length > 0 && (
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pl-6 pt-1">
+                            {(q.options as OptionItem[]).map((opt, optIdx) => {
+                              const optLetter = String.fromCharCode(65 + optIdx);
+                              const isCorrect = Array.isArray(q.answer)
+                                ? q.answer.includes(optLetter) || q.answer.includes(opt.text)
+                                : q.answer === optLetter || q.answer === opt.text;
 
+                              return (
+                                <div
+                                  key={optIdx}
+                                  className={`p-2 rounded-xl border flex items-center gap-2 text-xs transition ${
+                                    isCorrect
+                                      ? 'bg-emerald-50 dark:bg-emerald-950/60 border-emerald-300 dark:border-emerald-700 text-emerald-900 dark:text-emerald-200 font-bold'
+                                      : 'bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300'
+                                  }`}
+                                >
+                                  <span
+                                    className={`w-5 h-5 rounded-md flex items-center justify-center font-bold text-[10px] ${
+                                      isCorrect
+                                        ? 'bg-emerald-600 text-white'
+                                        : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
+                                    }`}
+                                  >
+                                    {optLetter}
+                                  </span>
+                                  <span className="flex-1 truncate">{opt.text}</span>
+                                  {isCorrect && <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+
+                      {/* B. Benar / Salah Multi-Pernyataan */}
+                      {q.type === 'Benar/Salah' && Array.isArray(q.options) && q.options.length > 0 && (
+                        <div className="space-y-1.5 pl-6 pt-1">
+                          {(q.options as OptionItem[]).map((opt, oIdx) => {
+                            const ans = Array.isArray(q.answer) ? q.answer[oIdx] : 'Benar';
                             return (
                               <div
-                                key={optIdx}
-                                className={`p-2 rounded-xl border flex items-center gap-2 text-xs transition ${
-                                  isCorrect
-                                    ? 'bg-emerald-50 dark:bg-emerald-950/60 border-emerald-300 dark:border-emerald-700 text-emerald-900 dark:text-emerald-200 font-bold'
-                                    : 'bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300'
-                                }`}
+                                key={oIdx}
+                                className="p-2 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 flex items-center justify-between text-xs gap-2"
                               >
-                                <span className={`w-5 h-5 rounded-md flex items-center justify-center font-bold text-[10px] ${
-                                  isCorrect
-                                    ? 'bg-emerald-600 text-white'
-                                    : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
-                                }`}>
-                                  {optLetter}
+                                <span className="text-slate-800 dark:text-slate-200 flex-1">
+                                  {oIdx + 1}. {opt.text}
                                 </span>
-                                <span className="flex-1 truncate">{opt.text}</span>
-                                {isCorrect && <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />}
+                                <span
+                                  className={`px-2 py-0.5 rounded-md font-bold text-[10px] shrink-0 ${
+                                    ans === 'Benar'
+                                      ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300'
+                                      : 'bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300'
+                                  }`}
+                                >
+                                  Kunci: {ans}
+                                </span>
                               </div>
                             );
                           })}
                         </div>
                       )}
 
-                      {/* Kunci Jawaban untuk Esai / Benar Salah */}
-                      {q.type === 'Esai' && q.answer && (
+                      {/* C. Benar / Salah Tunggal (1 Pernyataan) */}
+                      {q.type === 'Benar/Salah' && (!Array.isArray(q.options) || q.options.length === 0) && (
+                        <div className="pl-6 pt-1 flex items-center gap-2 text-xs">
+                          <span className="text-slate-500 dark:text-slate-400 text-[11px]">Kunci Status:</span>
+                          <span
+                            className={`px-2.5 py-0.5 rounded-lg font-bold text-[11px] ${
+                              q.answer === 'Benar'
+                                ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300'
+                                : 'bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300'
+                            }`}
+                          >
+                            {String(q.answer || 'Benar')}
+                          </span>
+                        </div>
+                      )}
+
+                      {/* D. Kunci Jawaban untuk Esai / Isian Singkat */}
+                      {(q.type === 'Esai' || q.type === 'Isian Singkat') && q.answer && (
                         <div className="pl-6 pt-1 text-[11px] text-emerald-700 dark:text-emerald-400">
-                          <strong>Kunci / Pembahasan:</strong> {q.answer}
+                          <strong>Kunci / Pembahasan:</strong> {Array.isArray(q.answer) ? q.answer.join(', ') : q.answer}
                         </div>
                       )}
                     </div>

@@ -159,10 +159,10 @@ export function AiQuestionGeneratorModal({
       }
       const savedModel = localStorage.getItem('cbt_gemini_model') || '';
       if (savedModel) {
-        // Reset jika sebelumnya tersimpan model usang 'gemini-2.0-flash'
-        if (savedModel === 'gemini-2.0-flash') {
-          setModelName('gemini-1.5-flash');
-          localStorage.setItem('cbt_gemini_model', 'gemini-1.5-flash');
+        // Reset jika sebelumnya tersimpan model usang 1.x atau 2.x
+        if (savedModel.includes('1.5') || savedModel.includes('2.0') || savedModel === 'gemini-2.5-flash') {
+          setModelName('gemini-3.5-flash');
+          localStorage.setItem('cbt_gemini_model', 'gemini-3.5-flash');
         } else {
           setModelName(savedModel);
         }
@@ -238,7 +238,7 @@ export function AiQuestionGeneratorModal({
     }
   };
 
-  const activeModelId = modelName.trim() || 'gemini-2.5-flash';
+  const activeModelId = modelName.trim() || 'gemini-3.5-flash';
 
   // Salin prompt untuk dipakai di gemini.google.com
   const handleCopyPrompt = () => {
@@ -896,11 +896,11 @@ export function AiQuestionGeneratorModal({
                               localStorage.setItem('cbt_gemini_model', val.trim());
                             }
                           }}
-                          placeholder="gemini-2.5-flash (Kosongkan jika menggunakan bawaan website)"
+                          placeholder="gemini-3.5-flash (Kosongkan jika menggunakan bawaan website)"
                           className="w-full text-xs font-mono px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500"
                         />
                         <p className="text-[10px] text-slate-400 mt-1">
-                          Ketik kode model yang aktif dari Google AI Studio (misal: <code className="text-violet-600 dark:text-violet-400 font-bold">gemini-2.5-flash</code> atau model lainnya). Kosongkan untuk model default website.
+                          Ketik kode model yang aktif dari Google AI Studio (misal: <code className="text-violet-600 dark:text-violet-400 font-bold">gemini-3.5-flash</code> atau model lainnya). Kosongkan untuk model default website.
                         </p>
                       </div>
 
@@ -1149,7 +1149,7 @@ export function AiQuestionGeneratorModal({
 
                       {q.type === 'Benar/Salah' && (
                         <div className="space-y-1.5 mb-2 text-xs">
-                          {Array.isArray(q.options) &&
+                          {Array.isArray(q.options) && q.options.length > 0 ? (
                             q.options.map((opt: any, optIdx: number) => {
                               const ans = Array.isArray(q.answer) ? q.answer[optIdx] : 'Benar';
                               return (
@@ -1169,7 +1169,21 @@ export function AiQuestionGeneratorModal({
                                   </span>
                                 </div>
                               );
-                            })}
+                            })
+                          ) : (
+                            <div className="flex items-center gap-2 text-xs">
+                              <span className="text-slate-500 dark:text-slate-400 text-[11px]">Kunci Status:</span>
+                              <span
+                                className={`px-2 py-0.5 rounded-md font-bold text-[10px] ${
+                                  q.answer === 'Benar'
+                                    ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300'
+                                    : 'bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300'
+                                }`}
+                              >
+                                {String(q.answer || 'Benar')}
+                              </span>
+                            </div>
+                          )}
                         </div>
                       )}
 

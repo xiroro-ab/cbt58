@@ -91,30 +91,56 @@ export interface GeminiModelOption {
 
 export const GEMINI_MODELS: GeminiModelOption[] = [
   {
-    id: 'gemini-1.5-flash',
-    name: 'Gemini 1.5 Flash',
-    tag: 'Rekomendasi Utama (Cepat & Cerdas)',
-    description: 'Model standar paling seimbang, respon sangat cepat dengan pemahaman struktur CBT yang presisi.'
+    id: 'gemini-3.5-flash',
+    name: 'Gemini 3.5 Flash',
+    tag: 'Rekomendasi Utama (Generasi 3 Cepat & Presisi)',
+    description: 'Model generasi 3 terbaru dengan performa tertinggi, respon kilat, dan pemahaman format soal CBT yang sangat akurat.'
   },
   {
-    id: 'gemini-1.5-pro',
-    name: 'Gemini 1.5 Pro',
-    tag: 'Penalaran HOTS Mendalam',
-    description: 'Daya analisis kognitif tinggi, sangat cocok untuk stimulus bacaan panjang AKM dan studi kasus PISA.'
+    id: 'gemini-3-flash',
+    name: 'Gemini 3 Flash',
+    tag: 'Generasi 3 Standar',
+    description: 'Model generasi 3 stabil dan andal untuk pembuatan bank soal lengkap.'
   },
   {
-    id: 'gemini-2.0-flash',
-    name: 'Gemini 2.0 Flash (Generasi Baru)',
-    tag: 'Teknologi Mutakhir',
-    description: 'Generasi terbaru dengan pemrosesan ultra-cepat dan kemampuan instruksi multi-standar yang tajam.'
+    id: 'gemini-3.0-flash',
+    name: 'Gemini 3.0 Flash',
+    tag: 'Generasi 3 Cepat',
+    description: 'Pemrosesan cepat dengan kuota optimal untuk naskah soal sekolah.'
   },
   {
-    id: 'gemini-2.0-flash-lite',
-    name: 'Gemini 2.0 Flash Lite',
-    tag: 'Hemat Kuota & Ringan',
-    description: 'Model ringan dan hemat kuota token, cocok untuk pembuatan soal ringkas atau koneksi internet lambat.'
+    id: 'gemini-2.5-flash',
+    name: 'Gemini 2.5 Flash',
+    tag: 'Model Alternatif',
+    description: 'Model alternatif cepat jika kuota model utama sedang mengalami antrean.'
   }
 ];
+
+/**
+ * Normalisasi jawaban Benar/Salah dari berbagai variasi input (B/S, True/False, Ya/Tidak, dll)
+ */
+export function normalizeBSAnswer(val: unknown): 'Benar' | 'Salah' {
+  if (val === null || val === undefined) return 'Benar';
+  const s = String(val).trim().toLowerCase();
+  if (
+    s === 'b' ||
+    s === 'benar' ||
+    s === 'true' ||
+    s === 't' ||
+    s === '1' ||
+    s === 'ya' ||
+    s === 'y' ||
+    s === 'betul' ||
+    s.startsWith('benar') ||
+    s.startsWith('true') ||
+    s.startsWith('betul') ||
+    s.includes('[b]') ||
+    s.includes('(b)')
+  ) {
+    return 'Benar';
+  }
+  return 'Salah';
+}
 
 export interface QuestionCounts {
   pg: number;
@@ -568,35 +594,61 @@ export function validateAndConvertRawQuestions(
         finalAnswer = ['A', 'B'];
       }
     } else if (qType === 'Benar/Salah') {
-      if (Array.isArray(raw.options) && raw.options.length > 0) {
+      // Ambil kumpulan pernyataan dari options, statements, rows, atau subQuestions
+      const rawStmts = (Array.isArray(raw.options) && raw.options.length > 0)
+        ? raw.options
+        : (Array.isArray(raw.statements) && raw.statements.length > 0)
+        ? raw.statements
+        : (Array.isArray(raw.rows) && raw.rows.length > 0)
+        ? raw.rows
+        : (Array.isArray(raw.subQuestions) && raw.subQuestions.length > 0)
+        ? raw.subQuestions
+        : [];
+
+      if (rawStmts.length > 0) {
         // Cek apakah options hanya berisi dummy radio 'Benar' dan 'Salah'
-        const isRadioOptionOnly = raw.options.length === 2 &&
-          raw.options.some((o: any) => String(o?.text || o).trim().toLowerCase() === 'benar') &&
-          raw.options.some((o: any) => String(o?.text || o).trim().toLowerCase() === 'salah');
+        const isRadioOptionOnly = rawStmts.length === 2 &&
+          rawStmts.some((o: any) => String(o?.text || o).trim().toLowerCase() === 'benar') &&
+          rawStmts.some((o: any) => String(o?.text || o).trim().toLowerCase() === 'salah');
 
         if (isRadioOptionOnly) {
           // Format Benar/Salah Tunggal (1 pernyataan klasik)
           finalOptions = [];
-          const ansStr = String(Array.isArray(raw.answer) ? raw.answer[0] : raw.answer || 'Benar');
-          finalAnswer = ansStr.toLowerCase().includes('salah') ? 'Salah' : 'Benar';
+          const ansVal = Array.isArray(raw.answer) ? raw.answer[0] : raw.answer;
+          finalAnswer = normalizeBSAnswer(ansVal);
         } else {
           // Format Benar/Salah Majemuk (Tabel Multi-Pernyataan)
-          finalOptions = raw.options.map((opt: any) => ({
-            text: typeof opt === 'string' ? opt : String(opt?.text || '')
+          finalOptions = rawStmts.map((opt: any) => ({
+            text: typeof opt === 'string' ? opt : String(opt?.text || opt?.statement || opt?.row || '')
           }));
+
           if (Array.isArray(raw.answer)) {
-            finalAnswer = raw.answer.map((a: any) => (String(a).toLowerCase().includes('benar') ? 'Benar' : 'Salah'));
+            finalAnswer = raw.answer.map(normalizeBSAnswer);
+          } else if (typeof raw.answer === 'object' && raw.answer !== null) {
+            finalAnswer = Object.values(raw.answer).map(normalizeBSAnswer);
           } else if (typeof raw.answer === 'string') {
-            finalAnswer = raw.answer.split(',').map((a: string) => a.trim().toLowerCase().includes('benar') ? 'Benar' : 'Salah');
+            if (raw.answer.includes(',') || raw.answer.includes(';') || raw.answer.includes('/')) {
+              finalAnswer = raw.answer.split(/[,;\/]+/).map(normalizeBSAnswer);
+            } else {
+              finalAnswer = [normalizeBSAnswer(raw.answer)];
+            }
           } else {
-            finalAnswer = finalOptions.map(() => 'Benar');
+            finalAnswer = [];
+          }
+
+          // Pastikan panjang array answer seimbang dengan jumlah pernyataan
+          while (finalAnswer.length < finalOptions.length) {
+            finalAnswer.push('Benar');
+          }
+          if (finalAnswer.length > finalOptions.length) {
+            finalAnswer = finalAnswer.slice(0, finalOptions.length);
           }
         }
       } else {
         // Options kosong -> Benar/Salah Tunggal (1 Pernyataan)
         finalOptions = [];
-        const ansStr = String(Array.isArray(raw.answer) ? raw.answer[0] : raw.answer || 'Benar');
-        finalAnswer = ansStr.toLowerCase().includes('salah') ? 'Salah' : 'Benar';
+        const ansVal = Array.isArray(raw.answer) ? raw.answer[0] : raw.answer;
+        finalAnswer = normalizeBSAnswer(ansVal);
       }
     } else if (qType === 'Menjodohkan') {
       if (Array.isArray(raw.options) && raw.options.length > 0) {

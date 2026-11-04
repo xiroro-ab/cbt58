@@ -20,7 +20,7 @@ export async function GET() {
   return NextResponse.json({
     status: 'ready',
     hasServerKey: !!serverKey,
-    defaultModel: 'gemini-2.5-flash'
+    defaultModel: 'gemini-3.5-flash'
   });
 }
 
@@ -75,7 +75,9 @@ PETUNJUK EKSTRAKSI KHUSUS:
 1. DETEKSI TIPE SOAL:
    - "Pilihan Ganda" (PG): Memiliki pertanyaan dan opsi pilihan A, B, C, D (atau E).
    - "Pilihan Ganda Kompleks" (PGK): Siswa memilih lebih dari 1 jawaban yang benar (misal mencentang kotak).
-   - "Benar/Salah": Pernyataan dengan opsi Benar / Salah.
+   - "Benar/Salah":
+     * Jika memiliki beberapa baris pernyataan dalam 1 nomor (misal pernyataan a, b, c atau baris-baris tabel asesmen), masukkan setiap pernyataan ke dalam array "options": [{ "text": "Pernyataan a..." }, { "text": "Pernyataan b..." }], dan "answer" berupa array string kunci: ["Salah", "Benar"].
+     * Jika hanya 1 pernyataan tunggal, kosongkan "options": [] dan isi "answer": "Benar" (atau "Salah").
    - "Menjodohkan": Mencocokkan premis/pertanyaan dengan pasangan jawaban.
    - "Isian Singkat": Jawaban singkat berupa kata/frasa/angka pasti.
    - "Esai": Soal uraian atau penjelasan bebas.
@@ -92,14 +94,14 @@ PETUNJUK EKSTRAKSI KHUSUS:
          { "text": "Isi pilihan C tanpa awalan C. atau C)" },
          { "text": "Isi pilihan D tanpa awalan D. atau D)" }
        ],
-       "answer": "A", // Jawaban benar (huruf opsi, string, atau array huruf untuk PGK)
+       "answer": "A", // Jawaban benar (huruf opsi, string, atau array huruf untuk PGK / array ["Benar", "Salah"] untuk B/S majemuk)
        "explanation": "Penjelasan atau kunci pembahasan ringkas jika ada di naskah"
      }
    ]
 
 3. KUNCI JAWABAN (ANSWER):
-   - Jika pada naskah soal terdapat penanda kunci jawaban (misalnya: kunci jawaban di lembar akhir, tulisan "Kunci: C", huruf tebal, tanda centang/lingkaran), gunakan kunci tersebut.
-   - Jika naskah soal tidak memuat kunci jawaban secara eksplisit, analisis pertanyaan dan tentukan kunci jawaban yang paling benar dan tepat secara keilmuan akademis.
+   - Jika pada naskah soal terdapat penanda kunci jawaban (misalnya: kunci jawaban di lembar akhir, tulisan "Kunci: C", huruf tebal, tanda centang/lingkaran, atau kotak "[S]" "[B]"), gunakan kunci tersebut.
+   - Jika pada soal Benar/Salah berupa kotak kosong "a. [ ]  b. [ ]" atau naskah tidak memuat kunci eksplisit, analisis pernyataan dan tentukan kunci status kebenaran yang paling akurat secara akademis.
 
 4. PEMBERSIHAN TEKS:
    - Bersihkan prefix huruf opsi seperti "A. ", "A) ", "B. ", "b) " dari field 'text' di dalam options, karena sistem web akan merendernya otomatis.
@@ -146,17 +148,17 @@ WAJIB: Hasilkan HANYA kode JSON murni tanpa pengantar obrolan, tanpa blok markdo
     });
 
     // Urutan kandidat model untuk mitigasi kendala 'High Demand' (Overloaded 503 / 429):
-    // 1. Model yang diminta pengguna
-    // 2. gemini-1.5-flash (paling stabil & kuota tertinggi)
-    // 3. gemini-2.0-flash
-    const defaultModel = process.env.NEXT_PUBLIC_GEMINI_MODEL || process.env.GEMINI_MODEL || 'gemini-1.5-flash';
+    // 1. Model yang diminta pengguna (default: gemini-3.5-flash)
+    // 2. gemini-3.5-flash -> gemini-3-flash -> gemini-3.0-flash -> gemini-2.5-flash
+    const defaultModel = process.env.NEXT_PUBLIC_GEMINI_MODEL || process.env.GEMINI_MODEL || 'gemini-3.5-flash';
     const rawModel = (clientModel?.trim() || defaultModel).trim();
     const primaryModel = rawModel.replace(/^models\//i, '');
 
     const candidateModels = Array.from(new Set([
       primaryModel,
-      'gemini-1.5-flash',
-      'gemini-2.0-flash',
+      'gemini-3.5-flash',
+      'gemini-3-flash',
+      'gemini-3.0-flash',
       'gemini-2.5-flash'
     ]));
 

@@ -5,6 +5,7 @@ import {
   StudentAnswerItem,
   QuestionScoreDetail
 } from '@/types/cbt';
+import { normalizeBSAnswer } from '@/lib/aiQuestionGenerator';
 
 const cleanStr = (val: unknown): string =>
   val ? String(val).toLowerCase().trim().replace(/\s+/g, ' ') : '';
@@ -49,7 +50,7 @@ export function calculateSingleQuestionScore(
 
           correctArr.forEach((kunci, idx) => {
             const uVal = userArr[idx];
-            if (uVal && cleanStr(uVal) === cleanStr(kunci)) {
+            if (uVal && normalizeBSAnswer(uVal) === normalizeBSAnswer(kunci)) {
               correctCount++;
             }
           });
@@ -58,7 +59,7 @@ export function calculateSingleQuestionScore(
         }
 
         // B. 1 Pernyataan Tunggal (Klasik)
-        return cleanStr(userAnswer) === cleanStr(correctAnswer) ? maxPoints : 0;
+        return normalizeBSAnswer(userAnswer) === normalizeBSAnswer(correctAnswer) ? maxPoints : 0;
       }
 
       // 3. Pilihan Ganda Kompleks (Sistem Bobot Berkurang/Denda Adil)

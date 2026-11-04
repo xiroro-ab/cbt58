@@ -94,58 +94,92 @@ export async function POST(req: NextRequest) {
     });
 
     // Sanitasi nama model yang dipilih guru (bersihkan spasi dan prefix 'models/' jika ada)
-    const defaultModel = process.env.NEXT_PUBLIC_GEMINI_MODEL || process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+    const defaultModel = process.env.NEXT_PUBLIC_GEMINI_MODEL || process.env.GEMINI_MODEL || 'gemini-3.5-flash';
     const rawModel = (clientModel?.trim() || defaultModel).trim();
-    const selectedModel = rawModel.replace(/^models\//i, '');
-    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
-      selectedModel
-    )}:generateContent?key=${apiKey}`;
+    const primaryModel = rawModel.replace(/^models\//i, '');
 
-    const geminiRes = await fetch(geminiUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        contents: [
-          {
-            parts: [{ text: systemPrompt }]
-          }
-        ],
-        generationConfig: {
-          temperature: 0.7,
-          topP: 0.95,
-          responseMimeType: 'application/json'
-        }
-      })
-    });
+    const candidateModels = Array.from(new Set([
+      primaryModel,
+      'gemini-3.5-flash',
+      'gemini-3-flash',
+      'gemini-3.0-flash',
+      'gemini-2.5-flash'
+    ]));
 
-    if (!geminiRes.ok) {
-      const errText = await geminiRes.text();
-      let errJson: any = null;
+    let rawOutputText = '';
+    let successfulModel = primaryModel;
+    let lastErrorMsg = '';
+    let lastErrorStatus = 500;
+    let lastErrorJson: any = null;
+
+    for (const modelToTry of candidateModels) {
       try {
-        errJson = JSON.parse(errText);
-      } catch {}
+        const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
+          modelToTry
+        )}:generateContent?key=${apiKey}`;
 
-      const msg =
-        errJson?.error?.message ||
-        `Gagal menghubungi Gemini API dengan model "${selectedModel}" (Status ${geminiRes.status})`;
-      return NextResponse.json(
-        { error: 'GEMINI_API_ERROR', message: msg, rawError: errJson },
-        { status: geminiRes.status }
-      );
+        const geminiRes = await fetch(geminiUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            contents: [
+              {
+                parts: [{ text: systemPrompt }]
+              }
+            ],
+            generationConfig: {
+              temperature: 0.7,
+              topP: 0.95,
+              responseMimeType: 'application/json'
+            }
+          })
+        });
+
+        if (geminiRes.ok) {
+          const geminiData = await geminiRes.json();
+          rawOutputText = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+          successfulModel = modelToTry;
+          break;
+        }
+
+        const errText = await geminiRes.text();
+        let errJson: any = null;
+        try {
+          errJson = JSON.parse(errText);
+        } catch {}
+
+        lastErrorStatus = geminiRes.status;
+        lastErrorJson = errJson;
+        lastErrorMsg = errJson?.error?.message || `Gagal dengan status ${geminiRes.status}`;
+
+        // Jika error High Demand (503) atau Rate Limit (429), lanjutkan fallback ke model berikutnya
+        if (geminiRes.status === 503 || geminiRes.status === 429) {
+          console.warn(`[Gemini Generate] Model "${modelToTry}" high demand (${geminiRes.status}), mencoba fallback model berikutnya...`);
+          continue;
+        }
+
+        break;
+      } catch (networkErr: any) {
+        lastErrorMsg = networkErr?.message || 'Network fetch error';
+        console.warn(`[Gemini Generate] Network error on model "${modelToTry}": ${lastErrorMsg}`);
+      }
     }
 
-    const geminiData = await geminiRes.json();
-    const rawOutputText = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text;
-
     if (!rawOutputText) {
+      const isHighDemand = lastErrorStatus === 503 || lastErrorStatus === 429;
+      const friendlyMsg = isHighDemand
+        ? 'Server Google Gemini saat ini sedang mengalami lonjakan beban (High Demand/Overloaded). Solusi: Coba beberapa saat lagi atau gunakan tombol "Salin Prompt AI" lalu paste ke gemini.google.com secara gratis tanpa batasan API.'
+        : lastErrorMsg || `Gagal menghubungi Gemini API (Status ${lastErrorStatus})`;
+
       return NextResponse.json(
         {
-          error: 'NO_RESPONSE',
-          message: `Model Gemini ${selectedModel} tidak memberikan respons teks yang valid.`
+          error: 'GEMINI_API_ERROR',
+          message: friendlyMsg,
+          rawError: lastErrorJson
         },
-        { status: 500 }
+        { status: lastErrorStatus }
       );
     }
 
@@ -174,7 +208,7 @@ export async function POST(req: NextRequest) {
         subjectTitle,
         topic,
         selectedStandards,
-        model: selectedModel
+        model: successfulModel
       }
     });
   } catch (error: any) {

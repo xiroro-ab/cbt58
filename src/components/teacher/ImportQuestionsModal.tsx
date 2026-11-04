@@ -20,7 +20,7 @@ import {
   ExternalLink
 } from 'lucide-react';
 import { Question, Subject, OptionItem } from '@/types/cbt';
-import { validateAndConvertRawQuestions } from '@/lib/aiQuestionGenerator';
+import { validateAndConvertRawQuestions, sanitizeAndParseAiJson } from '@/lib/aiQuestionGenerator';
 import { parseQuestionsFromRawText } from '@/lib/documentQuestionParser';
 
 interface ImportQuestionsModalProps {
@@ -355,18 +355,23 @@ Aturan:
         }
 
         // PRE-CHECK INSTAN: Jika teks yang ditempelkan guru sudah berupa JSON dari Gemini Web / ChatGPT
-        let directJson: any = null;
-        if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+        let directJson: any[] = [];
+        const isLikelyJson =
+          trimmed.startsWith('[') ||
+          trimmed.startsWith('{') ||
+          trimmed.includes('"questionText"') ||
+          trimmed.includes('"type"');
+
+        if (isLikelyJson) {
           try {
-            directJson = JSON.parse(trimmed);
-          } catch {}
-        }
-        if (!directJson) {
-          const match = trimmed.match(/\[\s*\{[\s\S]*\}\s*\]/);
-          if (match) {
-            try {
-              directJson = JSON.parse(match[0]);
-            } catch {}
+            directJson = sanitizeAndParseAiJson(trimmed);
+          } catch {
+            const match = trimmed.match(/\[\s*\{[\s\S]*\}\s*\]/);
+            if (match) {
+              try {
+                directJson = sanitizeAndParseAiJson(match[0]);
+              } catch {}
+            }
           }
         }
 

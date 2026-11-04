@@ -138,30 +138,34 @@ WAJIB: Hasilkan HANYA kode JSON murni tanpa pengantar obrolan, tanpa blok markdo
     // Jika ada teks naskah (rawText) yang sudah berupa JSON array dari Gemini Web / ChatGPT:
     if (rawText && !fileBase64) {
       const trimmedText = rawText.trim();
-      let preParsed: any = null;
-      if (trimmedText.startsWith('[') && trimmedText.endsWith(']')) {
-        try {
-          preParsed = JSON.parse(trimmedText);
-        } catch {}
-      }
-      if (!preParsed) {
-        const match = trimmedText.match(/\[\s*\{[\s\S]*\}\s*\]/);
-        if (match) {
-          try {
-            preParsed = JSON.parse(match[0]);
-          } catch {}
-        }
-      }
+      const isLikelyJson =
+        trimmedText.startsWith('[') ||
+        trimmedText.startsWith('{') ||
+        trimmedText.includes('"questionText"');
 
-      if (Array.isArray(preParsed) && preParsed.length > 0) {
-        return NextResponse.json({
-          success: true,
-          questions: preParsed,
-          meta: {
-            totalExtracted: preParsed.length,
-            model: 'Local JSON Parser (Direct)'
+      if (isLikelyJson) {
+        let preParsed: any[] = [];
+        try {
+          preParsed = sanitizeAndParseAiJson(trimmedText);
+        } catch {
+          const match = trimmedText.match(/\[\s*\{[\s\S]*\}\s*\]/);
+          if (match) {
+            try {
+              preParsed = sanitizeAndParseAiJson(match[0]);
+            } catch {}
           }
-        });
+        }
+
+        if (Array.isArray(preParsed) && preParsed.length > 0) {
+          return NextResponse.json({
+            success: true,
+            questions: preParsed,
+            meta: {
+              totalExtracted: preParsed.length,
+              model: 'Local JSON Parser (Direct)'
+            }
+          });
+        }
       }
     }
 

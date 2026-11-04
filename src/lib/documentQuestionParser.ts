@@ -1,5 +1,5 @@
 import { Question, QuestionType, OptionItem } from '@/types/cbt';
-import { validateAndConvertRawQuestions, normalizeBSAnswer } from './aiQuestionGenerator';
+import { validateAndConvertRawQuestions, normalizeBSAnswer, sanitizeAndParseAiJson } from './aiQuestionGenerator';
 
 /**
  * Heuristic Client-Side Parser untuk mengekstrak butir soal dari teks naskah (Word/PDF/Notepad/Hasil AI)
@@ -20,31 +20,42 @@ export function parseQuestionsFromRawText(
     .trim();
 
   // 1. DUKUNGAN LANGSUNG JSON: Jika teks berupa format JSON array dari Gemini Web atau ChatGPT
+  // Gunakan sanitizeAndParseAiJson agar kutip ganda tak ter-escape di dalam kalimat otomatis diperbaiki
   const jsonCandidate = cleanInput.trim();
-  let jsonParsed: any = null;
+  const isLikelyJson =
+    jsonCandidate.startsWith('[') ||
+    jsonCandidate.startsWith('{') ||
+    jsonCandidate.includes('"questionText"') ||
+    jsonCandidate.includes('"type"');
 
-  if (jsonCandidate.startsWith('[') && jsonCandidate.endsWith(']')) {
+  if (isLikelyJson) {
+    let jsonParsed: any[] = [];
     try {
-      jsonParsed = JSON.parse(jsonCandidate);
-    } catch {}
-  }
-  if (!jsonParsed) {
-    // Cari blok JSON di dalam teks jika ada teks pengantar AI
-    const jsonBlockMatch = cleanInput.match(/\[\s*\{[\s\S]*\}\s*\]/);
-    if (jsonBlockMatch) {
+      jsonParsed = sanitizeAndParseAiJson(jsonCandidate);
+    } catch {
+      // Jika sanitizeAndParseAiJson gagal, coba ekstrak blok [...]
+      const jsonBlockMatch = cleanInput.match(/\[\s*\{[\s\S]*\}\s*\]/);
+      if (jsonBlockMatch) {
+        try {
+          jsonParsed = sanitizeAndParseAiJson(jsonBlockMatch[0]);
+        } catch {}
+      }
+    }
+
+    if (Array.isArray(jsonParsed) && jsonParsed.length > 0) {
       try {
-        jsonParsed = JSON.parse(jsonBlockMatch[0]);
+        const converted = validateAndConvertRawQuestions(jsonParsed, targetSubjectId, startOrderIndex);
+        if (converted.length > 0) {
+          return converted;
+        }
       } catch {}
     }
-  }
 
-  if (Array.isArray(jsonParsed) && jsonParsed.length > 0) {
-    try {
-      const converted = validateAndConvertRawQuestions(jsonParsed, targetSubjectId, startOrderIndex);
-      if (converted.length > 0) {
-        return converted;
-      }
-    } catch {}
+    // Jika input jelas-jelas berupa format JSON (diawali [ atau {) namun gagal diparse,
+    // JANGAN dilempar ke parser teks biasa karena akan menjadi 1 butir soal raksasa yang tidak rapi
+    if (jsonCandidate.startsWith('[') || (jsonCandidate.startsWith('{') && jsonCandidate.includes('"questionText"'))) {
+      return [];
+    }
   }
 
   // 2. PARSER TEKS HEURISTIK UNTUK NASKAH BIASA

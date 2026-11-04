@@ -569,20 +569,34 @@ export function validateAndConvertRawQuestions(
       }
     } else if (qType === 'Benar/Salah') {
       if (Array.isArray(raw.options) && raw.options.length > 0) {
-        finalOptions = raw.options.map((opt: any) => ({
-          text: typeof opt === 'string' ? opt : String(opt?.text || '')
-        }));
+        // Cek apakah options hanya berisi dummy radio 'Benar' dan 'Salah'
+        const isRadioOptionOnly = raw.options.length === 2 &&
+          raw.options.some((o: any) => String(o?.text || o).trim().toLowerCase() === 'benar') &&
+          raw.options.some((o: any) => String(o?.text || o).trim().toLowerCase() === 'salah');
+
+        if (isRadioOptionOnly) {
+          // Format Benar/Salah Tunggal (1 pernyataan klasik)
+          finalOptions = [];
+          const ansStr = String(Array.isArray(raw.answer) ? raw.answer[0] : raw.answer || 'Benar');
+          finalAnswer = ansStr.toLowerCase().includes('salah') ? 'Salah' : 'Benar';
+        } else {
+          // Format Benar/Salah Majemuk (Tabel Multi-Pernyataan)
+          finalOptions = raw.options.map((opt: any) => ({
+            text: typeof opt === 'string' ? opt : String(opt?.text || '')
+          }));
+          if (Array.isArray(raw.answer)) {
+            finalAnswer = raw.answer.map((a: any) => (String(a).toLowerCase().includes('benar') ? 'Benar' : 'Salah'));
+          } else if (typeof raw.answer === 'string') {
+            finalAnswer = raw.answer.split(',').map((a: string) => a.trim().toLowerCase().includes('benar') ? 'Benar' : 'Salah');
+          } else {
+            finalAnswer = finalOptions.map(() => 'Benar');
+          }
+        }
       } else {
-        finalOptions = [
-          { text: 'Pernyataan 1' },
-          { text: 'Pernyataan 2' },
-          { text: 'Pernyataan 3' }
-        ];
-      }
-      if (Array.isArray(raw.answer)) {
-        finalAnswer = raw.answer.map((a: any) => (String(a).toLowerCase().includes('benar') ? 'Benar' : 'Salah'));
-      } else {
-        finalAnswer = finalOptions.map(() => 'Benar');
+        // Options kosong -> Benar/Salah Tunggal (1 Pernyataan)
+        finalOptions = [];
+        const ansStr = String(Array.isArray(raw.answer) ? raw.answer[0] : raw.answer || 'Benar');
+        finalAnswer = ansStr.toLowerCase().includes('salah') ? 'Salah' : 'Benar';
       }
     } else if (qType === 'Menjodohkan') {
       if (Array.isArray(raw.options) && raw.options.length > 0) {

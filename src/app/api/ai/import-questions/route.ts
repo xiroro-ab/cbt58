@@ -145,65 +145,109 @@ WAJIB: Hasilkan HANYA kode JSON murni tanpa pengantar obrolan, tanpa blok markdo
       text: extractionInstruction
     });
 
-    // Default model: gemini-2.5-flash
-    const defaultModel = process.env.NEXT_PUBLIC_GEMINI_MODEL || process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+    // Urutan kandidat model untuk mitigasi kendala 'High Demand' (Overloaded 503 / 429):
+    // 1. Model yang diminta pengguna
+    // 2. gemini-1.5-flash (paling stabil & kuota tertinggi)
+    // 3. gemini-2.0-flash
+    const defaultModel = process.env.NEXT_PUBLIC_GEMINI_MODEL || process.env.GEMINI_MODEL || 'gemini-1.5-flash';
     const rawModel = (clientModel?.trim() || defaultModel).trim();
-    const selectedModel = rawModel.replace(/^models\//i, '');
-    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
-      selectedModel
-    )}:generateContent?key=${apiKey}`;
+    const primaryModel = rawModel.replace(/^models\//i, '');
 
-    const geminiRes = await fetch(geminiUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        contents: [
-          {
-            parts
-          }
-        ],
-        generationConfig: {
-          temperature: 0.1, // Rendah agar ekstraksi sangat presisi dan faktual
-          topP: 0.95,
-          responseMimeType: 'application/json'
-        }
-      })
-    });
+    const candidateModels = Array.from(new Set([
+      primaryModel,
+      'gemini-1.5-flash',
+      'gemini-2.0-flash',
+      'gemini-2.5-flash'
+    ]));
 
-    if (!geminiRes.ok) {
-      const errText = await geminiRes.text();
-      let errJson: any = null;
+    let rawOutputText = '';
+    let successfulModel = primaryModel;
+    let lastErrorMsg = '';
+    let lastErrorStatus = 500;
+    let lastErrorJson: any = null;
+
+    for (const modelToTry of candidateModels) {
       try {
-        errJson = JSON.parse(errText);
-      } catch {}
+        const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
+          modelToTry
+        )}:generateContent?key=${apiKey}`;
 
-      const msg =
-        errJson?.error?.message ||
-        `Gagal menghubungi Gemini API dengan model "${selectedModel}" (Status ${geminiRes.status})`;
+        const geminiRes = await fetch(geminiUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            contents: [
+              {
+                parts
+              }
+            ],
+            generationConfig: {
+              temperature: 0.1, // Rendah agar ekstraksi sangat presisi dan faktual
+              topP: 0.95,
+              responseMimeType: 'application/json'
+            }
+          })
+        });
 
-      console.error('Gemini Import API Error:', msg, errJson);
+        if (geminiRes.ok) {
+          const data = await geminiRes.json();
+          rawOutputText = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+          if (rawOutputText) {
+            successfulModel = modelToTry;
+            break; // Sukses mengekstrak naskah soal!
+          }
+        }
+
+        const errText = await geminiRes.text();
+        let errJson: any = null;
+        try {
+          errJson = JSON.parse(errText);
+        } catch {}
+
+        lastErrorStatus = geminiRes.status;
+        lastErrorJson = errJson;
+        lastErrorMsg = errJson?.error?.message || `Gagal dengan status ${geminiRes.status}`;
+
+        // Jika error 503 (Model Overloaded) atau 429 (Resource Exhausted / High Demand), coba model berikutnya
+        const isOverloaded =
+          geminiRes.status === 503 ||
+          geminiRes.status === 429 ||
+          lastErrorMsg.toLowerCase().includes('overloaded') ||
+          lastErrorMsg.toLowerCase().includes('demand');
+
+        if (isOverloaded) {
+          console.warn(`Model ${modelToTry} mengalami high demand/overload, beralih ke model cadangan berikutnya...`);
+          continue;
+        } else {
+          // Jika error lain (misal API key invalid), jangan looping
+          break;
+        }
+      } catch (callErr: any) {
+        lastErrorMsg = callErr.message || 'Network call error';
+      }
+    }
+
+    if (!rawOutputText) {
+      const isHighDemand =
+        lastErrorStatus === 503 ||
+        lastErrorStatus === 429 ||
+        lastErrorMsg.toLowerCase().includes('overloaded') ||
+        lastErrorMsg.toLowerCase().includes('demand');
+
+      const helpfulMsg = isHighDemand
+        ? 'Server Google Gemini saat ini sedang mengalami lonjakan beban (High Demand/Overloaded) untuk file PDF. Solusi Cepat: Silakan gunakan tab "Salin & Tempel Teks" atau klik "Salin Prompt AI" lalu upload naskah ke gemini.google.com secara gratis tanpa batasan.'
+        : lastErrorMsg || 'Gagal mengekstrak soal dari dokumen dengan AI.';
+
+      console.error('Gemini Import API Final Error:', helpfulMsg, lastErrorJson);
       return NextResponse.json(
         {
           error: 'GEMINI_API_ERROR',
-          message: msg,
-          details: errJson
+          message: helpfulMsg,
+          details: lastErrorJson
         },
-        { status: geminiRes.status }
-      );
-    }
-
-    const data = await geminiRes.json();
-    const rawOutputText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-
-    if (!rawOutputText) {
-      return NextResponse.json(
-        {
-          error: 'NO_RESPONSE',
-          message: `Model Gemini ${selectedModel} tidak memberikan respons teks yang valid.`
-        },
-        { status: 502 }
+        { status: lastErrorStatus }
       );
     }
 
@@ -241,7 +285,7 @@ WAJIB: Hasilkan HANYA kode JSON murni tanpa pengantar obrolan, tanpa blok markdo
         totalExtracted: parsedQuestions.length,
         fileName,
         subjectTitle,
-        model: selectedModel,
+        model: successfulModel,
         usedKeyType: clientApiKey?.trim() ? 'custom' : (serverKey ? 'server' : 'none')
       }
     });

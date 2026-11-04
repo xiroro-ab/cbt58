@@ -74,34 +74,49 @@ Nama Berkas: ${fileName}
 PETUNJUK EKSTRAKSI KHUSUS:
 1. DETEKSI TIPE SOAL:
    - "Pilihan Ganda" (PG): Memiliki pertanyaan dan opsi pilihan A, B, C, D (atau E).
-   - "Pilihan Ganda Kompleks" (PGK): Siswa memilih lebih dari 1 jawaban yang benar (misal mencentang kotak).
+   - "Pilihan Ganda Kompleks" (PGK): Siswa memilih lebih dari 1 jawaban yang benar (misal mencentang kotak). "answer": ["A", "C"].
    - "Benar/Salah":
      * Jika memiliki beberapa baris pernyataan dalam 1 nomor (misal pernyataan a, b, c atau baris-baris tabel asesmen), masukkan setiap pernyataan ke dalam array "options": [{ "text": "Pernyataan a..." }, { "text": "Pernyataan b..." }], dan "answer" berupa array string kunci: ["Salah", "Benar"].
      * Jika hanya 1 pernyataan tunggal, kosongkan "options": [] dan isi "answer": "Benar" (atau "Salah").
-   - "Menjodohkan": Mencocokkan premis/pertanyaan dengan pasangan jawaban.
-   - "Isian Singkat": Jawaban singkat berupa kata/frasa/angka pasti.
-   - "Esai": Soal uraian atau penjelasan bebas.
+   - "Menjodohkan": Mencocokkan premis/pertanyaan kolom kiri dengan pasangan jawaban kolom kanan. "options": [{ "q": { "text": "Premis Kiri" }, "a": { "text": "Pasangan Kanan Cocok" } }], "answer": null.
+   - "Isian Singkat": Jawaban singkat berupa kata/frasa/angka pasti. "options": [], "answer": ["Kunci Jawaban", "variasi sinonim"].
+   - "Esai": Soal uraian atau penjelasan bebas. "options": [], "answer": "Rubrik penilaian".
 
 2. STRUKTUR FORMAT DATA:
    Kembalikan HANYA array JSON (Array of Objects) dengan struktur berikut untuk setiap soal:
    [
      {
-       "type": "Pilihan Ganda" | "Pilihan Ganda Kompleks" | "Benar/Salah" | "Menjodohkan" | "Isian Singkat" | "Esai",
-       "questionText": "Teks lengkap butir pertanyaan (termasuk stimulus, kutipan bacaan, dialog, atau cerita jika ada)",
+       "type": "Pilihan Ganda",
+       "questionText": "Teks lengkap butir pertanyaan...",
        "options": [
-         { "text": "Isi pilihan A tanpa awalan A. atau A)" },
-         { "text": "Isi pilihan B tanpa awalan B. atau B)" },
-         { "text": "Isi pilihan C tanpa awalan C. atau C)" },
-         { "text": "Isi pilihan D tanpa awalan D. atau D)" }
+         { "text": "Pilihan A tanpa awalan huruf" },
+         { "text": "Pilihan B tanpa awalan huruf" },
+         { "text": "Pilihan C tanpa awalan huruf" },
+         { "text": "Pilihan D tanpa awalan huruf" }
        ],
-       "answer": "A", // Jawaban benar (huruf opsi, string, atau array huruf untuk PGK / array ["Benar", "Salah"] untuk B/S majemuk)
-       "explanation": "Penjelasan atau kunci pembahasan ringkas jika ada di naskah"
+       "answer": "A"
+     },
+     {
+       "type": "Menjodohkan",
+       "questionText": "Petunjuk menjodohkan premis di kolom kiri dengan pasangan di kolom kanan...",
+       "options": [
+         { "q": { "text": "Premis Kiri 1" }, "a": { "text": "Pasangan Kanan 1" } },
+         { "q": { "text": "Premis Kiri 2" }, "a": { "text": "Pasangan Kanan 2" } }
+       ],
+       "answer": null
+     },
+     {
+       "type": "Isian Singkat",
+       "questionText": "Pertanyaan dengan jawaban kata kunci...",
+       "options": [],
+       "answer": ["Jawaban Pokok", "sinonim"]
      }
    ]
 
 3. KUNCI JAWABAN (ANSWER):
-   - Jika pada naskah soal terdapat penanda kunci jawaban (misalnya: kunci jawaban di lembar akhir, tulisan "Kunci: C", huruf tebal, tanda centang/lingkaran, atau kotak "[S]" "[B]"), gunakan kunci tersebut.
+   - Jika pada naskah soal terdapat penanda kunci jawaban (misalnya: kunci jawaban di lembar akhir, tulisan "Kunci: C", huruf tebal, tanda centang/lingkaran, pasangan "1-C, 2-A", atau kotak "[S]" "[B]"), gunakan kunci tersebut.
    - Jika pada soal Benar/Salah berupa kotak kosong "a. [ ]  b. [ ]" atau naskah tidak memuat kunci eksplisit, analisis pernyataan dan tentukan kunci status kebenaran yang paling akurat secara akademis.
+   - Untuk Menjodohkan, q dan a harus sudah berupa pasangan yang tepat, dan answer diset null.
 
 4. PEMBERSIHAN TEKS:
    - Bersihkan prefix huruf opsi seperti "A. ", "A) ", "B. ", "b) " dari field 'text' di dalam options, karena sistem web akan merendernya otomatis.

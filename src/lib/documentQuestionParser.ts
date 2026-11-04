@@ -1,4 +1,4 @@
-import { Question, QuestionType, OptionItem } from '@/types/cbt';
+import { Question, QuestionType, OptionItem, MatchingPair } from '@/types/cbt';
 import { validateAndConvertRawQuestions, normalizeBSAnswer, sanitizeAndParseAiJson } from './aiQuestionGenerator';
 
 /**
@@ -370,8 +370,73 @@ export function parseQuestionsFromRawText(
     }
 
     // =========================================================================
-    // KASUS 3: ISIAN SINGKAT / ESAI
+    // KASUS 3: MENJODOHKAN (HEURISTIK RAW TEXT)
     // =========================================================================
+    const isMenjodohkanCandidate =
+      explicitType === 'Menjodohkan' ||
+      /\b(jodohkan|pasangkan|menjodohkan)\b/i.test(block);
+
+    if (isMenjodohkanCandidate) {
+      const lines = textToProcess.split('\n').map(l => l.trim()).filter(Boolean);
+      const pairs: MatchingPair[] = [];
+      const preambleLines: string[] = [];
+
+      // Deteksi baris pasangan yang memuat pemisah: "->", "=>", "=", "—", "–", "\t"
+      const pairSeparatorRegex = /^(?:[a-zA-Z0-9\.\)\-\*\u2022]+\s+)?(.+?)\s*(?:->|=>|={1,2}|—|–|\t)\s*(.+)$/;
+
+      for (const line of lines) {
+        if (/^(?:petunjuk|instruksi|soal|nomor|bagian|bab)\b/i.test(line)) {
+          preambleLines.push(line);
+          continue;
+        }
+
+        const pMatch = line.match(pairSeparatorRegex);
+        if (pMatch) {
+          const leftText = pMatch[1].replace(/^[a-zA-Z0-9]+[\.\)]\s*/, '').trim();
+          const rightText = pMatch[2].trim();
+          if (leftText && rightText) {
+            pairs.push({
+              q: { text: leftText },
+              a: { text: rightText }
+            });
+            continue;
+          }
+        }
+        preambleLines.push(line);
+      }
+
+      if (pairs.length > 0) {
+        results.push({
+          id: `q-import-${Date.now()}-${bIdx}-${Math.random().toString(36).substr(2, 4)}`,
+          subjectId: targetSubjectId,
+          type: 'Menjodohkan',
+          questionText: preambleLines.join('\n').trim() || 'Pasangkan pernyataan di sebelah kiri dengan jawaban yang tepat di sebelah kanan:',
+          options: pairs,
+          answer: null,
+          orderIndex: startOrderIndex + results.length,
+          createdAt: Date.now()
+        });
+        continue;
+      }
+    }
+
+    // =========================================================================
+    // KASUS 4: ISIAN SINGKAT / ESAI
+    // =========================================================================
+    if (explicitType === 'Isian Singkat' || /\b(isian\s+singkat|isian)\b/i.test(block)) {
+      results.push({
+        id: `q-import-${Date.now()}-${bIdx}-${Math.random().toString(36).substr(2, 4)}`,
+        subjectId: targetSubjectId,
+        type: 'Isian Singkat',
+        questionText: textToProcess,
+        options: [],
+        answer: detectedKeyText ? [detectedKeyText] : ['Jawaban'],
+        orderIndex: startOrderIndex + results.length,
+        createdAt: Date.now()
+      });
+      continue;
+    }
+
     results.push({
       id: `q-import-${Date.now()}-${bIdx}-${Math.random().toString(36).substr(2, 4)}`,
       subjectId: targetSubjectId,

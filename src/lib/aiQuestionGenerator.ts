@@ -651,13 +651,23 @@ export function validateAndConvertRawQuestions(
         finalAnswer = normalizeBSAnswer(ansVal);
       }
     } else if (qType === 'Menjodohkan') {
-      if (Array.isArray(raw.options) && raw.options.length > 0) {
-        finalOptions = raw.options.map((pair: any) => {
-          const qText = pair?.q?.text || (typeof pair?.q === 'string' ? pair.q : 'Premis');
-          const aText = pair?.a?.text || (typeof pair?.a === 'string' ? pair.a : 'Jawaban');
+      const rawPairs = (Array.isArray(raw.options) && raw.options.length > 0)
+        ? raw.options
+        : (Array.isArray(raw.pairs) && raw.pairs.length > 0)
+        ? raw.pairs
+        : (Array.isArray(raw.matchingPairs) && raw.matchingPairs.length > 0)
+        ? raw.matchingPairs
+        : (Array.isArray(raw.items) && raw.items.length > 0)
+        ? raw.items
+        : [];
+
+      if (rawPairs.length > 0) {
+        finalOptions = rawPairs.map((pair: any) => {
+          const qText = pair?.q?.text || pair?.premis || pair?.left || pair?.soal || pair?.pertanyaan || (typeof pair?.q === 'string' ? pair.q : 'Premis');
+          const aText = pair?.a?.text || pair?.jawaban || pair?.right || pair?.pasangan || (typeof pair?.a === 'string' ? pair.a : 'Jawaban');
           return {
-            q: { text: String(qText) },
-            a: { text: String(aText) }
+            q: { text: String(qText).trim() },
+            a: { text: String(aText).trim() }
           };
         });
       } else {
@@ -669,10 +679,15 @@ export function validateAndConvertRawQuestions(
       finalAnswer = null;
     } else if (qType === 'Isian Singkat') {
       finalOptions = [];
-      if (Array.isArray(raw.answer)) {
-        finalAnswer = raw.answer.map((a: any) => String(a).trim());
-      } else if (typeof raw.answer === 'string') {
-        finalAnswer = [raw.answer.trim()];
+      const rawAns = raw.answer || raw.key || raw.keys || raw.kunci || raw.jawaban;
+      if (Array.isArray(rawAns)) {
+        finalAnswer = rawAns.map((a: any) => String(a).trim());
+      } else if (typeof rawAns === 'string') {
+        if (rawAns.includes(',') || rawAns.includes(';') || rawAns.includes('/')) {
+          finalAnswer = rawAns.split(/[,;\/]+/).map(s => s.trim()).filter(Boolean);
+        } else {
+          finalAnswer = [rawAns.trim()];
+        }
       } else {
         finalAnswer = ['Jawaban'];
       }

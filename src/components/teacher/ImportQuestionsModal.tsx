@@ -74,7 +74,7 @@ export const ImportQuestionsModal: React.FC<ImportQuestionsModalProps> = ({
   const [hasServerKey, setHasServerKey] = useState<boolean | null>(null);
   const [isPromptCopied, setIsPromptCopied] = useState(false);
 
-  // Template Prompt AI untuk Gemini Web (gemini.google.com) atau ChatGPT
+  // Template Prompt AI untuk Gemini Web (gemini.google.com), ChatGPT, DeepSeek, Claude, atau Qwen
   const aiExtractionPromptTemplate = `Tolong baca dan analisis seluruh butir soal pada naskah ujian yang saya lampirkan ini untuk mata pelajaran "${currentSubject.title}".
 Ekstrak seluruh butir soal tanpa terlewat, lalu berikan hasilnya HANYA berupa kode JSON murni (mulai dari [ sampai ]) agar bisa langsung diimpor ke sistem CBT kami, dengan format persis seperti ini:
 
@@ -89,6 +89,17 @@ Ekstrak seluruh butir soal tanpa terlewat, lalu berikan hasilnya HANYA berupa ko
       { "text": "Isi pilihan D tanpa awalan D." }
     ],
     "answer": "A"
+  },
+  {
+    "type": "Pilihan Ganda Kompleks",
+    "questionText": "Tuliskan pertanyaan dengan pilihan jawaban lebih dari satu",
+    "options": [
+      { "text": "Opsi pilihan A" },
+      { "text": "Opsi pilihan B" },
+      { "text": "Opsi pilihan C" },
+      { "text": "Opsi pilihan D" }
+    ],
+    "answer": ["A", "C"]
   },
   {
     "type": "Benar/Salah",
@@ -106,15 +117,20 @@ Ekstrak seluruh butir soal tanpa terlewat, lalu berikan hasilnya HANYA berupa ko
     "answer": "Benar"
   },
   {
-    "type": "Pilihan Ganda Kompleks",
-    "questionText": "Tuliskan pertanyaan dengan pilihan jawaban lebih dari satu",
+    "type": "Menjodohkan",
+    "questionText": "Pasangkan pernyataan/istilah di sebelah kiri dengan pasangan yang tepat di sebelah kanan:",
     "options": [
-      { "text": "Opsi pilihan A" },
-      { "text": "Opsi pilihan B" },
-      { "text": "Opsi pilihan C" },
-      { "text": "Opsi pilihan D" }
+      { "q": { "text": "Premis/Pertanyaan Kiri 1" }, "a": { "text": "Pasangan/Jawaban Kanan yang Cocok 1" } },
+      { "q": { "text": "Premis/Pertanyaan Kiri 2" }, "a": { "text": "Pasangan/Jawaban Kanan yang Cocok 2" } },
+      { "q": { "text": "Premis/Pertanyaan Kiri 3" }, "a": { "text": "Pasangan/Jawaban Kanan yang Cocok 3" } }
     ],
-    "answer": ["A", "C"]
+    "answer": null
+  },
+  {
+    "type": "Isian Singkat",
+    "questionText": "Tuliskan pertanyaan dengan jawaban singkat berupa kata/istilah/angka pasti",
+    "options": [],
+    "answer": ["Jawaban Utama", "sinonim / variasi penulisan"]
   },
   {
     "type": "Esai",
@@ -124,14 +140,23 @@ Ekstrak seluruh butir soal tanpa terlewat, lalu berikan hasilnya HANYA berupa ko
   }
 ]
 
-Aturan:
-1. Hasilkan HANYA kode JSON murni [ ... ] tanpa teks pembuka obrolan dan tanpa blok kutipan markdown.
+Aturan Analisis & Format:
+1. Hasilkan HANYA kode JSON murni [ ... ] tanpa teks pembuka/penutup obrolan dan tanpa blok kutipan markdown triple backticks.
 2. Bersihkan nomor butir soal ("1.", "18.", dll) dari questionText.
-3. Untuk Benar/Salah yang memiliki beberapa pernyataan dalam 1 nomor (misal pernyataan a, b, c atau baris tabel asesmen): masukkan setiap pernyataan ke dalam "options": [{ "text": "..." }], dan kunci jawabannya ke dalam array "answer": ["Salah", "Benar"].
-4. Untuk Benar/Salah 1 pernyataan tunggal: kosongkan "options": [] dan isi "answer": "Benar" (atau "Salah").
-5. Untuk Pilihan Ganda, hilangkan awalan 'A.', 'B.', 'C.', 'D.' dari teks options.
-6. Jika naskah belum memiliki kunci jawaban tertulis (misal masih kotak kosong "a. [ ]  b. [ ]"), analisis pernyataan dan tentukan kunci yang paling tepat secara akademis.
-7. PENTING: Jika teks soal mengandung istilah khusus bertanda petik (misal hukum tajwid 'Allah' atau kutipan ayat), gunakan tanda petik tunggal '...' atau garis miring terbalik \" agar format kode JSON valid dan tidak rusak.`;
+3. Untuk Pilihan Ganda: hilangkan awalan huruf opsi ('A.', 'B.', 'a)', dll) dari teks options.
+4. Untuk Pilihan Ganda Kompleks: "answer" berupa array huruf opsi yang benar, contoh: ["A", "C"].
+5. Untuk Benar/Salah Majemuk (Tabel Asesmen/Banyak Pernyataan): masukkan setiap pernyataan ke dalam "options": [{ "text": "..." }], dan kunci statusnya ke dalam array "answer": ["Benar", "Salah"].
+6. Untuk Benar/Salah Tunggal (1 Pernyataan Saja): kosongkan "options": [] dan isi "answer": "Benar" (atau "Salah").
+7. Untuk Menjodohkan:
+   - Ambil seluruh pasangan premis dan pasangannya dari naskah (baik berbentuk tabel 2 kolom, tanda panah '->', garis penghubung, titik-titik, atau yang kuncinya ada di bawah).
+   - Masukkan ke dalam "options" berupa array pasangan objek { "q": { "text": "Premis Kiri" }, "a": { "text": "Pasangan Kanan yang Benar" } }.
+   - Pasangan q dan a HARUS sudah dipasangkan dengan benar (sistem CBT kami yang akan otomatis mengacak pasangan kolom kanan saat siswa mengerjakan).
+   - Nilai "answer" untuk Menjodohkan wajib bernilai null.
+8. Untuk Isian Singkat: kosongkan "options": [], dan masukkan kata kunci jawaban yang tepat ke dalam array "answer": ["Jawaban Pokok", "alternatif kata kunci"].
+9. Kunci Jawaban Terpisah & Kotak Kosong:
+   - Jika kunci jawaban berada di bagian akhir naskah (misal: "Kunci Jawaban: 1. A, 2. B-S, 3. 1-C"), pasangkan kunci tersebut ke butir soal yang sesuai.
+   - Jika pada naskah belum ada kunci tertulis (misal masih kotak kosong "a. [ ]  b. [ ]"), analisis pernyataan dan tentukan kunci yang paling tepat secara akademis.
+10. PENTING: Jika teks soal memuat istilah bertanda petik ganda, gunakan tanda petik tunggal '...' atau garis miring terbalik \\" agar format kode JSON valid dan tidak rusak saat disalin.`;
 
   const handleCopyPrompt = () => {
     if (typeof navigator !== 'undefined' && navigator.clipboard) {

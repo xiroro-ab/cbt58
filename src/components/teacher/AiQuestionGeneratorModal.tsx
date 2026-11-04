@@ -40,6 +40,7 @@ import {
   CheckSquare,
   Square
 } from 'lucide-react';
+import { AiExternalPromptCard } from './AiExternalPromptCard';
 
 interface AiQuestionGeneratorModalProps {
   isOpen: boolean;
@@ -240,14 +241,13 @@ export function AiQuestionGeneratorModal({
 
   const activeModelId = modelName.trim() || 'gemini-3.5-flash';
 
-  // Salin prompt untuk dipakai di gemini.google.com
-  const handleCopyPrompt = () => {
+  const getCurrentPromptText = () => {
     const finalSubject = subjectName.trim() || activeSubject?.title || 'Informatika';
     const finalGrade = gradeLevel.trim() || activeSubject?.className || 'Kelas 9 (IX)';
     const defaultTopic = recommendedTopics[0] || 'Berpikir Komputasional dan Jaringan Komputer';
     const finalTopic = topic.trim() || defaultTopic;
 
-    const promptText = buildAiQuestionPrompt({
+    return buildAiQuestionPrompt({
       subjectTitle: finalSubject,
       className: finalGrade,
       topic: finalTopic,
@@ -257,10 +257,16 @@ export function AiQuestionGeneratorModal({
       customInstructions,
       model: activeModelId
     });
+  };
 
-    navigator.clipboard.writeText(promptText);
-    setCopySuccess(true);
-    setTimeout(() => setCopySuccess(false), 2500);
+  // Salin prompt untuk dipakai di gemini, chatgpt, deepseek, claude, atau qwen
+  const handleCopyPrompt = () => {
+    const promptText = getCurrentPromptText();
+    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+      navigator.clipboard.writeText(promptText);
+      setCopySuccess(true);
+      setTimeout(() => setCopySuccess(false), 2500);
+    }
   };
 
   // Generate via Next.js API Route (Gemini API)
@@ -1246,7 +1252,7 @@ export function AiQuestionGeneratorModal({
                   type="button"
                   onClick={handleCopyPrompt}
                   className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-300 transition cursor-pointer"
-                  title="Salin prompt untuk ditempel ke gemini.google.com"
+                  title="Salin prompt untuk ditempel ke Gemini, ChatGPT, DeepSeek, Claude, atau Qwen"
                 >
                   {copySuccess ? (
                     <>
@@ -1268,7 +1274,7 @@ export function AiQuestionGeneratorModal({
                     setShowPasteModal(true);
                   }}
                   className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-300 transition cursor-pointer"
-                  title="Tempel JSON hasil dari gemini.google.com"
+                  title="Buka panduan & tempel JSON hasil AI (Gemini, ChatGPT, DeepSeek, Claude, Qwen)"
                 >
                   <ClipboardPaste className="w-3.5 h-3.5 text-slate-500" />
                   <span>Tempel JSON Hasil</span>
@@ -1326,13 +1332,13 @@ export function AiQuestionGeneratorModal({
       {/* MODAL TEMPEL JSON MANUAL (100% BEBAS TANPA KUNCI API)        */}
       {/* ============================================================ */}
       {showPasteModal && (
-        <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fade-in">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-2xl w-full max-w-lg p-5 space-y-4">
-            <div className="flex items-center justify-between">
+        <div className="fixed inset-0 z-60 flex items-center justify-center p-3 sm:p-4 bg-slate-950/80 backdrop-blur-sm animate-fade-in">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto p-4 sm:p-6 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
               <div className="flex items-center gap-2">
                 <ClipboardPaste className="w-5 h-5 text-violet-600" />
                 <h4 className="text-sm font-bold text-slate-900 dark:text-white">
-                  Tempel JSON Hasil dari Gemini Web
+                  Opsi Bebas Limit: Salin Prompt &amp; Tempel Hasil AI
                 </h4>
               </div>
               <button
@@ -1340,11 +1346,18 @@ export function AiQuestionGeneratorModal({
                   setPasteError(null);
                   setShowPasteModal(false);
                 }}
-                className="p-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400"
+                className="p-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
+
+            {/* KARTU PANDUAN DAN 5 TOMBOL OPSI AI */}
+            <AiExternalPromptCard
+              promptText={getCurrentPromptText()}
+              subjectTitle={subjectName || activeSubject?.title}
+              mode="generate"
+            />
 
             {pasteError && (
               <div className="p-3.5 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-300 dark:border-rose-900/60 text-xs text-rose-700 dark:text-rose-300 flex items-start gap-2.5 animate-fade-in">
@@ -1356,19 +1369,19 @@ export function AiQuestionGeneratorModal({
               </div>
             )}
 
-            <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-              1. Klik tombol <strong>&apos;Salin Prompt AI&apos;</strong>.<br />
-              2. Buka <a href="https://gemini.google.com" target="_blank" rel="noreferrer" className="text-violet-600 dark:text-violet-400 underline font-bold">gemini.google.com</a> (gratis tanpa API key), lalu tempel prompt tersebut.<br />
-              3. Salin balasan JSON dari Gemini dan tempelkan di kotak bawah ini:
-            </p>
-
-            <textarea
-              value={manualJsonInput}
-              onChange={e => setManualJsonInput(e.target.value)}
-              placeholder='[ { "type": "Pilihan Ganda", "questionText": "...", "options": [...], "answer": "A" } ]'
-              rows={8}
-              className="w-full text-xs font-mono p-3 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500"
-            />
+            <div className="space-y-1.5 pt-1">
+              <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center justify-between">
+                <span>Tempelkan Balasan Kode JSON dari AI di Bawah Ini:</span>
+                <span className="text-[10px] text-slate-400 font-normal">Format: JSON Array [ ... ]</span>
+              </label>
+              <textarea
+                value={manualJsonInput}
+                onChange={e => setManualJsonInput(e.target.value)}
+                placeholder='[ { "type": "Pilihan Ganda", "questionText": "...", "options": [...], "answer": "A" } ]'
+                rows={6}
+                className="w-full text-xs font-mono p-3 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500"
+              />
+            </div>
 
             <div className="flex items-center justify-end gap-2 pt-2">
               <button

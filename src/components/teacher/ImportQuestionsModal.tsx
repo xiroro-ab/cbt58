@@ -22,6 +22,7 @@ import {
 import { Question, Subject, OptionItem } from '@/types/cbt';
 import { validateAndConvertRawQuestions, sanitizeAndParseAiJson } from '@/lib/aiQuestionGenerator';
 import { parseQuestionsFromRawText } from '@/lib/documentQuestionParser';
+import { AiExternalPromptCard } from './AiExternalPromptCard';
 
 interface ImportQuestionsModalProps {
   isOpen: boolean;
@@ -129,7 +130,8 @@ Aturan:
 3. Untuk Benar/Salah yang memiliki beberapa pernyataan dalam 1 nomor (misal pernyataan a, b, c atau baris tabel asesmen): masukkan setiap pernyataan ke dalam "options": [{ "text": "..." }], dan kunci jawabannya ke dalam array "answer": ["Salah", "Benar"].
 4. Untuk Benar/Salah 1 pernyataan tunggal: kosongkan "options": [] dan isi "answer": "Benar" (atau "Salah").
 5. Untuk Pilihan Ganda, hilangkan awalan 'A.', 'B.', 'C.', 'D.' dari teks options.
-6. Jika naskah belum memiliki kunci jawaban tertulis (misal masih kotak kosong "a. [ ]  b. [ ]"), analisis pernyataan dan tentukan kunci yang paling tepat secara akademis.`;
+6. Jika naskah belum memiliki kunci jawaban tertulis (misal masih kotak kosong "a. [ ]  b. [ ]"), analisis pernyataan dan tentukan kunci yang paling tepat secara akademis.
+7. PENTING: Jika teks soal mengandung istilah khusus bertanda petik (misal hukum tajwid 'Allah' atau kutipan ayat), gunakan tanda petik tunggal '...' atau garis miring terbalik \" agar format kode JSON valid dan tidak rusak.`;
 
   const handleCopyPrompt = () => {
     if (typeof navigator !== 'undefined' && navigator.clipboard) {
@@ -560,53 +562,12 @@ Aturan:
             <div className="space-y-5">
               
               {/* Petunjuk Singkat Penggunaan */}
-              {/* KARTU PANDUAN ALTERNATIF BEBAS HIGH DEMAND (PROMPT GEMINI WEB / CHATGPT) */}
-              <div className="p-3.5 sm:p-4 rounded-2xl bg-gradient-to-r from-violet-50 via-indigo-50 to-teal-50 dark:from-violet-950/40 dark:via-indigo-950/40 dark:to-teal-950/30 border border-violet-200/80 dark:border-violet-800/60 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs">
-                <div className="flex items-start gap-3">
-                  <div className="w-9 h-9 rounded-xl bg-violet-600 text-white flex items-center justify-center shrink-0 shadow-sm mt-0.5 sm:mt-0">
-                    <Sparkles className="w-5 h-5" />
-                  </div>
-                  <div className="space-y-0.5">
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <p className="font-bold text-xs text-slate-900 dark:text-white">
-                        Solusi Bebas Kendala &quot;High Demand&quot; (100% Gratis &amp; Tanpa Limit)
-                      </p>
-                      <span className="text-[10px] px-1.5 py-0.2 rounded-md bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 font-extrabold">
-                        Rekomendasi
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-slate-600 dark:text-slate-400 leading-relaxed">
-                      Jika server API sibuk, upload PDF Anda langsung ke <strong>Gemini Chat</strong> atau <strong>ChatGPT</strong> menggunakan prompt siap pakai, lalu salin hasilnya ke tab <em>Tempel Teks</em> di bawah.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2 shrink-0 w-full sm:w-auto">
-                  <button
-                    type="button"
-                    onClick={handleCopyPrompt}
-                    className={`flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition shadow-xs cursor-pointer ${
-                      isPromptCopied
-                        ? 'bg-emerald-600 text-white'
-                        : 'bg-violet-600 hover:bg-violet-500 text-white shadow-violet-600/20'
-                    }`}
-                  >
-                    {isPromptCopied ? <Check className="w-3.5 h-3.5" /> : <KeyRound className="w-3.5 h-3.5" />}
-                    <span>{isPromptCopied ? 'Prompt Berhasil Disalin!' : 'Salin Prompt AI'}</span>
-                  </button>
-
-                  <a
-                    href="https://gemini.google.com"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-violet-200 dark:border-violet-800 text-violet-700 dark:text-violet-300 hover:bg-violet-50 dark:hover:bg-violet-950/50 text-xs font-bold transition shadow-xs"
-                    title="Buka Gemini Web di Tab Baru"
-                  >
-                    <span>Gemini Web</span>
-                    <ExternalLink className="w-3 h-3" />
-                  </a>
-                </div>
-              </div>
+              {/* KARTU PANDUAN & OPSI SALIN PROMPT AI (GEMINI, CHATGPT, DEEPSEEK, CLAUDE, QWEN) */}
+              <AiExternalPromptCard
+                promptText={aiExtractionPromptTemplate}
+                subjectTitle={currentSubject.title}
+                mode="extract"
+              />
 
               {/* TAB SELECTOR: UPLOAD BERKAS vs COPY-PASTE TEKS */}
               <div className="flex items-center gap-2 border-b border-slate-200 dark:border-slate-800 pb-2">

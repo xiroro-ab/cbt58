@@ -135,6 +135,36 @@ WAJIB: Hasilkan HANYA kode JSON murni tanpa pengantar obrolan, tanpa blok markdo
       });
     }
 
+    // Jika ada teks naskah (rawText) yang sudah berupa JSON array dari Gemini Web / ChatGPT:
+    if (rawText && !fileBase64) {
+      const trimmedText = rawText.trim();
+      let preParsed: any = null;
+      if (trimmedText.startsWith('[') && trimmedText.endsWith(']')) {
+        try {
+          preParsed = JSON.parse(trimmedText);
+        } catch {}
+      }
+      if (!preParsed) {
+        const match = trimmedText.match(/\[\s*\{[\s\S]*\}\s*\]/);
+        if (match) {
+          try {
+            preParsed = JSON.parse(match[0]);
+          } catch {}
+        }
+      }
+
+      if (Array.isArray(preParsed) && preParsed.length > 0) {
+        return NextResponse.json({
+          success: true,
+          questions: preParsed,
+          meta: {
+            totalExtracted: preParsed.length,
+            model: 'Local JSON Parser (Direct)'
+          }
+        });
+      }
+    }
+
     // Jika ada teks naskah (rawText)
     if (rawText?.trim()) {
       parts.push({
@@ -147,20 +177,22 @@ WAJIB: Hasilkan HANYA kode JSON murni tanpa pengantar obrolan, tanpa blok markdo
       text: extractionInstruction
     });
 
-    // Urutan kandidat model untuk mitigasi kendala 'High Demand' (Overloaded 503 / 429):
-    // 1. Model yang diminta pengguna (default: gemini-3.5-flash)
-    // 2. gemini-3.5-flash -> gemini-3-flash -> gemini-3.0-flash -> gemini-2.5-flash
-    const defaultModel = process.env.NEXT_PUBLIC_GEMINI_MODEL || process.env.GEMINI_MODEL || 'gemini-3.5-flash';
-    const rawModel = (clientModel?.trim() || defaultModel).trim();
-    const primaryModel = rawModel.replace(/^models\//i, '');
+    // Urutan kandidat model:
+    // 1. Model yang diminta pengguna
+    // 2. Jika GURU MEMASUKKAN MODEL MANUAL: HANYA gunakan model tersebut (tidak boleh fallback ke model lain)
+    const userSpecifiedModel = clientModel?.trim();
+    const defaultModel = process.env.NEXT_PUBLIC_GEMINI_MODEL || process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+    const primaryModel = (userSpecifiedModel || defaultModel).replace(/^models\//i, '').trim();
 
-    const candidateModels = Array.from(new Set([
-      primaryModel,
-      'gemini-3.5-flash',
-      'gemini-3-flash',
-      'gemini-3.0-flash',
-      'gemini-2.5-flash'
-    ]));
+    // HANYA gunakan fallback jika guru TIDAK menentukan model sendiri (default website)
+    const candidateModels = userSpecifiedModel
+      ? [primaryModel]
+      : Array.from(new Set([
+          primaryModel,
+          'gemini-2.5-flash',
+          'gemini-2.0-flash',
+          'gemini-1.5-flash'
+        ]));
 
     let rawOutputText = '';
     let successfulModel = primaryModel;
@@ -238,9 +270,13 @@ WAJIB: Hasilkan HANYA kode JSON murni tanpa pengantar obrolan, tanpa blok markdo
         lastErrorMsg.toLowerCase().includes('overloaded') ||
         lastErrorMsg.toLowerCase().includes('demand');
 
-      const helpfulMsg = isHighDemand
-        ? 'Server Google Gemini saat ini sedang mengalami lonjakan beban (High Demand/Overloaded) untuk file PDF. Solusi Cepat: Silakan gunakan tab "Salin & Tempel Teks" atau klik "Salin Prompt AI" lalu upload naskah ke gemini.google.com secara gratis tanpa batasan.'
-        : lastErrorMsg || 'Gagal mengekstrak soal dari dokumen dengan AI.';
+      let helpfulMsg = lastErrorMsg || 'Gagal mengekstrak soal dari dokumen dengan AI.';
+
+      if (isHighDemand) {
+        helpfulMsg = `Server Google Gemini saat ini sedang mengalami lonjakan antrean (High Demand/Overloaded 503/429) untuk model "${primaryModel}". Solusi Cepat: Silakan gunakan tombol "Ekstrak Instan JSON / Naskah" atau upload naskah ke gemini.google.com secara gratis tanpa batasan.`;
+      } else if (lastErrorStatus === 404 || lastErrorMsg.toLowerCase().includes('not found')) {
+        helpfulMsg = `Model Gemini "${primaryModel}" tidak ditemukan di Google AI Studio (API v1beta) atau belum didukung. Tips: Pastikan nama model sesuai yang terdaftar di Google AI Studio (misal: gemini-2.5-flash, gemini-2.0-flash, gemini-1.5-flash), atau gunakan tombol "Ekstrak Instan" tanpa memerlukan API.`;
+      }
 
       console.error('Gemini Import API Final Error:', helpfulMsg, lastErrorJson);
       return NextResponse.json(

@@ -349,10 +349,46 @@ Aturan:
         }
         payload.fileBase64 = fileBase64;
       } else {
-        if (!rawText.trim()) {
+        const trimmed = rawText.trim();
+        if (!trimmed) {
           throw new Error('Silakan tempelkan teks naskah soal terlebih dahulu.');
         }
-        payload.rawText = rawText.trim();
+
+        // PRE-CHECK INSTAN: Jika teks yang ditempelkan guru sudah berupa JSON dari Gemini Web / ChatGPT
+        let directJson: any = null;
+        if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+          try {
+            directJson = JSON.parse(trimmed);
+          } catch {}
+        }
+        if (!directJson) {
+          const match = trimmed.match(/\[\s*\{[\s\S]*\}\s*\]/);
+          if (match) {
+            try {
+              directJson = JSON.parse(match[0]);
+            } catch {}
+          }
+        }
+
+        if (Array.isArray(directJson) && directJson.length > 0) {
+          const converted = validateAndConvertRawQuestions(
+            directJson,
+            currentSubject.id,
+            existingQuestionsCount + 1
+          );
+          if (converted.length > 0) {
+            clearTimeout(timer1);
+            clearTimeout(timer2);
+            clearTimeout(timer3);
+            setExtractedQuestions(converted);
+            setSelectedQuestionIds(new Set(converted.map(q => q.id)));
+            setCurrentStep('preview');
+            setIsLoading(false);
+            return;
+          }
+        }
+
+        payload.rawText = trimmed;
       }
 
       const res = await fetch('/api/ai/import-questions', {
@@ -734,7 +770,7 @@ Aturan:
                       className="py-2.5 px-4 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-bold text-xs transition cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
                     >
                       <FileText className="w-3.5 h-3.5" />
-                      <span>Ekstrak Cepat Lokal (Regex Tanpa AI)</span>
+                      <span>Ekstrak Instan JSON / Naskah (Tanpa API)</span>
                     </button>
                   </div>
                 </div>

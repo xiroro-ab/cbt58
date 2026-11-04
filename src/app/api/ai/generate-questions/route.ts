@@ -94,17 +94,20 @@ export async function POST(req: NextRequest) {
     });
 
     // Sanitasi nama model yang dipilih guru (bersihkan spasi dan prefix 'models/' jika ada)
-    const defaultModel = process.env.NEXT_PUBLIC_GEMINI_MODEL || process.env.GEMINI_MODEL || 'gemini-3.5-flash';
-    const rawModel = (clientModel?.trim() || defaultModel).trim();
-    const primaryModel = rawModel.replace(/^models\//i, '');
+    const userSpecifiedModel = clientModel?.trim();
+    const defaultModel = process.env.NEXT_PUBLIC_GEMINI_MODEL || process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+    const primaryModel = (userSpecifiedModel || defaultModel).replace(/^models\//i, '').trim();
 
-    const candidateModels = Array.from(new Set([
-      primaryModel,
-      'gemini-3.5-flash',
-      'gemini-3-flash',
-      'gemini-3.0-flash',
-      'gemini-2.5-flash'
-    ]));
+    // JIKA GURU MEMASUKKAN MODEL MANUAL:
+    // Wajib 100% HANYA gunakan model dari inputan guru tersebut! JANGAN looping / fallback ke model lain!
+    const candidateModels = userSpecifiedModel
+      ? [primaryModel]
+      : Array.from(new Set([
+          primaryModel,
+          'gemini-2.5-flash',
+          'gemini-2.0-flash',
+          'gemini-1.5-flash'
+        ]));
 
     let rawOutputText = '';
     let successfulModel = primaryModel;
@@ -169,9 +172,13 @@ export async function POST(req: NextRequest) {
 
     if (!rawOutputText) {
       const isHighDemand = lastErrorStatus === 503 || lastErrorStatus === 429;
-      const friendlyMsg = isHighDemand
-        ? 'Server Google Gemini saat ini sedang mengalami lonjakan beban (High Demand/Overloaded). Solusi: Coba beberapa saat lagi atau gunakan tombol "Salin Prompt AI" lalu paste ke gemini.google.com secara gratis tanpa batasan API.'
-        : lastErrorMsg || `Gagal menghubungi Gemini API (Status ${lastErrorStatus})`;
+      let friendlyMsg = lastErrorMsg || `Gagal menghubungi Gemini API (Status ${lastErrorStatus})`;
+
+      if (isHighDemand) {
+        friendlyMsg = `Server Google Gemini saat ini sedang mengalami lonjakan antrean (High Demand 503 / 429) untuk model "${primaryModel}". Solusi: Coba beberapa saat lagi atau gunakan tombol "Salin Prompt AI" lalu tempel ke gemini.google.com secara gratis tanpa batasan API.`;
+      } else if (lastErrorStatus === 404 || lastErrorMsg.toLowerCase().includes('not found')) {
+        friendlyMsg = `Model Gemini "${primaryModel}" tidak ditemukan di Google AI Studio (API v1beta) atau belum didukung. Tips: Pastikan nama model sesuai yang terdaftar di Google AI Studio (misal: gemini-2.5-flash, gemini-2.0-flash, gemini-1.5-flash).`;
+      }
 
       return NextResponse.json(
         {

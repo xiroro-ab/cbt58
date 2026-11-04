@@ -561,14 +561,6 @@ Aturan:
           {currentStep === 'input' && (
             <div className="space-y-5">
               
-              {/* Petunjuk Singkat Penggunaan */}
-              {/* KARTU PANDUAN & OPSI SALIN PROMPT AI (GEMINI, CHATGPT, DEEPSEEK, CLAUDE, QWEN) */}
-              <AiExternalPromptCard
-                promptText={aiExtractionPromptTemplate}
-                subjectTitle={currentSubject.title}
-                mode="extract"
-              />
-
               {/* TAB SELECTOR: UPLOAD BERKAS vs COPY-PASTE TEKS */}
               <div className="flex items-center gap-2 border-b border-slate-200 dark:border-slate-800 pb-2">
                 <button
@@ -699,6 +691,12 @@ Aturan:
               {/* TAB 2: COPY-PASTE TEKS NASKAH SOAL */}
               {inputTab === 'paste' && (
                 <div className="space-y-4">
+                  {/* BANTUAN AI EKSTERNAL & TOMBOL GEMINI, CHATGPT, DEEPSEEK, CLAUDE, QWEN */}
+                  <AiExternalPromptCard
+                    promptText={aiExtractionPromptTemplate}
+                    subjectTitle={currentSubject.title}
+                  />
+
                   <div>
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 mb-1.5">
                       <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">

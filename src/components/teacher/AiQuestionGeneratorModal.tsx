@@ -40,7 +40,6 @@ import {
   CheckSquare,
   Square
 } from 'lucide-react';
-import { AiExternalPromptCard } from './AiExternalPromptCard';
 
 interface AiQuestionGeneratorModalProps {
   isOpen: boolean;
@@ -1329,16 +1328,16 @@ export function AiQuestionGeneratorModal({
       </div>
 
       {/* ============================================================ */}
-      {/* MODAL TEMPEL JSON MANUAL (100% BEBAS TANPA KUNCI API)        */}
+      {/* MODAL TEMPEL JSON DARI AI EKSTERNAL                          */}
       {/* ============================================================ */}
       {showPasteModal && (
         <div className="fixed inset-0 z-60 flex items-center justify-center p-3 sm:p-4 bg-slate-950/80 backdrop-blur-sm animate-fade-in">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto p-4 sm:p-6 space-y-4">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-2xl w-full max-w-lg p-5 sm:p-6 space-y-4">
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
               <div className="flex items-center gap-2">
                 <ClipboardPaste className="w-5 h-5 text-violet-600" />
                 <h4 className="text-sm font-bold text-slate-900 dark:text-white">
-                  Opsi Bebas Limit: Salin Prompt &amp; Tempel Hasil AI
+                  Tempelkan Hasil dari AI Eksternal
                 </h4>
               </div>
               <button
@@ -1352,13 +1351,6 @@ export function AiQuestionGeneratorModal({
               </button>
             </div>
 
-            {/* KARTU PANDUAN DAN 5 TOMBOL OPSI AI */}
-            <AiExternalPromptCard
-              promptText={getCurrentPromptText()}
-              subjectTitle={subjectName || activeSubject?.title}
-              mode="generate"
-            />
-
             {pasteError && (
               <div className="p-3.5 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-300 dark:border-rose-900/60 text-xs text-rose-700 dark:text-rose-300 flex items-start gap-2.5 animate-fade-in">
                 <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
@@ -1369,21 +1361,19 @@ export function AiQuestionGeneratorModal({
               </div>
             )}
 
-            <div className="space-y-1.5 pt-1">
-              <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center justify-between">
-                <span>Tempelkan Balasan Kode JSON dari AI di Bawah Ini:</span>
-                <span className="text-[10px] text-slate-400 font-normal">Format: JSON Array [ ... ]</span>
-              </label>
-              <textarea
-                value={manualJsonInput}
-                onChange={e => setManualJsonInput(e.target.value)}
-                placeholder='[ { "type": "Pilihan Ganda", "questionText": "...", "options": [...], "answer": "A" } ]'
-                rows={6}
-                className="w-full text-xs font-mono p-3 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500"
-              />
-            </div>
+            <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+              Tempelkan kode JSON hasil balasan dari AI eksternal di kotak bawah ini:
+            </p>
 
-            <div className="flex items-center justify-end gap-2 pt-2">
+            <textarea
+              value={manualJsonInput}
+              onChange={e => setManualJsonInput(e.target.value)}
+              placeholder='[ { "type": "Pilihan Ganda", "questionText": "...", "options": [...], "answer": "A" } ]'
+              rows={8}
+              className="w-full text-xs font-mono p-3.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500"
+            />
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
               <button
                 type="button"
                 onClick={() => {
@@ -1398,9 +1388,9 @@ export function AiQuestionGeneratorModal({
                 type="button"
                 onClick={handleImportPastedJson}
                 disabled={!manualJsonInput.trim()}
-                className="px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 disabled:opacity-40 text-white font-bold text-xs transition cursor-pointer"
+                className="px-5 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 disabled:opacity-40 text-white font-bold text-xs shadow-md shadow-violet-600/20 transition cursor-pointer"
               >
-                Validasi & Pratinjau Soal
+                Validasi &amp; Tampilkan Butir Soal
               </button>
             </div>
           </div>

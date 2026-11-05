@@ -6868,13 +6868,13 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                               <div className="flex items-center justify-center gap-2">
                                 {/* TOMBOL BUKA KUNCI (RESET PELANGGARAN) */}
                                 <button
-                                  onClick={() => {
+                                  onClick={async () => {
                                     sendProctorCommand({
                                       action: 'RESET_VIOLATION',
                                       studentName: s.studentName,
                                       subjectId: s.subjectId
                                     });
-                                    clearStudentAutolockInSupabase(s.subjectId, s.studentName);
+                                    await clearStudentAutolockInSupabase(s.subjectId, s.studentName);
                                     setMonitoringActionToast(`Pelanggaran siswa ${s.studentName} berhasil di-reset menjadi 0 dan ujian telah dibuka kuncinya.`);
                                   }}
                                   className={`p-2 rounded-xl transition cursor-pointer flex items-center gap-1 text-xs font-bold ${

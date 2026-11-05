@@ -771,12 +771,25 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   }, [selectedResult?.subjectId]);
 
   useEffect(() => {
-    if (selectedResult) {
-      setManualEssayScores(selectedResult.essayScores || {});
-      setEssayMaxNotice(null);
-      setEssaySavedNotice(false);
+    if (!selectedResult) return;
+    setManualEssayScores(selectedResult.essayScores || {});
+    setEssayMaxNotice(null);
+    setEssaySavedNotice(false);
+
+    // Jawaban tidak diunduh saat daftar nilai di-fetch (hemat egress).
+    // Ambil on-demand saat dossier dibuka, lalu inject ke selectedResult.
+    if (!selectedResult.answers || selectedResult.answers.length === 0) {
+      fetchExamResultAnswers(selectedResult.id).then(answers => {
+        if (answers && answers.length > 0) {
+          setSelectedResult(prev =>
+            prev && prev.id === selectedResult.id
+              ? { ...prev, answers }
+              : prev
+          );
+        }
+      }).catch(() => {});
     }
-  }, [selectedResult]);
+  }, [selectedResult?.id]);
 
   const liveDossierEval = useMemo(() => {
     if (!selectedResult) return null;

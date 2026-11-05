@@ -1378,6 +1378,57 @@ export async function clearStudentAutolockInSupabase(subjectId: string, studentN
 }
 
 /**
+ * Membersihkan semua siswa terkunci untuk mata pelajaran tertentu (cleanup massal)
+ */
+export async function clearAllLockedStudents(subjectId: string): Promise<{ success: boolean; count: number }> {
+  try {
+    // 1. Tandai semua notifikasi autolock dan violation sebagai sudah dibaca
+    await supabase
+      .from('exam_notifications')
+      .update({ is_read: true })
+      .eq('subject_id', subjectId)
+      .in('type', ['autolock', 'violation']);
+
+    // 2. Hapus semua notifikasi autolock
+    const { data, error } = await supabase
+      .from('exam_notifications')
+      .delete()
+      .eq('subject_id', subjectId)
+      .eq('type', 'autolock')
+      .select();
+
+    if (error) throw error;
+
+    // 3. Bersihkan localStorage guru untuk mata pelajaran ini
+    if (typeof window !== 'undefined') {
+      try {
+        const keys = Object.keys(localStorage);
+        keys.forEach(key => {
+          if (key.includes(`cbt_blocked_${subjectId}`) || key.includes(`cbt_exam_state_${subjectId}`)) {
+            const saved = localStorage.getItem(key);
+            if (saved && key.includes('cbt_exam_state')) {
+              try {
+                const parsed = JSON.parse(saved);
+                parsed.violationCount = 0;
+                parsed.isLocked = false;
+                localStorage.setItem(key, JSON.stringify(parsed));
+              } catch {}
+            } else if (key.includes('cbt_blocked')) {
+              localStorage.removeItem(key);
+            }
+          }
+        });
+      } catch {}
+    }
+
+    return { success: true, count: data?.length || 0 };
+  } catch (err) {
+    console.warn('Exception clearAllLockedStudents:', err);
+    return { success: false, count: 0 };
+  }
+}
+
+/**
  * Mengambil daftar notifikasi sistem dari Supabase
  */
 export async function fetchNotifications(subjectId?: string): Promise<ExamNotification[]> {

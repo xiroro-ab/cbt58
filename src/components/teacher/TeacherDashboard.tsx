@@ -10,7 +10,7 @@ import { ImportQuestionsModal } from './ImportQuestionsModal';
 import { extractSubjectAndGrade } from '@/lib/aiQuestionGenerator';
 import { evaluateFullExam, calculateSingleQuestionScore } from '@/lib/scoringEngine';
 import { sendProctorCommand, subscribeToLiveSessions, removeStudentSession, broadcastAnnouncementToStudents } from '@/lib/liveMonitoringService';
-import { clearStudentAutolockInSupabase, insertMessage, fetchQuestionsBySubject, updateTeacherPhotoInSupabase } from '@/lib/supabaseService';
+import { clearStudentAutolockInSupabase, clearAllLockedStudents, insertMessage, fetchQuestionsBySubject, updateTeacherPhotoInSupabase } from '@/lib/supabaseService';
 import { resolveStudentSingleClass, isClassInGrade } from '@/lib/rosterStudents';
 import { initialTeachers } from '@/lib/rosterTeachers';
 import { TTESignatureSeal } from '@/components/common/TTESignatureSeal';
@@ -6621,6 +6621,51 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                     ))}
                   </select>
                 </div>
+
+                {/* TOMBOL RESET SEMUA SISWA TERKUNCI */}
+                {blockedCount > 0 && (
+                  <button
+                    onClick={() => {
+                      showThemedConfirm({
+                        title: 'Reset Semua Siswa Terkunci',
+                        message: `Ada ${blockedCount} siswa terkunci${monitoringFilterSubId !== 'ALL' ? ` di mata pelajaran yang dipilih` : ''}. Reset semua pelanggaran dan buka kunci mereka sekaligus?`,
+                        variant: 'warning',
+                        confirmLabel: 'Ya, Reset Semua',
+                        cancelLabel: 'Batal',
+                        onConfirm: async () => {
+                          const targetSubId = monitoringFilterSubId !== 'ALL' ? monitoringFilterSubId : '';
+                          if (!targetSubId) {
+                            setMonitoringActionToast('Pilih mata pelajaran tertentu untuk reset massal.');
+                            return;
+                          }
+                          
+                          const result = await clearAllLockedStudents(targetSubId);
+                          
+                          if (result.success) {
+                            // Kirim command RESET_VIOLATION ke semua siswa terkunci
+                            filteredSessions.filter(s => s.violationCount >= (subject?.violationLimit || 3)).forEach(s => {
+                              sendProctorCommand({
+                                action: 'RESET_VIOLATION',
+                                studentName: s.studentName,
+                                subjectId: s.subjectId
+                              });
+                            });
+                            
+                            setMonitoringActionToast(`Berhasil mereset ${result.count} notifikasi autolock. Semua siswa terkunci telah dibuka kuncinya.`);
+                          } else {
+                            setMonitoringActionToast('Gagal mereset siswa terkunci. Coba lagi.');
+                          }
+                        }
+                      });
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold shadow-md shadow-blue-600/20 transition"
+                    title="Reset semua siswa terkunci sekaligus"
+                  >
+                    <Unlock className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">Reset Semua ({blockedCount})</span>
+                    <span className="sm:hidden">{blockedCount}</span>
+                  </button>
+                )}
               </div>
             </div>
 

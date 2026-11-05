@@ -1265,9 +1265,10 @@ export async function checkStudentLockStatus(
       }
 
       // Gunakan hitungan pelanggaran tertinggi agar pelanggaran siswa tidak hilang jika browser ditutup/kill task
-      const finalViolationCount = Math.max(cloudViolationCount, localViolationCount);
+      // TAPI: Jika tidak ada autolock di database, abaikan localStorage (guru sudah unlock)
+      const finalViolationCount = autolocks.length === 0 ? cloudViolationCount : Math.max(cloudViolationCount, localViolationCount);
 
-      if (isCloudBlocked || localIsBlocked || finalViolationCount >= violationLimit) {
+      if (isCloudBlocked) {
         if (typeof window !== 'undefined') {
           try {
             const payloadStr = JSON.stringify({

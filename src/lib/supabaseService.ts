@@ -1241,7 +1241,7 @@ export async function checkStudentLockStatus(
           try {
             const payloadStr = JSON.stringify({
               isBlocked: true,
-              violationCount: finalViolationCount,
+              violationCount: cloudViolationCount,
               lockedAt: Date.now()
             });
             if (cleanClass) {
@@ -1252,8 +1252,8 @@ export async function checkStudentLockStatus(
         }
         return {
           isBlocked: true,
-          violationCount: finalViolationCount,
-          reason: autolocks?.[0]?.message || localReason || `Terkunci karena telah melakukan ${finalViolationCount} kali pelanggaran anti-cheat.`
+          violationCount: cloudViolationCount,
+          reason: autolocks?.[0]?.message || `Terkunci karena telah melakukan ${cloudViolationCount} kali pelanggaran anti-cheat.`
         };
       } else {
         if (typeof window !== 'undefined') {
@@ -1266,7 +1266,7 @@ export async function checkStudentLockStatus(
         }
         return {
           isBlocked: false,
-          violationCount: finalViolationCount
+          violationCount: cloudViolationCount
         };
       }
     }

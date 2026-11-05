@@ -1,5 +1,13 @@
 import { ExamSession, ExamResult } from '@/types/cbt';
 import { supabase, isSupabaseConfigured } from './supabaseClient';
+import {
+  upsertExamSession,
+  fetchActiveExamSessions,
+  deleteExamSession,
+  writeProctorCommand,
+  readProctorCommand,
+  clearProctorCommand
+} from './examSessionService';
 
 const SESSIONS_STORAGE_KEY = 'cbt_live_sessions';
 const COMMAND_STORAGE_KEY = 'cbt_teacher_command';
@@ -11,6 +19,7 @@ export interface ProctorCommand {
   action: ProctorActionType;
   studentName: string;
   subjectId: string;
+  className?: string;
   timestamp: number;
 }
 
@@ -190,10 +199,11 @@ function initSupabaseChannel() {
   return sharedSupaChannel;
 }
 
-// Inisialisasi awal channel di environment browser
+// Inisialisasi awal channel di environment browser.
+// Realtime Supabase sengaja TIDAK dibuka di sini: siswa tidak boleh memakai koneksi Realtime.
+// Channel Supabase hanya dibuat lazy oleh fitur guru (hasil/status/pengumuman).
 if (typeof window !== 'undefined') {
   getSharedBroadcastChannel();
-  initSupabaseChannel();
 
   window.addEventListener('storage', (e: StorageEvent) => {
     if (e.key === SESSIONS_STORAGE_KEY) {
@@ -219,6 +229,10 @@ if (typeof window !== 'undefined') {
   });
 }
 
+function sessionKey(session: Pick<ExamSession, 'subjectId' | 'studentName' | 'className'>): string {
+  return `${session.subjectId}|${(session.className || '').toLowerCase().trim()}|${session.studentName.toLowerCase().trim()}`;
+}
+
 /**
  * Mengambil seluruh sesi ujian siswa yang sedang aktif dari memori lokal (fail-safe)
  */
@@ -230,11 +244,11 @@ export function getStoredSessions(): ExamSession[] {
     const list: ExamSession[] = JSON.parse(raw);
     const now = Date.now();
 
-    // Deduplikasi ketat per nama siswa: simpan yang paling mutakhir detak jantungnya
+    // Deduplikasi per nama + kelas + mapel: siswa kembar di rombel berbeda tidak saling menimpa.
     const dedupedMap = new Map<string, ExamSession>();
     for (const s of list) {
       if (!s || !s.studentName) continue;
-      const key = s.studentName.toLowerCase().trim();
+      const key = sessionKey(s);
       const existing = dedupedMap.get(key);
       if (!existing || s.lastHeartbeat > existing.lastHeartbeat) {
         dedupedMap.set(key, s);
@@ -242,10 +256,9 @@ export function getStoredSessions(): ExamSession[] {
     }
     const dedupedList = Array.from(dedupedMap.values());
 
-    // Jika siswa tidak mengirim detak jantung (heartbeat) lebih dari 3.5 detik (misal aplikasi diminimalkan / di layar utama HP),
-    // otomatis tandai isFocus = false agar pengawas langsung tahu siswa sedang di luar aplikasi
+    // Heartbeat siswa kini 15 detik (bukan 5 detik). Ambang 25 detik mencegah status "keluar fokus" palsu.
     const marked = dedupedList.map(s => {
-      if (s.status === 'ongoing' && (now - s.lastHeartbeat) > 3500 && s.isFocus) {
+      if (s.status === 'ongoing' && (now - s.lastHeartbeat) > 25000 && s.isFocus) {
         return { ...s, isFocus: false };
       }
       return s;
@@ -262,21 +275,26 @@ export function getStoredSessions(): ExamSession[] {
   }
 }
 
+// Throttle tulis DB: heartbeat 15 detik, tetapi event penting (terkunci) langsung ditulis.
+const lastDbHeartbeat = new Map<string, number>();
+const lastAnswersSent = new Map<string, string>();
+
 /**
- * Siswa melaporkan progres, status fokus, dan sisa waktu secara berkala (Heartbeat)
+ * Siswa melaporkan progres, status fokus, dan sisa waktu secara berkala (Heartbeat).
+ * Data lintas perangkat disimpan ke tabel exam_sessions (polling guru), BUKAN Realtime broadcast.
  */
 export function reportStudentSession(session: ExamSession) {
   if (typeof window === 'undefined' || !session || !session.studentName) return;
 
-  const cleanName = session.studentName.toLowerCase().trim();
+  const key = sessionKey(session);
 
-  // 1. Simpan ke localStorage lokal dengan deduplikasi ketat per nama siswa
+  // 1. Simpan ke localStorage lokal (fail-safe refresh)
   let updated: ExamSession[] = [];
   try {
     const current = getStoredSessions();
     updated = [
       session,
-      ...current.filter(s => s.studentName.toLowerCase().trim() !== cleanName)
+      ...current.filter(s => sessionKey(s) !== key)
     ];
     localStorage.setItem(SESSIONS_STORAGE_KEY, JSON.stringify(updated));
   } catch (e) {
@@ -288,7 +306,7 @@ export function reportStudentSession(session: ExamSession) {
     try { fn(updated); } catch {}
   });
 
-  // 2. Siarkan via BroadcastChannel lokal (antar-tab browser sama)
+  // 2. BroadcastChannel lokal (antar-tab di perangkat yang sama)
   const bc = getSharedBroadcastChannel();
   if (bc) {
     try {
@@ -296,30 +314,35 @@ export function reportStudentSession(session: ExamSession) {
     } catch {}
   }
 
-  // 3. Siarkan via Supabase Realtime untuk dilihat komputer pengawas di jaringan lain
-  const supa = initSupabaseChannel();
-  if (supa) {
-    try {
-      supa.send({
-        type: 'broadcast',
-        event: 'session_heartbeat',
-        payload: session
-      });
-    } catch {}
-  }
+  // 3. Tulis ke database untuk guru di perangkat lain.
+  // Jawaban hanya dikirim saat berubah, agar egress tetap kecil.
+  const now = Date.now();
+  const lastWrite = lastDbHeartbeat.get(key) || 0;
+  if (session.status !== 'blocked' && now - lastWrite < 3000) return;
+
+  const answersJson = JSON.stringify(session.answers || []);
+  const includeAnswers = lastAnswersSent.get(key) !== answersJson;
+
+  lastDbHeartbeat.set(key, now);
+  if (includeAnswers) lastAnswersSent.set(key, answersJson);
+  void upsertExamSession(session, includeAnswers);
 }
 
 /**
  * Menghapus sesi aktif ketika siswa telah menyelesaikan ujian secara mandiri atau dipaksa selesai
  */
-export function removeStudentSession(studentName: string, subjectId?: string) {
+export function removeStudentSession(studentName: string, subjectId?: string, className?: string) {
   if (typeof window === 'undefined' || !studentName) return;
   try {
     const cleanName = studentName.toLowerCase().trim();
+    const cleanClass = (className || '').toLowerCase().trim();
     const current = getStoredSessions();
-    const filtered = current.filter(
-      s => s.studentName.toLowerCase().trim() !== cleanName
-    );
+    const filtered = current.filter(s => {
+      if (s.studentName.toLowerCase().trim() !== cleanName) return true;
+      if (subjectId && s.subjectId !== subjectId) return true;
+      if (cleanClass && (s.className || '').toLowerCase().trim() !== cleanClass) return true;
+      return false;
+    });
     localStorage.setItem(SESSIONS_STORAGE_KEY, JSON.stringify(filtered));
 
     // Notifikasi listeners lokal
@@ -329,16 +352,11 @@ export function removeStudentSession(studentName: string, subjectId?: string) {
 
     const bc = getSharedBroadcastChannel();
     if (bc) {
-      bc.postMessage({ type: 'SESSION_REMOVED', studentName, subjectId });
+      bc.postMessage({ type: 'SESSION_REMOVED', studentName, subjectId, className });
     }
 
-    const supa = initSupabaseChannel();
-    if (supa) {
-      supa.send({
-        type: 'broadcast',
-        event: 'session_removed',
-        payload: { studentName, subjectId }
-      });
+    if (subjectId) {
+      void deleteExamSession(subjectId, studentName, className);
     }
   } catch {}
 }
@@ -346,7 +364,12 @@ export function removeStudentSession(studentName: string, subjectId?: string) {
 /**
  * Pengawas / Guru mengirim instruksi kontrol ke siswa tertentu
  */
-export function sendProctorCommand(cmd: { action: ProctorActionType; studentName: string; subjectId: string }) {
+export function sendProctorCommand(cmd: {
+  action: ProctorActionType;
+  studentName: string;
+  subjectId: string;
+  className?: string;
+}) {
   if (typeof window === 'undefined') return;
 
   const payload: ProctorCommand = {
@@ -354,12 +377,12 @@ export function sendProctorCommand(cmd: { action: ProctorActionType; studentName
     timestamp: Date.now()
   };
 
-  // 1. Simpan ke localStorage dengan timestamp acak agar memicu storage event di tab siswa
+  // 1. Simpan ke localStorage agar tab siswa di perangkat yang sama langsung bereaksi
   try {
     localStorage.setItem(COMMAND_STORAGE_KEY, JSON.stringify(payload));
   } catch {}
 
-  // 2. Siarkan via BroadcastChannel (same-device, antar-tab)
+  // 2. BroadcastChannel lokal (same-device, antar-tab)
   const bc = getSharedBroadcastChannel();
   if (bc) {
     try {
@@ -367,27 +390,31 @@ export function sendProctorCommand(cmd: { action: ProctorActionType; studentName
     } catch {}
   }
 
-  // 3. Siarkan via Supabase Realtime Channel (lintas perangkat: laptop guru → HP siswa)
-  const supa = initSupabaseChannel();
-  if (supa) {
-    try {
-      supa.send({
-        type: 'broadcast',
-        event: 'proctor_command',
-        payload
-      });
-    } catch (err) {
-      console.error('[ERROR] Supabase broadcast failed:', err);
-    }
-  }
+  // 3. Perintah lintas perangkat ditulis ke database; siswa membacanya lewat polling.
+  void writeProctorCommand(
+    cmd.subjectId,
+    cmd.studentName,
+    cmd.className,
+    cmd.action,
+    payload.timestamp
+  );
 
   // 4. Update sesi lokal seketika
+  const cleanName = cmd.studentName.toLowerCase().trim();
+  const cleanClass = (cmd.className || '').toLowerCase().trim();
+  const matches = (s: ExamSession) =>
+    s.studentName.toLowerCase().trim() === cleanName &&
+    s.subjectId === cmd.subjectId &&
+    (!cleanClass || (s.className || '').toLowerCase().trim() === cleanClass);
+
   if (cmd.action === 'RESET_VIOLATION') {
-    const cleanName = cmd.studentName.toLowerCase().trim();
     if (typeof window !== 'undefined') {
       try {
+        if (cleanClass) localStorage.removeItem(`cbt_blocked_${cmd.subjectId}_${cleanClass}_${cleanName}`);
         localStorage.removeItem(`cbt_blocked_${cmd.subjectId}_${cleanName}`);
-        const stateKey = `cbt_exam_state_${cmd.subjectId}_${cleanName}`;
+        const stateKey = cleanClass
+          ? `cbt_exam_state_${cmd.subjectId}_${cleanClass}_${cleanName}`
+          : `cbt_exam_state_${cmd.subjectId}_${cleanName}`;
         const saved = localStorage.getItem(stateKey);
         if (saved) {
           const parsed = JSON.parse(saved);
@@ -400,7 +427,7 @@ export function sendProctorCommand(cmd: { action: ProctorActionType; studentName
 
     const current = getStoredSessions();
     const updated = current.map(s => {
-      if (s.studentName.toLowerCase().trim() === cleanName && s.subjectId === cmd.subjectId) {
+      if (matches(s)) {
         return {
           ...s,
           violationCount: 0,
@@ -416,9 +443,9 @@ export function sendProctorCommand(cmd: { action: ProctorActionType; studentName
       try { fn(updated); } catch {}
     });
   } else if (cmd.action === 'RESET_EXAM') {
-    const cleanName = cmd.studentName.toLowerCase().trim();
     if (typeof window !== 'undefined') {
       try {
+        if (cleanClass) localStorage.removeItem(`cbt_blocked_${cmd.subjectId}_${cleanClass}_${cleanName}`);
         localStorage.removeItem(`cbt_blocked_${cmd.subjectId}_${cleanName}`);
         localStorage.removeItem(`cbt_exam_state_${cmd.subjectId}_${cleanName}`);
         localStorage.removeItem(`cbt_exam_questions_${cmd.subjectId}_${cleanName}`);
@@ -426,17 +453,17 @@ export function sendProctorCommand(cmd: { action: ProctorActionType; studentName
         localStorage.removeItem(`cbt_submitted_${cmd.subjectId}_${cleanName}`);
       } catch {}
     }
-    removeStudentSession(cmd.studentName, cmd.subjectId);
+    removeStudentSession(cmd.studentName, cmd.subjectId, cmd.className);
   } else if (cmd.action === 'FORCE_FINISH') {
-    const cleanName = cmd.studentName.toLowerCase().trim();
     if (typeof window !== 'undefined') {
       try {
+        if (cleanClass) localStorage.removeItem(`cbt_blocked_${cmd.subjectId}_${cleanClass}_${cleanName}`);
         localStorage.removeItem(`cbt_blocked_${cmd.subjectId}_${cleanName}`);
         localStorage.removeItem(`cbt_exam_state_${cmd.subjectId}_${cleanName}`);
         localStorage.removeItem(`cbt_exam_questions_${cmd.subjectId}_${cleanName}`);
       } catch {}
     }
-    removeStudentSession(cmd.studentName, cmd.subjectId);
+    removeStudentSession(cmd.studentName, cmd.subjectId, cmd.className);
   }
 }
 
@@ -540,26 +567,56 @@ export function subscribeToTeacherStatus(onStatusChange: (payload: TeacherStatus
 export function subscribeToStudentCommands(
   studentName: string,
   subjectId: string,
-  onCommand: (cmd: ProctorCommand) => void
+  onCommand: (cmd: ProctorCommand) => void,
+  className?: string
 ): () => void {
   if (typeof window === 'undefined') return () => {};
 
   const cleanName = studentName.toLowerCase().trim();
+  const cleanClass = (className || '').toLowerCase().trim();
+  // Abaikan perintah lama sebelum layar ujian ini dibuka.
+  let lastCommandAt = Date.now();
+  let stopped = false;
 
-  const commandHandler = (cmd: ProctorCommand) => {
-    if (!cmd) return;
-    if (
-      cmd.studentName.toLowerCase().trim() === cleanName &&
-      cmd.subjectId === subjectId
-    ) {
-      onCommand(cmd);
-    }
+  const deliver = (cmd: ProctorCommand) => {
+    if (stopped || !cmd) return;
+    if (cmd.timestamp <= lastCommandAt) return;
+    if (cmd.studentName.toLowerCase().trim() !== cleanName) return;
+    if (cmd.subjectId !== subjectId) return;
+    if (cleanClass && (cmd.className || '').toLowerCase().trim() && (cmd.className || '').toLowerCase().trim() !== cleanClass) return;
+    lastCommandAt = cmd.timestamp;
+    onCommand(cmd);
   };
 
+  // Jalur lokal (tab yang sama / perangkat yang sama)
+  const commandHandler = (cmd: ProctorCommand) => deliver(cmd);
   studentCommandListeners.add(commandHandler);
 
+  // Jalur lintas perangkat: polling database tiap 5 detik.
+  const poll = async () => {
+    if (stopped) return;
+    const cmd = await readProctorCommand(subjectId, studentName, className);
+    if (!cmd || stopped) return;
+    if (cmd.commandAt <= lastCommandAt) return;
+
+    lastCommandAt = cmd.commandAt;
+    void clearProctorCommand(subjectId, studentName, className);
+    onCommand({
+      action: cmd.action,
+      studentName,
+      subjectId,
+      className,
+      timestamp: cmd.commandAt
+    });
+  };
+
+  void poll();
+  const intervalId = setInterval(poll, 5000);
+
   return () => {
+    stopped = true;
     studentCommandListeners.delete(commandHandler);
+    clearInterval(intervalId);
   };
 }
 
@@ -567,24 +624,46 @@ export function subscribeToStudentCommands(
  * Pengawas mendengarkan seluruh pembaruan sesi siswa secara realtime
  */
 export function subscribeToLiveSessions(
-  onUpdate: (sessions: ExamSession[]) => void
+  onUpdate: (sessions: ExamSession[]) => void,
+  subjectId?: string
 ): () => void {
   if (typeof window === 'undefined') return () => {};
 
-  // Daftarkan listener
-  liveSessionListeners.add(onUpdate);
+  let stopped = false;
+  let remoteSessions: ExamSession[] = [];
 
-  // Panggil pertama kali dari sesi yang tersimpan
-  onUpdate(getStoredSessions());
+  const emit = () => {
+    if (stopped) return;
+    const merged = new Map<string, ExamSession>();
+    for (const session of [...remoteSessions, ...getStoredSessions()]) {
+      if (!session?.studentName) continue;
+      const key = sessionKey(session);
+      const existing = merged.get(key);
+      if (!existing || session.lastHeartbeat > existing.lastHeartbeat) {
+        merged.set(key, session);
+      }
+    }
+    onUpdate(Array.from(merged.values()));
+  };
 
-  // Interval polling tiap 2 detik untuk menyegarkan sisa waktu dan memfilter sesi timeout
-  const intervalId = setInterval(() => {
-    onUpdate(getStoredSessions());
-  }, 2000);
+  // Lokal: 2 detik (tab/perangkat yang sama). Database: 5 detik (lintas perangkat).
+  const refreshRemote = async () => {
+    const sessions = await fetchActiveExamSessions(subjectId);
+    if (stopped) return;
+    remoteSessions = sessions;
+    emit();
+  };
+
+  emit();
+  void refreshRemote();
+
+  const localInterval = setInterval(emit, 2000);
+  const remoteInterval = setInterval(refreshRemote, 5000);
 
   return () => {
-    liveSessionListeners.delete(onUpdate);
-    clearInterval(intervalId);
+    stopped = true;
+    clearInterval(localInterval);
+    clearInterval(remoteInterval);
   };
 }
 
@@ -620,23 +699,8 @@ export function broadcastAnnouncementToStudents(announcement: {
     } catch {}
   }
 
-  // 3. Siarkan via Supabase Realtime Broadcast (sub-detik lintas HP siswa & laptop guru)
-  const sendRealtime = () => {
-    const supa = initSupabaseChannel();
-    if (supa) {
-      try {
-        supa.send({
-          type: 'broadcast',
-          event: 'exam_announcement',
-          payload
-        });
-      } catch {}
-    }
-  };
-
-  sendRealtime();
-  setTimeout(sendRealtime, 600);
-  setTimeout(sendRealtime, 1500);
+  // 3. Lintas perangkat: pengumuman sudah disimpan ke exam_messages oleh pemanggil.
+  // Siswa membacanya lewat polling ringan, bukan koneksi Realtime.
 
   // 4. Picu listener lokal seketika
   announcementListeners.forEach(fn => {

@@ -11,7 +11,6 @@ import {
   insertNotification,
   insertMessage,
   fetchMessages,
-  subscribeToMessages,
   checkStudentLockStatus,
   getStudentLockState,
   saveStudentLockState
@@ -372,17 +371,26 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
     });
   }, [studentName, subject.id, studentActualClass, questions.length]);
 
-  // 2. LIVE MONITORING HEARTBEAT & BROADCAST TO PROCTOR (EVERY 5 SECONDS - OPTIMIZED FOR 300 STUDENTS)
+  // 2. LIVE MONITORING HEARTBEAT (15 DETIK + JITTER - OPTIMIZED FOR 300 STUDENTS)
+  // Jitter mencegah 180 siswa menulis ke database pada detik yang sama.
   useEffect(() => {
     if (isExamCompleted) return;
 
-    sendDirectHeartbeat();
-    const interval = setInterval(() => {
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let stopped = false;
+
+    const tick = () => {
+      if (stopped) return;
       sendDirectHeartbeat();
-    }, 5000);
+      const nextDelay = 15000 + Math.floor(Math.random() * 4000);
+      timer = setTimeout(tick, nextDelay);
+    };
+
+    tick();
 
     return () => {
-      clearInterval(interval);
+      stopped = true;
+      if (timer) clearTimeout(timer);
     };
   }, [isExamCompleted, sendDirectHeartbeat]);
 
@@ -474,7 +482,7 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
             localStorage.removeItem(`cbt_exam_questions_${subject.id}_${cleanName}`);
           } catch {}
         }
-        removeStudentSession(studentName, subject.id);
+        removeStudentSession(studentName, subject.id, studentActualClass);
 
         // Tampilkan tampilan selesai ujian pada layar siswa tanpa memanggil onFinishExam lagi (karena guru sudah menyimpannya ke database)
         const evaluation = evaluateFullExam(questions, answersRef.current, subject.scoringRules);
@@ -497,7 +505,7 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
         } catch {}
       } else if (cmd.action === 'RESET_EXAM') {
         // Pengawas mereset ujian siswa (bersihkan cache dan kembali ke login)
-        removeStudentSession(studentName, subject.id);
+        removeStudentSession(studentName, subject.id, studentActualClass);
         const cleanName = studentName.toLowerCase().trim();
         if (typeof window !== 'undefined') {
           try {
@@ -516,14 +524,13 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
         }
         onExit();
       }
-    });
+    }, studentActualClass);
 
     return () => unsubscribe();
-  }, [studentName, subject.id, onExit, requestFullscreenMode, stateKey, blockedKey]);
+  }, [studentName, subject.id, studentActualClass, onExit, requestFullscreenMode, stateKey, blockedKey]);
 
-  // 3b. FAIL-SAFE POLLING BUKA KUNCI DARI SUPABASE (SETIAP 2 DETIK SAAT TERKUNCI)
-  // Menjamin layar merah siswa otomatis terbuka seketika guru menekan tombol "Buka Kunci" / "Reset",
-  // walaupun websocket broadcast sempat tidak tersampaikan ke HP siswa.
+  // 3b. FAIL-SAFE POLLING BUKA KUNCI DARI SUPABASE (SETIAP 5 DETIK SAAT TERKUNCI)
+  // Menjamin layar merah siswa otomatis terbuka saat guru menekan "Buka Kunci" / "Reset".
   useEffect(() => {
     if (!isLocked || isExamCompleted) return;
 
@@ -557,7 +564,7 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
       } catch (err) {
         console.warn('Gagal polling lock status di ExamScreen:', err);
       }
-    }, 2000);
+    }, 5000);
 
     return () => clearInterval(pollInterval);
   }, [isLocked, isExamCompleted, subject.id, studentName, subject.violationLimit, blockedKey, stateKey, sendDirectHeartbeat, requestFullscreenMode]);
@@ -931,18 +938,7 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
       }
     });
 
-    // B. Dengarkan Postgres Database Changes
-    const unsubMessages = subscribeToMessages(msg => {
-      if (msg.targetType === 'broadcast' && msg.body) {
-        processIncomingAnnouncement({
-          id: msg.id,
-          text: msg.body,
-          senderName: msg.senderName || 'Guru Pengawas',
-          subjectId: msg.subjectId,
-          timestamp: Date.now()
-        }, true);
-      }
-    });
+    // B. Pengumuman lintas perangkat dibaca lewat polling exam_messages (tanpa koneksi Realtime).
 
     // C. Muat pesan broadcast yang terbit SETELAH sesi siswa dimulai
     // Supaya pengumuman lama dari sesi sebelumnya TIDAK terbaca oleh siswa baru
@@ -968,14 +964,13 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
 
     checkCloudBroadcasts();
 
-    // D. Polling berkala fail-safe (tiap 45 detik sebagai backup ringan jika websocket terputus)
+    // D. Polling berkala (15 detik) sebagai satu-satunya jalur pengumuman lintas perangkat.
     const pollInterval = setInterval(() => {
       checkCloudBroadcasts();
-    }, 45000);
+    }, 15000);
 
     return () => {
       unsubAnnouncements();
-      unsubMessages();
       clearInterval(pollInterval);
     };
   }, [isExamCompleted, subject.id, processIncomingAnnouncement]);
@@ -1127,7 +1122,7 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
     setIsLocked(false);
 
     // Hapus sesi live monitoring & tandai sudah submit di storage lokal
-    removeStudentSession(studentName, subject.id);
+    removeStudentSession(studentName, subject.id, studentActualClass);
     if (typeof window !== 'undefined') {
       try {
         const cleanName = studentName.toLowerCase().trim();

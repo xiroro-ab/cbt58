@@ -346,8 +346,14 @@ export default function Home() {
     async function loadData() {
       setIsLoading(true);
       try {
+        // Baca sesi guru lebih dulu: katalog foto hanya diunduh di perangkat guru,
+        // bukan di 300 perangkat siswa.
+        const savedTeacherId = typeof window !== 'undefined'
+          ? localStorage.getItem('cbt_logged_teacher_id')
+          : null;
+
         // Ambil data guru resmi dari Supabase & deteksi sesi aktif
-        const tList = await fetchTeachers();
+        const tList = await fetchTeachers(Boolean(savedTeacherId));
         let loadedTeachers = initialTeachers;
         if (tList && tList.length > 0) {
           const cleaned = tList.filter(t => !t.id?.match(/^tea-\d{2}$/) && t.id !== '__cbt_school_settings__');
@@ -362,7 +368,6 @@ export default function Home() {
 
         let savedTeacher: Teacher | null = null;
         if (typeof window !== 'undefined') {
-          const savedTeacherId = localStorage.getItem('cbt_logged_teacher_id');
           if (savedTeacherId) {
             savedTeacher = loadedTeachers.find(t => t.id === savedTeacherId) || null;
             if (savedTeacher) {
@@ -589,7 +594,7 @@ export default function Home() {
           return hasDiff ? cloudResults : prev;
         });
       } catch {}
-    }, 20000);
+    }, 60000);
 
     return () => {
       isMounted = false;
@@ -618,7 +623,7 @@ export default function Home() {
     let isMounted = true;
     const interval = setInterval(async () => {
       try {
-        const cloudTeachers = await fetchTeachers();
+        const cloudTeachers = await fetchTeachers(false);
         if (!isMounted || !cloudTeachers || cloudTeachers.length === 0) return;
 
         setTeachers(prev => {

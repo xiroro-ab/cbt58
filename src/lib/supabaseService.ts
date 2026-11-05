@@ -1,5 +1,5 @@
 import { supabase } from './supabaseClient';
-import { Subject, Question, ExamResult, ScoringRules, ExamNotification, ExamMessage, Student, Teacher, TeacherAssignment, SchoolSettings } from '@/types/cbt';
+import { Subject, Question, ExamResult, ScoringRules, ExamNotification, ExamMessage, Student, Teacher, TeacherAssignment, SchoolSettings, StudentAnswerItem } from '@/types/cbt';
 import { initialSubject, sampleSubjects, sampleQuestions } from './mockData';
 import { initialStudents } from './rosterStudents';
 import { initialTeachers } from './rosterTeachers';
@@ -11,6 +11,7 @@ import {
   subscribeToTeacherStatus,
   TeacherStatusPayload
 } from './liveMonitoringService';
+import { LOCK_STATE_TITLE } from './examSessionService';
 
 export { subscribeToTeacherStatus };
 export type { TeacherStatusPayload };
@@ -899,7 +900,7 @@ export async function fetchAllExamResults(): Promise<ExamResult[]> {
 
     const { data, error } = await supabase
       .from('exam_results')
-      .select('*')
+      .select('id,subject_id,student_name,class_name,score,total_earned,total_max,submitted_at,violation_count')
       .order('submitted_at', { ascending: false });
 
     if (!error && Array.isArray(data)) {
@@ -931,7 +932,9 @@ export async function fetchAllExamResults(): Promise<ExamResult[]> {
         score: Number(r.score),
         totalEarned: Number(r.total_earned || 0),
         totalMax: Number(r.total_max || 0),
-        answers: r.answers || [],
+        // Jawaban tidak diikutkan di polling daftar nilai (hemat egress).
+        // Dossier memanggil fetchExamResultAnswers saat dibuka.
+        answers: [],
         submittedAt: new Date(r.submitted_at).toLocaleString('id-ID'),
         violationCount: r.violation_count || 0
       }));
@@ -1001,7 +1004,7 @@ export async function fetchExamResults(subjectId?: string): Promise<ExamResult[]
   try {
     const { data, error } = await supabase
       .from('exam_results')
-      .select('*')
+      .select('id,subject_id,student_name,class_name,score,total_earned,total_max,submitted_at,violation_count')
       .eq('subject_id', subjectId)
       .order('submitted_at', { ascending: false });
 
@@ -1025,7 +1028,7 @@ export async function fetchExamResults(subjectId?: string): Promise<ExamResult[]
         score: Number(r.score),
         totalEarned: Number(r.total_earned || 0),
         totalMax: Number(r.total_max || 0),
-        answers: r.answers || [],
+        answers: [],
         submittedAt: new Date(r.submitted_at).toLocaleString('id-ID'),
         violationCount: r.violation_count || 0
       }));
@@ -1061,6 +1064,23 @@ export async function fetchExamResults(subjectId?: string): Promise<ExamResult[]
         }
       } catch {}
     }
+    return [];
+  }
+}
+
+/**
+ * Mengambil jawaban satu hasil ujian saat dossier dibuka (on-demand, bukan saat polling).
+ */
+export async function fetchExamResultAnswers(resultId: string): Promise<StudentAnswerItem[]> {
+  try {
+    const { data, error } = await supabase
+      .from('exam_results')
+      .select('answers')
+      .eq('id', resultId)
+      .maybeSingle();
+    if (error || !data) return [];
+    return Array.isArray(data.answers) ? data.answers : [];
+  } catch {
     return [];
   }
 }
@@ -1177,9 +1197,7 @@ export function subscribeToExamResults(
  * Baris ini menyimpan { count, locked }. Notifikasi violation/autolock hanyalah log
  * untuk guru dan TIDAK BOLEH menentukan lock (karena is_read juga dipakai UI notifikasi).
  */
-const LOCK_STATE_TITLE = '__CBT_LOCK_STATE__';
-
-type LockStateRow = { id: string; count: number; locked: boolean; className: string };
+type LockStateRow = { id: string; count: number; locked: boolean; className: string; message: string };
 
 async function findLockStateRow(
   subjectId: string,
@@ -1206,7 +1224,7 @@ async function findLockStateRow(
       locked = Boolean(parsed.locked);
       rowClass = (parsed.className || '').toLowerCase().trim();
     } catch {}
-    return { id: r.id as string, count, locked, className: rowClass };
+    return { id: r.id as string, count, locked, className: rowClass, message: r.message || '{}' };
   });
 
   if (cleanClass) {
@@ -1249,7 +1267,19 @@ export async function saveStudentLockState(
 ): Promise<boolean> {
   try {
     const row = await findLockStateRow(subjectId, studentName, className);
-    const message = JSON.stringify({ count, locked, className: (className || '').trim() });
+    let previous: Record<string, unknown> = {};
+    if (row) {
+      try {
+        previous = JSON.parse(row.message || '{}');
+      } catch {}
+    }
+    // Pertahankan field lain (mis. perintah pengawas) saat counter berubah.
+    const message = JSON.stringify({
+      ...previous,
+      count,
+      locked,
+      className: (className || row?.className || '').trim()
+    });
     if (row) {
       const { error } = await supabase
         .from('exam_notifications')
@@ -1282,10 +1312,15 @@ export async function resetStudentLockState(
   try {
     const row = await findLockStateRow(subjectId, studentName, className);
     if (row) {
+      let previous: Record<string, unknown> = {};
+      try {
+        previous = JSON.parse(row.message || '{}');
+      } catch {}
       await supabase
         .from('exam_notifications')
         .update({
           message: JSON.stringify({
+            ...previous,
             count: 0,
             locked: false,
             className: (row.className || className || '').trim()
@@ -1454,12 +1489,24 @@ export async function clearStudentAutolockInSupabase(
  */
 export async function clearAllLockedStudents(subjectId: string): Promise<{ success: boolean; count: number }> {
   try {
-    // 1. Reset semua baris status anti-cheat mapel ini ke 0 / tidak terkunci
-    await supabase
+    // 1. Reset semua baris status anti-cheat mapel ini ke 0 / tidak terkunci.
+    // Update per baris agar className (isolasi rombel) dan perintah pengawas tidak hilang.
+    const { data: stateRows } = await supabase
       .from('exam_notifications')
-      .update({ message: JSON.stringify({ count: 0, locked: false }) })
+      .select('id,message')
       .eq('subject_id', subjectId)
       .eq('title', LOCK_STATE_TITLE);
+
+    await Promise.all((stateRows || []).map(async row => {
+      let previous: Record<string, unknown> = {};
+      try {
+        previous = JSON.parse(row.message || '{}');
+      } catch {}
+      await supabase
+        .from('exam_notifications')
+        .update({ message: JSON.stringify({ ...previous, count: 0, locked: false }) })
+        .eq('id', row.id);
+    }));
 
     // 2. Hapus log pelanggaran (bukan lagi sumber lock, hanya bersih-bersih)
     const { data, error } = await supabase
@@ -1622,7 +1669,7 @@ export function subscribeToNotifications(
         },
         payload => {
           const n = payload.new;
-          if (n) {
+          if (n && n.title !== LOCK_STATE_TITLE) {
             onNewNotif({
               id: n.id,
               subjectId: n.subject_id,
@@ -1838,7 +1885,11 @@ export async function deleteNotificationFromSupabase(notifId: string): Promise<b
  */
 export async function clearAllNotificationsFromSupabase(subjectId?: string): Promise<boolean> {
   try {
-    let query = supabase.from('exam_notifications').delete();
+    // Jangan hapus baris status anti-cheat: menghapusnya = membuka kunci semua siswa.
+    let query = supabase
+      .from('exam_notifications')
+      .delete()
+      .neq('title', LOCK_STATE_TITLE);
     if (subjectId) {
       query = query.eq('subject_id', subjectId);
     } else {
@@ -2079,9 +2130,10 @@ export async function fetchTeacherPhotosFromSupabase(): Promise<Record<string, s
 /**
  * Mengambil daftar Akun Guru & Pengawas Resmi dari Supabase (fallback ke initialTeachers)
  */
-export async function fetchTeachers(): Promise<Teacher[]> {
+export async function fetchTeachers(includePhotos: boolean = true): Promise<Teacher[]> {
   try {
-    // Ambil data guru dan katalog foto dari Supabase Cloud secara paralel
+    // Ambil data guru dan katalog foto dari Supabase Cloud secara paralel.
+    // Halaman siswa memanggil dengan includePhotos=false agar tidak mengunduh katalog foto.
     const [teachersRes, photosMap] = await Promise.all([
       supabase
         .from('teachers')
@@ -2089,7 +2141,7 @@ export async function fetchTeachers(): Promise<Teacher[]> {
         .neq('id', '__cbt_school_settings__')
         .neq('id', '__cbt_teacher_photos__')
         .order('name', { ascending: true }),
-      fetchTeacherPhotosFromSupabase()
+      includePhotos ? fetchTeacherPhotosFromSupabase() : Promise.resolve({} as Record<string, string>)
     ]);
 
     const { data, error } = teachersRes;
@@ -2171,15 +2223,51 @@ export async function updateTeacherStatusInSupabase(
 }
 
 /**
- * Memperbarui foto profil guru di Supabase Cloud (pada row __cbt_teacher_photos__)
+ * Upload foto guru ke Supabase Storage. Database hanya menyimpan URL publik,
+ * sehingga QR code di perangkat mana pun hanya mengunduh satu foto.
+ * Jika bucket belum dibuat, kembalikan null agar pemanggil memakai base64 lama (tidak error).
+ */
+export async function uploadTeacherPhotoToStorage(
+  teacherId: string,
+  dataUrl: string
+): Promise<string | null> {
+  try {
+    if (!dataUrl.startsWith('data:')) return dataUrl;
+    const blob = await (await fetch(dataUrl)).blob();
+    const ext = (blob.type.split('/')[1] || 'jpg').replace('jpeg', 'jpg');
+    const safeId = teacherId.replace(/[^a-zA-Z0-9_-]/g, '_');
+    const path = `${safeId}_${Date.now()}.${ext}`;
+
+    const { error } = await supabase.storage
+      .from('teacher-photos')
+      .upload(path, blob, { upsert: false, contentType: blob.type || 'image/jpeg' });
+
+    if (error) {
+      console.warn('Gagal upload foto guru ke Storage:', error.message);
+      return null;
+    }
+
+    return supabase.storage.from('teacher-photos').getPublicUrl(path).data.publicUrl;
+  } catch (err) {
+    console.warn('Exception upload foto guru ke Storage:', err);
+    return null;
+  }
+}
+
+/**
+ * Memperbarui foto profil guru di Supabase Cloud (pada row __cbt_teacher_photos__).
+ * Foto base64 diunggah ke Storage lebih dulu; URL disimpan ke database.
  */
 export async function updateTeacherPhotoInSupabase(
   teacherId: string, 
   photoUrl: string, 
   teacherNip?: string
-): Promise<boolean> {
+): Promise<string> {
   try {
-    // 1. Ambil map foto yang ada di __cbt_teacher_photos__
+    // 1. Upload ke Storage jika masih berupa data URL base64.
+    const storedPhoto = photoUrl ? (await uploadTeacherPhotoToStorage(teacherId, photoUrl)) || photoUrl : '';
+
+    // 2. Ambil map foto yang ada di __cbt_teacher_photos__
     const { data } = await supabase
       .from('teachers')
       .select('assignments')
@@ -2190,10 +2278,10 @@ export async function updateTeacherPhotoInSupabase(
       ? { ...(data.assignments as Record<string, string>) }
       : {};
 
-    if (photoUrl) {
-      photosMap[teacherId] = photoUrl;
+    if (storedPhoto) {
+      photosMap[teacherId] = storedPhoto;
       if (teacherNip) {
-        photosMap[teacherNip] = photoUrl;
+        photosMap[teacherNip] = storedPhoto;
       }
     } else {
       delete photosMap[teacherId];
@@ -2202,7 +2290,7 @@ export async function updateTeacherPhotoInSupabase(
       }
     }
 
-    // 2. Simpan kembali ke Cloud Database Supabase
+    // 3. Simpan kembali ke Cloud Database Supabase
     const { error } = await supabase
       .from('teachers')
       .upsert({
@@ -2217,15 +2305,15 @@ export async function updateTeacherPhotoInSupabase(
 
     if (error) {
       console.warn('updateTeacherPhotoInSupabase error:', error.message);
-      return false;
+      return storedPhoto;
     }
 
-    // Simpan ke local storage perangkat saat ini
+    // Simpan URL (bukan base64) ke cache perangkat saat ini
     if (typeof window !== 'undefined') {
       try {
-        if (photoUrl) {
-          localStorage.setItem(`cbt_teacher_${teacherId}_photo`, photoUrl);
-          if (teacherNip) localStorage.setItem(`cbt_teacher_${teacherNip}_photo`, photoUrl);
+        if (storedPhoto) {
+          localStorage.setItem(`cbt_teacher_${teacherId}_photo`, storedPhoto);
+          if (teacherNip) localStorage.setItem(`cbt_teacher_${teacherNip}_photo`, storedPhoto);
         } else {
           localStorage.removeItem(`cbt_teacher_${teacherId}_photo`);
           if (teacherNip) localStorage.removeItem(`cbt_teacher_${teacherNip}_photo`);
@@ -2233,10 +2321,10 @@ export async function updateTeacherPhotoInSupabase(
       } catch {}
     }
 
-    return true;
+    return storedPhoto;
   } catch (err) {
     console.warn('updateTeacherPhotoInSupabase exception:', err);
-    return false;
+    return photoUrl;
   }
 }
 

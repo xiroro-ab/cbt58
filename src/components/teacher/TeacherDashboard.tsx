@@ -10,7 +10,8 @@ import { ImportQuestionsModal } from './ImportQuestionsModal';
 import { extractSubjectAndGrade } from '@/lib/aiQuestionGenerator';
 import { evaluateFullExam, calculateSingleQuestionScore } from '@/lib/scoringEngine';
 import { sendProctorCommand, subscribeToLiveSessions, removeStudentSession, broadcastAnnouncementToStudents } from '@/lib/liveMonitoringService';
-import { clearStudentAutolockInSupabase, clearAllLockedStudents, insertMessage, fetchQuestionsBySubject, updateTeacherPhotoInSupabase } from '@/lib/supabaseService';
+import { clearStudentAutolockInSupabase, clearAllLockedStudents, insertMessage, fetchQuestionsBySubject, updateTeacherPhotoInSupabase, fetchExamResultAnswers } from '@/lib/supabaseService';
+import { fetchExamSessionAnswers } from '@/lib/examSessionService';
 import { resolveStudentSingleClass, isClassInGrade } from '@/lib/rosterStudents';
 import { initialTeachers } from '@/lib/rosterTeachers';
 import { TTESignatureSeal } from '@/components/common/TTESignatureSeal';
@@ -461,24 +462,29 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
     try {
       const compressedDataUrl = await compressImageFile(file, 400, 500, 0.88);
       if (compressedDataUrl) {
+        // Tampilkan pratinjau seketika.
         setCurrentTeacherPhoto(compressedDataUrl);
+        // Upload ke Storage; database menyimpan URL publik agar QR lintas perangkat tetap ringan.
+        const storedPhoto = await updateTeacherPhotoInSupabase(
+          currentTeacher.id,
+          compressedDataUrl,
+          currentTeacher.nip
+        );
+        const finalPhoto = storedPhoto || compressedDataUrl;
+        setCurrentTeacherPhoto(finalPhoto);
         if (typeof window !== 'undefined') {
-          localStorage.setItem(`cbt_teacher_${currentTeacher.id}_photo`, compressedDataUrl);
+          localStorage.setItem(`cbt_teacher_${currentTeacher.id}_photo`, finalPhoto);
           if (currentTeacher.nip) {
-            localStorage.setItem(`cbt_teacher_${currentTeacher.nip}_photo`, compressedDataUrl);
+            localStorage.setItem(`cbt_teacher_${currentTeacher.nip}_photo`, finalPhoto);
           }
         }
         if (onUpdateTeacher) {
           onUpdateTeacher({
             ...currentTeacher,
-            photoUrl: compressedDataUrl,
-            avatar: compressedDataUrl
+            photoUrl: finalPhoto,
+            avatar: finalPhoto
           });
         }
-        // Simpan langsung ke Supabase Cloud agar dapat diverifikasi pihak luar lewat HP
-        updateTeacherPhotoInSupabase(currentTeacher.id, compressedDataUrl, currentTeacher.nip).catch(err => {
-          console.warn('Gagal sinkron foto guru ke Cloud Supabase:', err);
-        });
       }
     } catch (err) {
       console.error('Gagal upload foto guru:', err);
@@ -919,11 +925,12 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
 
   useEffect(() => {
     if (currentNav !== 'monitoring') return;
-    const unsub = subscribeToLiveSessions((sessions) => {
-      setLiveSessions(sessions);
-    });
+    const unsub = subscribeToLiveSessions(
+      (sessions) => setLiveSessions(sessions),
+      monitoringFilterSubId !== 'ALL' ? monitoringFilterSubId : undefined
+    );
     return () => unsub();
-  }, [currentNav]);
+  }, [currentNav, monitoringFilterSubId]);
 
   // ==========================================
   // BANK SOAL STATE (KATALOG & DETAIL SOAL)
@@ -4543,9 +4550,10 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                                     sendProctorCommand({
                                       action: 'RESET_EXAM',
                                       studentName: r.studentName,
-                                      subjectId: r.subjectId
+                                      subjectId: r.subjectId,
+                                      className: r.className
                                     });
-                                    removeStudentSession(r.studentName, r.subjectId);
+                                    removeStudentSession(r.studentName, r.subjectId, r.className);
                                     setMonitoringActionToast(`Lembar ujian siswa ${r.studentName} berhasil di-reset. Siswa kini dapat login kembali.`);
                                   }
                                 });
@@ -6543,7 +6551,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
           if (monitoringFilterSubId !== 'ALL' && s.subjectId !== monitoringFilterSubId) continue;
           const actualStudentCls = resolveStudentSingleClass(s.studentName, s.className, students);
           if (monitoringFilterClass !== 'ALL' && actualStudentCls !== monitoringFilterClass) continue;
-          const key = s.studentName.toLowerCase().trim();
+          const key = `${s.subjectId}|${(s.className || '').toLowerCase().trim()}|${s.studentName.toLowerCase().trim()}`;
           const existing = sessionMap.get(key);
           if (!existing || s.lastHeartbeat > existing.lastHeartbeat) {
             sessionMap.set(key, s);
@@ -6553,8 +6561,8 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
 
         const now = Date.now();
         const activeCount = filteredSessions.length;
-        const focusCount = filteredSessions.filter(s => s.status === 'ongoing' && s.isFocus && (now - s.lastHeartbeat) <= 3500).length;
-        const blurCount = filteredSessions.filter(s => s.status === 'ongoing' && (!s.isFocus || (now - s.lastHeartbeat) > 3500)).length;
+        const focusCount = filteredSessions.filter(s => s.status === 'ongoing' && s.isFocus && (now - s.lastHeartbeat) <= 25000).length;
+        const blurCount = filteredSessions.filter(s => s.status === 'ongoing' && (!s.isFocus || (now - s.lastHeartbeat) > 25000)).length;
         const blockedCount = filteredSessions.filter(s => s.status === 'blocked').length;
 
         return (
@@ -6647,7 +6655,8 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                               sendProctorCommand({
                                 action: 'RESET_VIOLATION',
                                 studentName: s.studentName,
-                                subjectId: s.subjectId
+                                subjectId: s.subjectId,
+                                className: s.className
                               });
                             });
                             
@@ -6790,7 +6799,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                     ) : (
                       filteredSessions.map((s) => {
                         const isDisqualified = s.status === 'blocked';
-                        const isStale = (Date.now() - s.lastHeartbeat) > 3500;
+                        const isStale = (Date.now() - s.lastHeartbeat) > 25000;
                         const isOut = !s.isFocus || isStale;
 
                         const sSec = s.remainingSeconds || 0;
@@ -6917,7 +6926,8 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                                     sendProctorCommand({
                                       action: 'RESET_VIOLATION',
                                       studentName: s.studentName,
-                                      subjectId: s.subjectId
+                                      subjectId: s.subjectId,
+                                      className: s.className
                                     });
                                     await clearStudentAutolockInSupabase(s.subjectId, s.studentName, s.className);
                                     setMonitoringActionToast(`Pelanggaran siswa ${s.studentName} berhasil di-reset menjadi 0 dan ujian telah dibuka kuncinya.`);
@@ -6944,31 +6954,45 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                                       cancelLabel: 'Batal',
                                       onConfirm: async () => {
                                         const cleanName = s.studentName.toLowerCase().trim();
+                                        const cleanClass = (s.className || '').toLowerCase().trim();
 
-                                        // 1. Simpan flag submit lokal di browser pengawas & bersihkan cache
+                                        // 1. Ambil jawaban terbaru siswa dari sesi database (bukan dari memori guru)
+                                        const sessionAnswers = await fetchExamSessionAnswers(s.subjectId, s.studentName, s.className);
+
+                                        // 2. Simpan flag submit lokal di browser pengawas & bersihkan cache
                                         if (typeof window !== 'undefined') {
                                           try {
-                                            localStorage.setItem(`cbt_submitted_${s.subjectId}_${cleanName}`, JSON.stringify({
+                                            const submittedKey = cleanClass
+                                              ? `cbt_submitted_${s.subjectId}_${cleanClass}_${cleanName}`
+                                              : `cbt_submitted_${s.subjectId}_${cleanName}`;
+                                            localStorage.setItem(submittedKey, JSON.stringify({
                                               submittedAt: new Date().toLocaleString('id-ID'),
                                               reason: 'Diselesaikan Paksa oleh Pengawas'
                                             }));
+                                            if (cleanClass) localStorage.removeItem(`cbt_blocked_${s.subjectId}_${cleanClass}_${cleanName}`);
                                             localStorage.removeItem(`cbt_blocked_${s.subjectId}_${cleanName}`);
                                             localStorage.removeItem(`cbt_exam_state_${s.subjectId}_${cleanName}`);
                                           } catch {}
                                         }
-                                        removeStudentSession(s.studentName, s.subjectId);
-                                        setLiveSessions(prev => prev.filter(sess => sess.studentName.toLowerCase().trim() !== cleanName));
+                                        removeStudentSession(s.studentName, s.subjectId, s.className);
+                                        setLiveSessions(prev => prev.filter(sess =>
+                                          !(sess.studentName.toLowerCase().trim() === cleanName &&
+                                            sess.subjectId === s.subjectId &&
+                                            (!cleanClass || (sess.className || '').toLowerCase().trim() === cleanClass))
+                                        ));
 
-                                        // 2. Siarkan instruksi FORCE_FINISH ke siswa
+                                        // 3. Perintahkan layar siswa untuk selesai
                                         sendProctorCommand({
                                           action: 'FORCE_FINISH',
                                           studentName: s.studentName,
-                                          subjectId: s.subjectId
+                                          subjectId: s.subjectId,
+                                          className: s.className
                                         });
 
-                                        // 3. Buat hasil evaluasi dan simpan ke database secara async
+                                        // 4. Nilai hanya soal mapel siswa, lalu simpan
                                         const matchedSub = (allSubjects || []).find(sub => sub.id === s.subjectId) || subject;
-                                        const evalRes = evaluateFullExam(questions, s.answers || [], matchedSub.scoringRules);
+                                        const subjectQuestions = questions.filter(q => q.subjectId === s.subjectId);
+                                        const evalRes = evaluateFullExam(subjectQuestions, sessionAnswers, matchedSub.scoringRules);
                                         const forcedResult: ExamResult = {
                                           id: `res-${Date.now()}`,
                                           subjectId: s.subjectId,
@@ -6979,7 +7003,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                                           score: evalRes.finalScore,
                                           totalEarned: evalRes.totalEarned,
                                           totalMax: evalRes.totalMax,
-                                          answers: s.answers || [],
+                                          answers: sessionAnswers,
                                           submittedAt: new Date().toLocaleString('id-ID'),
                                           violationCount: s.violationCount,
                                           details: evalRes.details
@@ -7011,9 +7035,10 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                                         sendProctorCommand({
                                           action: 'RESET_EXAM',
                                           studentName: s.studentName,
-                                          subjectId: s.subjectId
+                                          subjectId: s.subjectId,
+                                          className: s.className
                                         });
-                                        removeStudentSession(s.studentName, s.subjectId);
+                                        removeStudentSession(s.studentName, s.subjectId, s.className);
                                         await clearStudentAutolockInSupabase(s.subjectId, s.studentName, s.className);
                                         if (onDeleteResult) {
                                           await onDeleteResult(s.id, s.subjectId, s.studentName, s.className);
@@ -9700,9 +9725,10 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                             sendProctorCommand({
                               action: 'RESET_EXAM',
                               studentName: selectedResult.studentName,
-                              subjectId: selectedResult.subjectId
+                              subjectId: selectedResult.subjectId,
+                              className: selectedResult.className
                             });
-                            removeStudentSession(selectedResult.studentName, selectedResult.subjectId);
+                            removeStudentSession(selectedResult.studentName, selectedResult.subjectId, selectedResult.className);
                             setSelectedResult(null);
                           }
                         });

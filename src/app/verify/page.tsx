@@ -73,7 +73,7 @@ function VerifyDetails() {
       console.warn('Gagal memuat pengaturan sekolah untuk verifikasi:', err);
     });
 
-    fetchTeachers().then(ts => {
+    fetchTeachers(false).then(ts => {
       if (ts) setTeachers(ts);
     }).catch(() => {});
 

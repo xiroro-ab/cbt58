@@ -1206,10 +1206,11 @@ export async function checkStudentLockStatus(
 
       const autolocks = notifList.filter(n => n.type === 'autolock');
       const cloudViolationCount = notifList.length;
-      const isCloudBlocked = (autolocks.length > 0) || (cloudViolationCount >= violationLimit);
+      // Hanya block kalau ada autolock (bukan cuma violation count), karena guru bisa unlock siswa walau sudah 3x violation
+      const isCloudBlocked = (autolocks.length > 0);
 
-      // Jika database tidak ada violation & autolock sama sekali (berarti guru sudah unlock/reset), paksa bersihkan localStorage blocked
-      if (cloudViolationCount === 0 && autolocks.length === 0 && typeof window !== 'undefined') {
+      // Jika database tidak ada autolock sama sekali (berarti guru sudah unlock/reset), paksa bersihkan localStorage blocked
+      if (autolocks.length === 0 && typeof window !== 'undefined') {
         try {
           if (cleanClass) {
             localStorage.removeItem(`cbt_blocked_${subjectId}_${cleanClass}_${cleanName}`);

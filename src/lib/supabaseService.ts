@@ -1381,12 +1381,13 @@ export async function clearStudentAutolockInSupabase(subjectId: string, studentN
       } catch {}
     }
 
-    // 1. Tandai semua notifikasi autolock dan violation siswa ini sebagai sudah dibaca
+    // 1. Tandai semua notifikasi autolock siswa ini sebagai sudah dibaca (biarkan violation tetap unread)
     await supabase
       .from('exam_notifications')
       .update({ is_read: true })
       .eq('subject_id', subjectId)
-      .ilike('student_name', studentName.trim());
+      .ilike('student_name', studentName.trim())
+      .eq('type', 'autolock');
 
     // 2. Hapus entri notifikasi autolock agar bersih dari query lock
     await supabase

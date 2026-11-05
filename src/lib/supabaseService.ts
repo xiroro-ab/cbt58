@@ -1205,11 +1205,12 @@ export async function checkStudentLockStatus(
       });
 
       const autolocks = notifList.filter(n => n.type === 'autolock');
-      const cloudViolationCount = notifList.length;
-      // Hanya block kalau ada autolock (bukan cuma violation count), karena guru bisa unlock siswa walau sudah 3x violation
+      const violations = notifList.filter(n => n.type === 'violation');
+      const cloudViolationCount = violations.length;
+      // Database adalah single source of truth - hanya block kalau ada autolock
       const isCloudBlocked = (autolocks.length > 0);
 
-      // Jika database tidak ada autolock sama sekali (berarti guru sudah unlock/reset), paksa bersihkan localStorage blocked
+      // Jika database tidak ada autolock, paksa bersihkan localStorage blocked
       if (autolocks.length === 0 && typeof window !== 'undefined') {
         try {
           if (cleanClass) {
@@ -1218,7 +1219,7 @@ export async function checkStudentLockStatus(
             const saved = localStorage.getItem(stateKey);
             if (saved) {
               const parsed = JSON.parse(saved);
-              parsed.violationCount = 0;
+              parsed.violationCount = cloudViolationCount;
               parsed.isLocked = false;
               localStorage.setItem(stateKey, JSON.stringify(parsed));
             }
@@ -1228,45 +1229,12 @@ export async function checkStudentLockStatus(
           const saved = localStorage.getItem(stateKey);
           if (saved) {
             const parsed = JSON.parse(saved);
-            parsed.violationCount = 0;
+            parsed.violationCount = cloudViolationCount;
             parsed.isLocked = false;
             localStorage.setItem(stateKey, JSON.stringify(parsed));
           }
         } catch {}
       }
-
-      // Baca rekaman lokal perangkat siswa
-      let localViolationCount = 0;
-      let localIsBlocked = false;
-      let localReason = '';
-
-      if (typeof window !== 'undefined') {
-        try {
-          const classBlockedKey = cleanClass ? `cbt_blocked_${subjectId}_${cleanClass}_${cleanName}` : null;
-          const blockedFlag = (classBlockedKey && localStorage.getItem(classBlockedKey)) || localStorage.getItem(`cbt_blocked_${subjectId}_${cleanName}`);
-          if (blockedFlag) {
-            const parsed = JSON.parse(blockedFlag);
-            if (parsed.isBlocked) {
-              localIsBlocked = true;
-              localViolationCount = parsed.violationCount || violationLimit;
-            }
-          }
-          const classStateKey = cleanClass ? `cbt_exam_state_${subjectId}_${cleanClass}_${cleanName}` : null;
-          const saved = (classStateKey && localStorage.getItem(classStateKey)) || localStorage.getItem(`cbt_exam_state_${subjectId}_${cleanName}`);
-          if (saved) {
-            const parsed = JSON.parse(saved);
-            localViolationCount = Math.max(localViolationCount, parsed.violationCount || 0);
-            if (parsed.isLocked || localViolationCount >= violationLimit) {
-              localIsBlocked = true;
-              localReason = parsed.lastViolationReason || '';
-            }
-          }
-        } catch {}
-      }
-
-      // Gunakan hitungan pelanggaran tertinggi agar pelanggaran siswa tidak hilang jika browser ditutup/kill task
-      // TAPI: Jika tidak ada autolock di database, abaikan localStorage (guru sudah unlock)
-      const finalViolationCount = autolocks.length === 0 ? cloudViolationCount : Math.max(cloudViolationCount, localViolationCount);
 
       if (isCloudBlocked) {
         if (typeof window !== 'undefined') {

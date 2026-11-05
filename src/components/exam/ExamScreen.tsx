@@ -402,7 +402,9 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
 
   // 3. LISTEN TO PROCTOR COMMANDS (Buka Kunci, Paksa Selesai, Reset)
   useEffect(() => {
+    console.log('[DEBUG ExamScreen] Subscribe to proctor commands for:', studentName, subject.id);
     const unsubscribe = subscribeToStudentCommands(studentName, subject.id, (cmd) => {
+      console.log('[DEBUG ExamScreen] Received command:', cmd);
       if (cmd.action === 'RESET_VIOLATION') {
         // Pengawas membuka kunci & me-reset pelanggaran
         setViolationCount(0);

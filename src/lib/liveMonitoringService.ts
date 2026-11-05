@@ -143,6 +143,7 @@ function initSupabaseChannel() {
         })
         .on('broadcast', { event: 'proctor_command' }, (payload: any) => {
           const cmd: ProctorCommand = payload.payload;
+          console.log('[DEBUG] Supabase broadcast proctor_command received:', cmd);
           if (cmd) {
             studentCommandListeners.forEach(fn => {
               try { fn(cmd); } catch {}
@@ -369,6 +370,7 @@ export function sendProctorCommand(cmd: { action: ProctorActionType; studentName
 
   // 3. Siarkan via Supabase Realtime Channel (lintas perangkat: laptop guru → HP siswa)
   const supa = initSupabaseChannel();
+  console.log('[DEBUG] sendProctorCommand - Supabase channel:', supa ? 'READY' : 'NULL', 'Command:', payload);
   if (supa) {
     try {
       supa.send({
@@ -376,7 +378,10 @@ export function sendProctorCommand(cmd: { action: ProctorActionType; studentName
         event: 'proctor_command',
         payload
       });
-    } catch {}
+      console.log('[DEBUG] Supabase broadcast sent successfully');
+    } catch (err) {
+      console.error('[DEBUG] Supabase broadcast failed:', err);
+    }
   }
 
   // 4. Update sesi lokal seketika

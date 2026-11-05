@@ -436,18 +436,6 @@ export function sendProctorCommand(cmd: { action: ProctorActionType; studentName
     }
     removeStudentSession(cmd.studentName, cmd.subjectId);
   }
-
-  // 4. Siarkan via Supabase Realtime
-  const supa = initSupabaseChannel();
-  if (supa) {
-    try {
-      supa.send({
-        type: 'broadcast',
-        event: 'proctor_command',
-        payload
-      });
-    } catch {}
-  }
 }
 
 /**

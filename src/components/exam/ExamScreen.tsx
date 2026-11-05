@@ -402,9 +402,7 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
 
   // 3. LISTEN TO PROCTOR COMMANDS (Buka Kunci, Paksa Selesai, Reset)
   useEffect(() => {
-    console.log('[DEBUG ExamScreen] Subscribe to proctor commands for:', studentName, subject.id);
     const unsubscribe = subscribeToStudentCommands(studentName, subject.id, (cmd) => {
-      console.log('[DEBUG ExamScreen] Received command:', cmd);
       if (cmd.action === 'RESET_VIOLATION') {
         // Pengawas membuka kunci & me-reset pelanggaran
         setViolationCount(0);
@@ -589,15 +587,29 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
     const limit = subject.violationLimit || 3;
     const actualClass = studentActualClass;
 
-    // Catat notifikasi otomatis ke Supabase
+    // Catat notifikasi otomatis ke Supabase (dengan deduplication check)
+    let skipInsert = false;
     try {
-      await insertNotification({
-        subjectId: subject.id,
-        studentName,
-        type: nextCount >= limit ? 'autolock' : 'violation',
-        title: nextCount >= limit ? 'Ujian Siswa Terkunci' : 'Peringatan Anti-Cheat',
-        message: `Siswa ${studentName} (${actualClass}): ${reason} (Pelanggaran ke-${nextCount} dari batas ${limit}).`
-      });
+      // Prevent duplicate insert jika baru saja insert violation yang sama dalam 5 detik terakhir
+      const dedupKey = `cbt_violation_dedup_${subject.id}_${cleanName}_${nextCount}`;
+      const lastInsertTime = localStorage.getItem(dedupKey);
+      if (lastInsertTime && (Date.now() - parseInt(lastInsertTime)) < 5000) {
+        console.warn('[DEDUP] Skip duplicate violation insert - baru saja dicatat');
+        skipInsert = true;
+      }
+
+      if (!skipInsert) {
+        await insertNotification({
+          subjectId: subject.id,
+          studentName,
+          type: nextCount >= limit ? 'autolock' : 'violation',
+          title: nextCount >= limit ? 'Ujian Siswa Terkunci' : 'Peringatan Anti-Cheat',
+          message: `Siswa ${studentName} (${actualClass}): ${reason} (Pelanggaran ke-${nextCount} dari batas ${limit}).`
+        });
+        
+        // Mark violation sudah di-insert
+        localStorage.setItem(dedupKey, Date.now().toString());
+      }
     } catch {}
 
     // Segera laporkan sesi dengan status terbaru

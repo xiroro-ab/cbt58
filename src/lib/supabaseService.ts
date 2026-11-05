@@ -744,7 +744,7 @@ export async function deleteExamResult(
       await delQuery;
 
       // Otomatis bersihkan notifikasi pelanggaran / autolock jika guru mereset hasil ujian siswa
-      await clearStudentAutolockInSupabase(subjectId || '', studentName!);
+      await clearStudentAutolockInSupabase(subjectId || '', studentName!, className || undefined);
     }
 
     notifyResultChanged({
@@ -1179,31 +1179,53 @@ export function subscribeToExamResults(
  */
 const LOCK_STATE_TITLE = '__CBT_LOCK_STATE__';
 
-async function findLockStateRow(subjectId: string, studentName: string) {
+type LockStateRow = { id: string; count: number; locked: boolean; className: string };
+
+async function findLockStateRow(
+  subjectId: string,
+  studentName: string,
+  className?: string
+): Promise<LockStateRow | null> {
+  const cleanClass = (className || '').toLowerCase().trim();
   const { data, error } = await supabase
     .from('exam_notifications')
     .select('id, message')
     .eq('subject_id', subjectId)
     .ilike('student_name', studentName.trim())
     .eq('title', LOCK_STATE_TITLE)
-    .limit(1);
+    .order('created_at', { ascending: false });
   if (error || !data || data.length === 0) return null;
-  let count = 0;
-  let locked = false;
-  try {
-    const parsed = JSON.parse(data[0].message || '{}');
-    count = Number(parsed.count) || 0;
-    locked = Boolean(parsed.locked);
-  } catch {}
-  return { id: data[0].id as string, count, locked };
+
+  const rows: LockStateRow[] = data.map(r => {
+    let count = 0;
+    let locked = false;
+    let rowClass = '';
+    try {
+      const parsed = JSON.parse(r.message || '{}');
+      count = Number(parsed.count) || 0;
+      locked = Boolean(parsed.locked);
+      rowClass = (parsed.className || '').toLowerCase().trim();
+    } catch {}
+    return { id: r.id as string, count, locked, className: rowClass };
+  });
+
+  if (cleanClass) {
+    const exact = rows.find(r => r.className === cleanClass);
+    if (exact) return exact;
+    // Toleransi data lama: jika hanya ada satu baris untuk nama ini, pakai baris itu
+    if (rows.length === 1) return rows[0];
+    return null;
+  }
+  return rows[0];
 }
 
 async function readLockState(
   subjectId: string,
-  studentName: string
+  studentName: string,
+  className?: string
 ): Promise<{ count: number; locked: boolean } | null> {
   try {
-    const row = await findLockStateRow(subjectId, studentName);
+    const row = await findLockStateRow(subjectId, studentName, className);
     return row ? { count: row.count, locked: row.locked } : { count: 0, locked: false };
   } catch {
     return null;
@@ -1212,20 +1234,22 @@ async function readLockState(
 
 export async function getStudentLockState(
   subjectId: string,
-  studentName: string
+  studentName: string,
+  className?: string
 ): Promise<{ count: number; locked: boolean }> {
-  return (await readLockState(subjectId, studentName)) || { count: 0, locked: false };
+  return (await readLockState(subjectId, studentName, className)) || { count: 0, locked: false };
 }
 
 export async function saveStudentLockState(
   subjectId: string,
   studentName: string,
+  className: string | undefined,
   count: number,
   locked: boolean
 ): Promise<boolean> {
   try {
-    const row = await findLockStateRow(subjectId, studentName);
-    const message = JSON.stringify({ count, locked });
+    const row = await findLockStateRow(subjectId, studentName, className);
+    const message = JSON.stringify({ count, locked, className: (className || '').trim() });
     if (row) {
       const { error } = await supabase
         .from('exam_notifications')
@@ -1250,22 +1274,37 @@ export async function saveStudentLockState(
   }
 }
 
-export async function resetStudentLockState(subjectId: string, studentName: string): Promise<boolean> {
+export async function resetStudentLockState(
+  subjectId: string,
+  studentName: string,
+  className?: string
+): Promise<boolean> {
   try {
-    const row = await findLockStateRow(subjectId, studentName);
+    const row = await findLockStateRow(subjectId, studentName, className);
     if (row) {
       await supabase
         .from('exam_notifications')
-        .update({ message: JSON.stringify({ count: 0, locked: false }), is_read: true })
+        .update({
+          message: JSON.stringify({
+            count: 0,
+            locked: false,
+            className: (row.className || className || '').trim()
+          }),
+          is_read: true
+        })
         .eq('id', row.id);
     }
-    // Bersihkan log pelanggaran siswa agar tidak menumpuk
-    await supabase
+    // Bersihkan log pelanggaran siswa (kelas ini saja jika kelas diketahui)
+    let delQuery = supabase
       .from('exam_notifications')
       .delete()
       .eq('subject_id', subjectId)
       .ilike('student_name', studentName.trim())
       .in('type', ['violation', 'autolock']);
+    if (className && className.trim()) {
+      delQuery = delQuery.ilike('message', `%(${className.trim()})%`);
+    }
+    await delQuery;
     return true;
   } catch (err) {
     console.warn('Gagal reset status anti-cheat siswa:', err);
@@ -1285,7 +1324,7 @@ export async function checkStudentLockStatus(
   const cleanName = studentName.toLowerCase().trim();
   const cleanClass = (className || '').toLowerCase().trim();
 
-  const state = await readLockState(subjectId, studentName);
+  const state = await readLockState(subjectId, studentName, className);
 
   if (state) {
     if (typeof window !== 'undefined') {
@@ -1375,10 +1414,26 @@ export async function fetchSubjectByToken(token: string): Promise<Subject | null
 /**
  * Membuka kunci siswa: reset status anti-cheat resmi ke 0 & hapus log pelanggaran.
  */
-export async function clearStudentAutolockInSupabase(subjectId: string, studentName: string): Promise<boolean> {
+export async function clearStudentAutolockInSupabase(
+  subjectId: string,
+  studentName: string,
+  className?: string
+): Promise<boolean> {
   const cleanName = studentName.toLowerCase().trim();
+  const cleanClass = (className || '').toLowerCase().trim();
   if (typeof window !== 'undefined') {
     try {
+      if (cleanClass) {
+        localStorage.removeItem(`cbt_blocked_${subjectId}_${cleanClass}_${cleanName}`);
+        const classStateKey = `cbt_exam_state_${subjectId}_${cleanClass}_${cleanName}`;
+        const classSaved = localStorage.getItem(classStateKey);
+        if (classSaved) {
+          const parsed = JSON.parse(classSaved);
+          parsed.violationCount = 0;
+          parsed.isLocked = false;
+          localStorage.setItem(classStateKey, JSON.stringify(parsed));
+        }
+      }
       localStorage.removeItem(`cbt_blocked_${subjectId}_${cleanName}`);
       const stateKey = `cbt_exam_state_${subjectId}_${cleanName}`;
       const saved = localStorage.getItem(stateKey);
@@ -1391,7 +1446,7 @@ export async function clearStudentAutolockInSupabase(subjectId: string, studentN
     } catch {}
   }
 
-  return resetStudentLockState(subjectId, studentName);
+  return resetStudentLockState(subjectId, studentName, className);
 }
 
 /**

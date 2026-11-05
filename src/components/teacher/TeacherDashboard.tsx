@@ -4539,7 +4539,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                                     if (onDeleteResult) {
                                       await onDeleteResult(r.id, r.subjectId, r.studentName, r.className);
                                     }
-                                    await clearStudentAutolockInSupabase(r.subjectId, r.studentName);
+                                    await clearStudentAutolockInSupabase(r.subjectId, r.studentName, r.className);
                                     sendProctorCommand({
                                       action: 'RESET_EXAM',
                                       studentName: r.studentName,
@@ -4567,7 +4567,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                                     if (onDeleteResult) {
                                       await onDeleteResult(r.id, r.subjectId, r.studentName, r.className);
                                     }
-                                    await clearStudentAutolockInSupabase(r.subjectId, r.studentName);
+                                    await clearStudentAutolockInSupabase(r.subjectId, r.studentName, r.className);
                                     removeStudentSession(r.studentName, r.subjectId);
                                     setMonitoringActionToast(`Lembar nilai siswa ${r.studentName} berhasil dihapus permanen.`);
                                   }
@@ -6919,7 +6919,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                                       studentName: s.studentName,
                                       subjectId: s.subjectId
                                     });
-                                    await clearStudentAutolockInSupabase(s.subjectId, s.studentName);
+                                    await clearStudentAutolockInSupabase(s.subjectId, s.studentName, s.className);
                                     setMonitoringActionToast(`Pelanggaran siswa ${s.studentName} berhasil di-reset menjadi 0 dan ujian telah dibuka kuncinya.`);
                                   }}
                                   className={`p-2 rounded-xl transition cursor-pointer flex items-center gap-1 text-xs font-bold ${
@@ -7014,7 +7014,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                                           subjectId: s.subjectId
                                         });
                                         removeStudentSession(s.studentName, s.subjectId);
-                                        await clearStudentAutolockInSupabase(s.subjectId, s.studentName);
+                                        await clearStudentAutolockInSupabase(s.subjectId, s.studentName, s.className);
                                         if (onDeleteResult) {
                                           await onDeleteResult(s.id, s.subjectId, s.studentName, s.className);
                                         }
@@ -9696,7 +9696,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                             if (onDeleteResult) {
                               await onDeleteResult(selectedResult.id, selectedResult.subjectId, selectedResult.studentName, selectedResult.className);
                             }
-                            await clearStudentAutolockInSupabase(selectedResult.subjectId, selectedResult.studentName);
+                            await clearStudentAutolockInSupabase(selectedResult.subjectId, selectedResult.studentName, selectedResult.className);
                             sendProctorCommand({
                               action: 'RESET_EXAM',
                               studentName: selectedResult.studentName,

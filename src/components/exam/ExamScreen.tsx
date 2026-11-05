@@ -409,7 +409,7 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
   // Mencegah hitungan pelanggaran hilang/reset saat siswa refresh browser.
   useEffect(() => {
     let cancelled = false;
-    getStudentLockState(subject.id, studentName)
+    getStudentLockState(subject.id, studentName, studentActualClass)
       .then(state => {
         if (cancelled) return;
         setViolationCount(state.count);
@@ -430,7 +430,7 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
     return () => {
       cancelled = true;
     };
-  }, [subject.id, studentName, blockedKey, cleanName]);
+  }, [subject.id, studentName, studentActualClass, blockedKey, cleanName]);
 
   // 3. LISTEN TO PROCTOR COMMANDS (Buka Kunci, Paksa Selesai, Reset)
   useEffect(() => {
@@ -623,7 +623,7 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
     const actualClass = studentActualClass;
 
     // 1. Simpan status resmi (jumlah + terkunci) ke database — sumber kebenaran tunggal
-    await saveStudentLockState(subject.id, studentName, nextCount, nextCount >= limit);
+    await saveStudentLockState(subject.id, studentName, studentActualClass, nextCount, nextCount >= limit);
 
     // 2. Catat log pelanggaran untuk guru (log ini TIDAK menentukan lock)
     try {

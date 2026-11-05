@@ -400,6 +400,26 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
     }
   }, [answers, secondsRemaining, violationCount, isLocked, lastViolationReason, currentIndex, isExamCompleted, stateKey]);
 
+  // 2b. MARK VIOLATION NOTIFICATIONS AS READ SAAT SISWA BERHASIL MASUK EXAM
+  // Prevent violation bertambah terus karena query hanya ambil is_read=false
+  useEffect(() => {
+    const markViolationsRead = async () => {
+      try {
+        const { supabase } = await import('@/lib/supabaseClient');
+        await supabase
+          .from('exam_notifications')
+          .update({ is_read: true })
+          .eq('subject_id', subject.id)
+          .ilike('student_name', studentName.trim())
+          .eq('type', 'violation');
+      } catch (err) {
+        console.warn('Failed to mark violations as read:', err);
+      }
+    };
+    
+    markViolationsRead();
+  }, []); // Run once on mount
+
   // 3. LISTEN TO PROCTOR COMMANDS (Buka Kunci, Paksa Selesai, Reset)
   useEffect(() => {
     const unsubscribe = subscribeToStudentCommands(studentName, subject.id, (cmd) => {

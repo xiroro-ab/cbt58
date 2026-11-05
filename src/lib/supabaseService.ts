@@ -1210,32 +1210,6 @@ export async function checkStudentLockStatus(
       // Database adalah single source of truth - hanya block kalau ada autolock
       const isCloudBlocked = (autolocks.length > 0);
 
-      // Jika database tidak ada autolock, paksa bersihkan localStorage blocked
-      if (autolocks.length === 0 && typeof window !== 'undefined') {
-        try {
-          if (cleanClass) {
-            localStorage.removeItem(`cbt_blocked_${subjectId}_${cleanClass}_${cleanName}`);
-            const stateKey = `cbt_exam_state_${subjectId}_${cleanClass}_${cleanName}`;
-            const saved = localStorage.getItem(stateKey);
-            if (saved) {
-              const parsed = JSON.parse(saved);
-              parsed.violationCount = cloudViolationCount;
-              parsed.isLocked = false;
-              localStorage.setItem(stateKey, JSON.stringify(parsed));
-            }
-          }
-          localStorage.removeItem(`cbt_blocked_${subjectId}_${cleanName}`);
-          const stateKey = `cbt_exam_state_${subjectId}_${cleanName}`;
-          const saved = localStorage.getItem(stateKey);
-          if (saved) {
-            const parsed = JSON.parse(saved);
-            parsed.violationCount = cloudViolationCount;
-            parsed.isLocked = false;
-            localStorage.setItem(stateKey, JSON.stringify(parsed));
-          }
-        } catch {}
-      }
-
       if (isCloudBlocked) {
         if (typeof window !== 'undefined') {
           try {

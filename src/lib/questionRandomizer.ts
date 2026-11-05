@@ -4,8 +4,8 @@ import { Question, QuestionType } from '@/types/cbt';
  * Mengacak butir-butir soal secara adil, dengan tetap menjaga urutan tipe soal:
  * 1. Pilihan Ganda (semua butir PG diacak di dalam kelompoknya)
  * 2. Pilihan Ganda Kompleks (semua butir PGK diacak di dalam kelompoknya)
- * 3. Benar/Salah (semua butir B/S diacak di dalam kelompoknya)
- * 4. Menjodohkan (semua butir Menjodohkan diacak di dalam kelompoknya)
+ * 3. Menjodohkan (semua butir Menjodohkan diacak di dalam kelompoknya)
+ * 4. Benar/Salah (semua butir B/S diacak di dalam kelompoknya)
  * 5. Isian Singkat (semua butir Isian diacak di dalam kelompoknya)
  * 6. Esai (semua butir Esai diacak di dalam kelompoknya)
  */
@@ -15,8 +15,8 @@ export function shuffleQuestionsGroupedByType(questions: Question[]): Question[]
   const typeOrder: QuestionType[] = [
     'Pilihan Ganda',
     'Pilihan Ganda Kompleks',
-    'Benar/Salah',
     'Menjodohkan',
+    'Benar/Salah',
     'Isian Singkat',
     'Esai'
   ];

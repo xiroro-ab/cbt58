@@ -1149,6 +1149,18 @@ export default function Home() {
             : `ACCESS DENIED (EXAM LOCKED): Student "${studentName}" is currently BLOCKED by the anti-cheat system for exceeding the violation limit (${matchedSub.violationLimit || 3}x). Retakes are forbidden. Please contact your proctor to unlock or reset your exam.`
         );
         return;
+      } else {
+        // Jika database sudah tidak terkunci tapi localStorage masih ada flag blocked, bersihkan
+        const cleanName = studentName.toLowerCase().trim();
+        const cleanClass = selectedStudentClass ? selectedStudentClass.toLowerCase().trim() : '';
+        if (typeof window !== 'undefined') {
+          try {
+            if (cleanClass) {
+              localStorage.removeItem(`cbt_blocked_${matchedSub.id}_${cleanClass}_${cleanName}`);
+            }
+            localStorage.removeItem(`cbt_blocked_${matchedSub.id}_${cleanName}`);
+          } catch {}
+        }
       }
 
       if (!loadedQuestions || loadedQuestions.length === 0) {

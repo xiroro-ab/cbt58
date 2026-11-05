@@ -12,7 +12,9 @@ import {
   insertMessage,
   fetchMessages,
   subscribeToMessages,
-  checkStudentLockStatus
+  checkStudentLockStatus,
+  getStudentLockState,
+  saveStudentLockState
 } from '@/lib/supabaseService';
 import {
   reportStudentSession,
@@ -277,6 +279,9 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
   const startTimeRef = useRef(Date.now());
   const violationCountRef = useRef(violationCount);
   violationCountRef.current = violationCount;
+  // Masa tenggang setelah layar ujian dimuat: mencegah refresh browser dihitung
+  // sebagai pelanggaran "keluar fullscreen / kehilangan fokus" (false positive).
+  const violationGraceUntilRef = useRef(Date.now() + 4000);
 
   const isLockedRef = useRef(isLocked);
   isLockedRef.current = isLocked;
@@ -400,25 +405,32 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
     }
   }, [answers, secondsRemaining, violationCount, isLocked, lastViolationReason, currentIndex, isExamCompleted, stateKey]);
 
-  // 2b. MARK VIOLATION NOTIFICATIONS AS READ SAAT SISWA BERHASIL MASUK EXAM
-  // Prevent violation bertambah terus karena query hanya ambil is_read=false
+  // 2b. MUAT STATUS ANTI-CHEAT RESMI DARI DATABASE (sumber kebenaran tunggal).
+  // Mencegah hitungan pelanggaran hilang/reset saat siswa refresh browser.
   useEffect(() => {
-    const markViolationsRead = async () => {
-      try {
-        const { supabase } = await import('@/lib/supabaseClient');
-        await supabase
-          .from('exam_notifications')
-          .update({ is_read: true })
-          .eq('subject_id', subject.id)
-          .ilike('student_name', studentName.trim())
-          .eq('type', 'violation');
-      } catch (err) {
-        console.warn('Failed to mark violations as read:', err);
-      }
+    let cancelled = false;
+    getStudentLockState(subject.id, studentName)
+      .then(state => {
+        if (cancelled) return;
+        setViolationCount(state.count);
+        if (state.locked) {
+          setIsLocked(true);
+          setShowWarningModal(false);
+        } else {
+          setIsLocked(false);
+          if (typeof window !== 'undefined') {
+            try {
+              localStorage.removeItem(blockedKey);
+              localStorage.removeItem(`cbt_blocked_${subject.id}_${cleanName}`);
+            } catch {}
+          }
+        }
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
     };
-    
-    markViolationsRead();
-  }, []); // Run once on mount
+  }, [subject.id, studentName, blockedKey, cleanName]);
 
   // 3. LISTEN TO PROCTOR COMMANDS (Buka Kunci, Paksa Selesai, Reset)
   useEffect(() => {
@@ -520,7 +532,7 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
         const lockStatus = await checkStudentLockStatus(subject.id, studentName, subject.violationLimit || 3, studentActualClass);
         if (!lockStatus.isBlocked) {
           setIsLocked(false);
-          setViolationCount(0);
+          setViolationCount(lockStatus.violationCount);
           setShowWarningModal(false);
           setUnlockedNotice(true);
           setTimeout(() => setUnlockedNotice(false), 5000);
@@ -531,7 +543,7 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
               localStorage.setItem(stateKey, JSON.stringify({
                 answers: answersRef.current,
                 secondsRemaining: secondsRemainingRef.current,
-                violationCount: 0,
+                violationCount: lockStatus.violationCount,
                 isLocked: false,
                 startTime: startTimeRef.current,
                 currentIndex: currentIndexRef.current,
@@ -558,7 +570,7 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
       const lockStatus = await checkStudentLockStatus(subject.id, studentName, subject.violationLimit || 3, studentActualClass);
       if (!lockStatus.isBlocked) {
         setIsLocked(false);
-        setViolationCount(0);
+        setViolationCount(lockStatus.violationCount);
         setShowWarningModal(false);
         setUnlockedNotice(true);
         setTimeout(() => setUnlockedNotice(false), 5000);
@@ -569,7 +581,7 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
             localStorage.setItem(stateKey, JSON.stringify({
               answers: answersRef.current,
               secondsRemaining: secondsRemainingRef.current,
-              violationCount: 0,
+              violationCount: lockStatus.violationCount,
               isLocked: false,
               startTime: startTimeRef.current,
               currentIndex: currentIndexRef.current,
@@ -593,6 +605,9 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
   const handleViolation = useCallback(async (reason: string) => {
     if (isCompletedRef.current || isLockedRef.current) return;
 
+    // Abaikan event palsu tepat setelah halaman dimuat/refresh (fullscreen/blur transien)
+    if (Date.now() < violationGraceUntilRef.current) return;
+
     // Cooldown debounce 2.5 detik untuk mencegah multi-trigger dari 1 kali pindah tab (blur + visibility + fullscreen)
     const now = Date.now();
     if (now - lastViolationTimeRef.current < 2500) {
@@ -607,29 +622,18 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
     const limit = subject.violationLimit || 3;
     const actualClass = studentActualClass;
 
-    // Catat notifikasi otomatis ke Supabase (dengan deduplication check)
-    let skipInsert = false;
-    try {
-      // Prevent duplicate insert jika baru saja insert violation yang sama dalam 5 detik terakhir
-      const dedupKey = `cbt_violation_dedup_${subject.id}_${cleanName}_${nextCount}`;
-      const lastInsertTime = localStorage.getItem(dedupKey);
-      if (lastInsertTime && (Date.now() - parseInt(lastInsertTime)) < 5000) {
-        console.warn('[DEDUP] Skip duplicate violation insert - baru saja dicatat');
-        skipInsert = true;
-      }
+    // 1. Simpan status resmi (jumlah + terkunci) ke database — sumber kebenaran tunggal
+    await saveStudentLockState(subject.id, studentName, nextCount, nextCount >= limit);
 
-      if (!skipInsert) {
-        await insertNotification({
-          subjectId: subject.id,
-          studentName,
-          type: nextCount >= limit ? 'autolock' : 'violation',
-          title: nextCount >= limit ? 'Ujian Siswa Terkunci' : 'Peringatan Anti-Cheat',
-          message: `Siswa ${studentName} (${actualClass}): ${reason} (Pelanggaran ke-${nextCount} dari batas ${limit}).`
-        });
-        
-        // Mark violation sudah di-insert
-        localStorage.setItem(dedupKey, Date.now().toString());
-      }
+    // 2. Catat log pelanggaran untuk guru (log ini TIDAK menentukan lock)
+    try {
+      await insertNotification({
+        subjectId: subject.id,
+        studentName,
+        type: nextCount >= limit ? 'autolock' : 'violation',
+        title: nextCount >= limit ? 'Ujian Siswa Terkunci' : 'Peringatan Anti-Cheat',
+        message: `Siswa ${studentName} (${actualClass}): ${reason} (Pelanggaran ke-${nextCount} dari batas ${limit}).`
+      });
     } catch {}
 
     // Segera laporkan sesi dengan status terbaru

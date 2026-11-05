@@ -1172,8 +1172,109 @@ export function subscribeToExamResults(
 }
 
 /**
- * Memeriksa apakah siswa sedang terkunci/diblokir oleh sistem anti-cheat (di database Supabase & memori sesi)
- * Dilengkapi isolasi rombel kelas agar dua siswa bernama sama di kelas berbeda tidak saling mengunci.
+ * SUMBER KEBENARAN TUNGGAL status anti-cheat siswa.
+ * Satu baris per siswa+mapel disimpan di exam_notifications dengan title penanda.
+ * Baris ini menyimpan { count, locked }. Notifikasi violation/autolock hanyalah log
+ * untuk guru dan TIDAK BOLEH menentukan lock (karena is_read juga dipakai UI notifikasi).
+ */
+const LOCK_STATE_TITLE = '__CBT_LOCK_STATE__';
+
+async function findLockStateRow(subjectId: string, studentName: string) {
+  const { data, error } = await supabase
+    .from('exam_notifications')
+    .select('id, message')
+    .eq('subject_id', subjectId)
+    .ilike('student_name', studentName.trim())
+    .eq('title', LOCK_STATE_TITLE)
+    .limit(1);
+  if (error || !data || data.length === 0) return null;
+  let count = 0;
+  let locked = false;
+  try {
+    const parsed = JSON.parse(data[0].message || '{}');
+    count = Number(parsed.count) || 0;
+    locked = Boolean(parsed.locked);
+  } catch {}
+  return { id: data[0].id as string, count, locked };
+}
+
+async function readLockState(
+  subjectId: string,
+  studentName: string
+): Promise<{ count: number; locked: boolean } | null> {
+  try {
+    const row = await findLockStateRow(subjectId, studentName);
+    return row ? { count: row.count, locked: row.locked } : { count: 0, locked: false };
+  } catch {
+    return null;
+  }
+}
+
+export async function getStudentLockState(
+  subjectId: string,
+  studentName: string
+): Promise<{ count: number; locked: boolean }> {
+  return (await readLockState(subjectId, studentName)) || { count: 0, locked: false };
+}
+
+export async function saveStudentLockState(
+  subjectId: string,
+  studentName: string,
+  count: number,
+  locked: boolean
+): Promise<boolean> {
+  try {
+    const row = await findLockStateRow(subjectId, studentName);
+    const message = JSON.stringify({ count, locked });
+    if (row) {
+      const { error } = await supabase
+        .from('exam_notifications')
+        .update({ message })
+        .eq('id', row.id);
+      if (error) throw error;
+    } else {
+      const { error } = await supabase.from('exam_notifications').insert({
+        subject_id: subjectId,
+        student_name: studentName.trim(),
+        type: 'system',
+        title: LOCK_STATE_TITLE,
+        message,
+        is_read: false
+      });
+      if (error) throw error;
+    }
+    return true;
+  } catch (err) {
+    console.warn('Gagal simpan status anti-cheat siswa:', err);
+    return false;
+  }
+}
+
+export async function resetStudentLockState(subjectId: string, studentName: string): Promise<boolean> {
+  try {
+    const row = await findLockStateRow(subjectId, studentName);
+    if (row) {
+      await supabase
+        .from('exam_notifications')
+        .update({ message: JSON.stringify({ count: 0, locked: false }), is_read: true })
+        .eq('id', row.id);
+    }
+    // Bersihkan log pelanggaran siswa agar tidak menumpuk
+    await supabase
+      .from('exam_notifications')
+      .delete()
+      .eq('subject_id', subjectId)
+      .ilike('student_name', studentName.trim())
+      .in('type', ['violation', 'autolock']);
+    return true;
+  } catch (err) {
+    console.warn('Gagal reset status anti-cheat siswa:', err);
+    return false;
+  }
+}
+
+/**
+ * Memeriksa apakah siswa sedang terkunci/diblokir oleh sistem anti-cheat.
  */
 export async function checkStudentLockStatus(
   subjectId: string,
@@ -1184,71 +1285,37 @@ export async function checkStudentLockStatus(
   const cleanName = studentName.toLowerCase().trim();
   const cleanClass = (className || '').toLowerCase().trim();
 
-  // 1. PRIORITAS UTAMA: Periksa database Supabase Cloud (Single Source of Truth)
-  try {
-    // Satu query gabungan untuk seluruh notifikasi pelanggaran & autolock siswa ini
-    const { data: notifications, error } = await supabase
-      .from('exam_notifications')
-      .select('id, type, message, created_at')
-      .eq('subject_id', subjectId)
-      .ilike('student_name', studentName.trim())
-      .in('type', ['violation', 'autolock'])
-      .eq('is_read', false)
-      .order('created_at', { ascending: false });
+  const state = await readLockState(subjectId, studentName);
 
-    if (!error) {
-      // Jika ada kelas, filter notifikasi yang sesuai kelas siswa
-      const notifList = (notifications || []).filter(n => {
-        if (!cleanClass || !n.message) return true;
-        const msgLower = n.message.toLowerCase();
-        return msgLower.includes(`(${cleanClass})`) || msgLower.includes(cleanClass);
-      });
-
-      const autolocks = notifList.filter(n => n.type === 'autolock');
-      const violations = notifList.filter(n => n.type === 'violation');
-      const cloudViolationCount = violations.length;
-      // Database adalah single source of truth - hanya block kalau ada autolock
-      const isCloudBlocked = (autolocks.length > 0);
-
-      if (isCloudBlocked) {
-        if (typeof window !== 'undefined') {
-          try {
-            const payloadStr = JSON.stringify({
-              isBlocked: true,
-              violationCount: cloudViolationCount,
-              lockedAt: Date.now()
-            });
-            if (cleanClass) {
-              localStorage.setItem(`cbt_blocked_${subjectId}_${cleanClass}_${cleanName}`, payloadStr);
-            }
-            localStorage.setItem(`cbt_blocked_${subjectId}_${cleanName}`, payloadStr);
-          } catch {}
+  if (state) {
+    if (typeof window !== 'undefined') {
+      try {
+        const classBlockedKey = cleanClass ? `cbt_blocked_${subjectId}_${cleanClass}_${cleanName}` : null;
+        if (state.locked) {
+          const payloadStr = JSON.stringify({
+            isBlocked: true,
+            violationCount: state.count,
+            lockedAt: Date.now()
+          });
+          if (classBlockedKey) localStorage.setItem(classBlockedKey, payloadStr);
+          localStorage.setItem(`cbt_blocked_${subjectId}_${cleanName}`, payloadStr);
+        } else {
+          if (classBlockedKey) localStorage.removeItem(classBlockedKey);
+          localStorage.removeItem(`cbt_blocked_${subjectId}_${cleanName}`);
         }
-        return {
-          isBlocked: true,
-          violationCount: cloudViolationCount,
-          reason: autolocks?.[0]?.message || `Terkunci karena telah melakukan ${cloudViolationCount} kali pelanggaran anti-cheat.`
-        };
-      } else {
-        if (typeof window !== 'undefined') {
-          try {
-            if (cleanClass) {
-              localStorage.removeItem(`cbt_blocked_${subjectId}_${cleanClass}_${cleanName}`);
-            }
-            localStorage.removeItem(`cbt_blocked_${subjectId}_${cleanName}`);
-          } catch {}
-        }
-        return {
-          isBlocked: false,
-          violationCount: cloudViolationCount
-        };
-      }
+      } catch {}
     }
-  } catch (err) {
-    console.warn('Gagal cek status lock siswa di Supabase, fallback ke local storage:', err);
+
+    return {
+      isBlocked: state.locked,
+      violationCount: state.count,
+      reason: state.locked
+        ? `Terkunci karena telah melakukan ${state.count} dari batas ${violationLimit} kali pelanggaran anti-cheat.`
+        : undefined
+    };
   }
 
-  // 2. Fallback jika offline
+  // Fallback jika database tidak dapat dihubungi
   if (typeof window !== 'undefined') {
     try {
       const classBlockedKey = cleanClass ? `cbt_blocked_${subjectId}_${cleanClass}_${cleanName}` : null;
@@ -1306,67 +1373,46 @@ export async function fetchSubjectByToken(token: string): Promise<Subject | null
 }
 
 /**
- * Membersihkan notifikasi autolock siswa di Supabase saat guru membuka kunci atau mereset ujian
+ * Membuka kunci siswa: reset status anti-cheat resmi ke 0 & hapus log pelanggaran.
  */
 export async function clearStudentAutolockInSupabase(subjectId: string, studentName: string): Promise<boolean> {
-  try {
-    const cleanName = studentName.toLowerCase().trim();
-    if (typeof window !== 'undefined') {
-      try {
-        localStorage.removeItem(`cbt_blocked_${subjectId}_${cleanName}`);
-        const stateKey = `cbt_exam_state_${subjectId}_${cleanName}`;
-        const saved = localStorage.getItem(stateKey);
-        if (saved) {
-          const parsed = JSON.parse(saved);
-          parsed.violationCount = 0;
-          parsed.isLocked = false;
-          localStorage.setItem(stateKey, JSON.stringify(parsed));
-        }
-      } catch {}
-    }
-
-    // 1. Tandai semua notifikasi autolock siswa ini sebagai sudah dibaca (biarkan violation tetap unread)
-    await supabase
-      .from('exam_notifications')
-      .update({ is_read: true })
-      .eq('subject_id', subjectId)
-      .ilike('student_name', studentName.trim())
-      .eq('type', 'autolock');
-
-    // 2. Hapus entri notifikasi autolock agar bersih dari query lock
-    await supabase
-      .from('exam_notifications')
-      .delete()
-      .eq('subject_id', subjectId)
-      .ilike('student_name', studentName.trim())
-      .eq('type', 'autolock');
-
-    return true;
-  } catch (err) {
-    console.warn('Exception clearStudentAutolockInSupabase:', err);
-    return false;
+  const cleanName = studentName.toLowerCase().trim();
+  if (typeof window !== 'undefined') {
+    try {
+      localStorage.removeItem(`cbt_blocked_${subjectId}_${cleanName}`);
+      const stateKey = `cbt_exam_state_${subjectId}_${cleanName}`;
+      const saved = localStorage.getItem(stateKey);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        parsed.violationCount = 0;
+        parsed.isLocked = false;
+        localStorage.setItem(stateKey, JSON.stringify(parsed));
+      }
+    } catch {}
   }
+
+  return resetStudentLockState(subjectId, studentName);
 }
 
 /**
- * Membersihkan semua siswa terkunci untuk mata pelajaran tertentu (cleanup massal)
+ * Membuka kunci SEMUA siswa pada satu mata pelajaran (cleanup massal).
  */
 export async function clearAllLockedStudents(subjectId: string): Promise<{ success: boolean; count: number }> {
   try {
-    // 1. Tandai semua notifikasi autolock dan violation sebagai sudah dibaca
+    // 1. Reset semua baris status anti-cheat mapel ini ke 0 / tidak terkunci
     await supabase
       .from('exam_notifications')
-      .update({ is_read: true })
+      .update({ message: JSON.stringify({ count: 0, locked: false }) })
       .eq('subject_id', subjectId)
-      .in('type', ['autolock', 'violation']);
+      .eq('title', LOCK_STATE_TITLE);
 
-    // 2. Hapus semua notifikasi autolock
+    // 2. Hapus log pelanggaran (bukan lagi sumber lock, hanya bersih-bersih)
     const { data, error } = await supabase
       .from('exam_notifications')
       .delete()
       .eq('subject_id', subjectId)
-      .eq('type', 'autolock')
-      .select();
+      .in('type', ['violation', 'autolock'])
+      .select('id');
 
     if (error) throw error;
 
@@ -1404,7 +1450,12 @@ export async function clearAllLockedStudents(subjectId: string): Promise<{ succe
  */
 export async function fetchNotifications(subjectId?: string): Promise<ExamNotification[]> {
   try {
-    let query = supabase.from('exam_notifications').select('*').order('created_at', { ascending: false }).limit(30);
+    let query = supabase
+      .from('exam_notifications')
+      .select('*')
+      .neq('title', LOCK_STATE_TITLE)
+      .order('created_at', { ascending: false })
+      .limit(30);
     if (subjectId) {
       query = query.eq('subject_id', subjectId);
     }
@@ -1412,7 +1463,9 @@ export async function fetchNotifications(subjectId?: string): Promise<ExamNotifi
     if (error || !data) {
       return [];
     }
-    return data.map(n => ({
+    return data
+      .filter(n => n.title !== LOCK_STATE_TITLE)
+      .map(n => ({
       id: n.id,
       subjectId: n.subject_id,
       studentName: n.student_name,

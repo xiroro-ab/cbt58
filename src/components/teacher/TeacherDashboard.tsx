@@ -94,7 +94,7 @@ interface TeacherDashboardProps {
   onUpdateQuestion?: (updatedQuestion: Question) => void;
   onDeleteQuestion: (questionId: string) => void;
   onUpdateResult?: (updatedResult: ExamResult) => void;
-  onDeleteResult?: (resultId: string, subjectId?: string, studentName?: string) => void;
+  onDeleteResult?: (resultId: string, subjectId?: string, studentName?: string, className?: string) => void;
   onAddStudent?: (s: Student) => void;
   onUpdateStudent?: (s: Student) => void;
   onDeleteStudent?: (studentId: string) => void;
@@ -4363,7 +4363,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                         for (const id of selectedResultIds) {
                           const target = results.find(r => r.id === id);
                           if (target && onDeleteResult) {
-                            await onDeleteResult(target.id, target.subjectId, target.studentName);
+                            await onDeleteResult(target.id, target.subjectId, target.studentName, target.className);
                           }
                         }
                         setSelectedResultIds([]);
@@ -4537,7 +4537,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                                   cancelLabel: 'Batal',
                                   onConfirm: async () => {
                                     if (onDeleteResult) {
-                                      await onDeleteResult(r.id, r.subjectId, r.studentName);
+                                      await onDeleteResult(r.id, r.subjectId, r.studentName, r.className);
                                     }
                                     await clearStudentAutolockInSupabase(r.subjectId, r.studentName);
                                     sendProctorCommand({
@@ -4550,10 +4550,33 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                                   }
                                 });
                               }}
-                              className="p-1 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/60 text-slate-400 hover:text-rose-600 transition"
+                              className="p-1 rounded-lg hover:bg-amber-50 dark:hover:bg-amber-950/60 text-slate-400 hover:text-amber-600 transition"
                               title="Reset Ujian (Izinkan Ujian Ulang)"
                             >
                               <RotateCcw className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => {
+                                showThemedConfirm({
+                                  title: 'Hapus Nilai Siswa Permanen',
+                                  message: `Hapus lembar nilai ujian "${r.studentName}" secara permanen? Data ini akan dibersihkan dari database dan tidak dapat dipulihkan.`,
+                                  variant: 'danger',
+                                  confirmLabel: 'Ya, Hapus Permanen',
+                                  cancelLabel: 'Batal',
+                                  onConfirm: async () => {
+                                    if (onDeleteResult) {
+                                      await onDeleteResult(r.id, r.subjectId, r.studentName, r.className);
+                                    }
+                                    await clearStudentAutolockInSupabase(r.subjectId, r.studentName);
+                                    removeStudentSession(r.studentName, r.subjectId);
+                                    setMonitoringActionToast(`Lembar nilai siswa ${r.studentName} berhasil dihapus permanen.`);
+                                  }
+                                });
+                              }}
+                              className="p-1 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/60 text-slate-400 hover:text-rose-600 transition"
+                              title="Hapus Nilai Permanen"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
                             </button>
                           </div>
                         </td>
@@ -6948,7 +6971,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                                         removeStudentSession(s.studentName, s.subjectId);
                                         await clearStudentAutolockInSupabase(s.subjectId, s.studentName);
                                         if (onDeleteResult) {
-                                          await onDeleteResult(s.id, s.subjectId, s.studentName);
+                                          await onDeleteResult(s.id, s.subjectId, s.studentName, s.className);
                                         }
                                         setMonitoringActionToast(`Sesi ujian siswa ${s.studentName} berhasil dibersihkan.`);
                                       }
@@ -9626,7 +9649,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                           cancelLabel: 'Batal',
                           onConfirm: async () => {
                             if (onDeleteResult) {
-                              await onDeleteResult(selectedResult.id, selectedResult.subjectId, selectedResult.studentName);
+                              await onDeleteResult(selectedResult.id, selectedResult.subjectId, selectedResult.studentName, selectedResult.className);
                             }
                             await clearStudentAutolockInSupabase(selectedResult.subjectId, selectedResult.studentName);
                             sendProctorCommand({

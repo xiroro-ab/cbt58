@@ -760,34 +760,15 @@ export default function Home() {
 
   const handleDeleteResult = async (resultId: string, subjectId?: string, studentName?: string, className?: string) => {
     const cleanName = studentName ? studentName.toLowerCase().trim() : '';
-    const cleanClass = className ? className.toLowerCase().trim() : '';
     setResults(prev =>
-      prev.filter(
-        r => r.id !== resultId && !(
-          cleanName &&
-          r.studentName.toLowerCase().trim() === cleanName &&
-          (!subjectId || r.subjectId === subjectId) &&
-          (!cleanClass || !r.className || r.className.toLowerCase().trim() === cleanClass)
-        )
-      )
+      prev.filter(r => {
+        if (resultId && r.id === resultId) return false;
+        if (cleanName && r.studentName && r.studentName.toLowerCase().trim() === cleanName) {
+          if (!subjectId || !r.subjectId || r.subjectId === subjectId) return false;
+        }
+        return true;
+      })
     );
-    if (cleanName && typeof window !== 'undefined') {
-      try {
-        if (cleanClass) {
-          localStorage.removeItem(`cbt_submitted_${subjectId || subject?.id}_${cleanClass}_${cleanName}`);
-          localStorage.removeItem(`cbt_blocked_${subjectId || subject?.id}_${cleanClass}_${cleanName}`);
-          localStorage.removeItem(`cbt_exam_state_${subjectId || subject?.id}_${cleanClass}_${cleanName}`);
-          localStorage.removeItem(`cbt_exam_questions_${subjectId || subject?.id}_${cleanClass}_${cleanName}`);
-        }
-        localStorage.removeItem(`cbt_submitted_${subjectId || subject?.id}_${cleanName}`);
-        localStorage.removeItem(`cbt_blocked_${subjectId || subject?.id}_${cleanName}`);
-        localStorage.removeItem(`cbt_exam_state_${subjectId || subject?.id}_${cleanName}`);
-        localStorage.removeItem(`cbt_exam_questions_${subjectId || subject?.id}_${cleanName}`);
-        if (studentName) {
-          localStorage.removeItem(`cbt_answers_${studentName}_${subjectId || subject?.id}`);
-        }
-      } catch {}
-    }
     try {
       await deleteExamResult(resultId, subjectId || subject?.id, studentName, className);
     } catch (err) {
@@ -883,40 +864,41 @@ export default function Home() {
 
       const targetSubName = firstAsg ? firstAsg.subject : (teacher.subject || '');
       const matchedSub = findMatchingSubject(subsToUse, targetSubName);
+      const activeSubToUse = matchedSub || subsToUse.find(s => s.isActive) || subsToUse[0];
 
-      if (matchedSub) {
+      if (activeSubToUse) {
         setSubject({
-          ...matchedSub,
-          className: firstAsg?.classes?.length ? firstAsg.classes.join(', ') : matchedSub.className
+          ...activeSubToUse,
+          className: firstAsg?.classes?.length ? firstAsg.classes.join(', ') : activeSubToUse.className
         });
-        setActiveAssignmentSubject(firstAsg ? firstAsg.subject : matchedSub.title);
+        setActiveAssignmentSubject(firstAsg ? firstAsg.subject : (matchedSub ? matchedSub.title : 'Semua Mata Pelajaran'));
         if (firstAsg?.classes?.length) {
           setSelectedStudentClass(firstAsg.classes[0]);
-        } else if (matchedSub.className) {
-          setSelectedStudentClass(matchedSub.className.split(',')[0].trim());
-        }
-
-        if (matchedSub.id) {
-          const qList = await fetchQuestionsBySubject(matchedSub.id);
-          setQuestions(prev => {
-            const otherQuestions = prev.filter(q => q.subjectId && q.subjectId !== matchedSub.id);
-            return [...otherQuestions, ...(qList || [])];
-          });
-          const resList = await fetchExamResults(matchedSub.id);
-          setResults(prev => {
-            const otherResults = prev.filter(r => r.subjectId && r.subjectId !== matchedSub.id);
-            return [...(resList || []), ...otherResults];
-          });
-
-          // Muat seluruh bank soal & database nilai secara asinkron di latar belakang khusus untuk sesi guru
-          fetchAllQuestions().then(allQ => {
-            if (allQ && allQ.length > 0) setQuestions(allQ);
-          }).catch(() => {});
-          fetchAllExamResults().then(allR => {
-            if (allR && allR.length > 0) setResults(allR);
-          }).catch(() => {});
+        } else if (activeSubToUse.className) {
+          setSelectedStudentClass(activeSubToUse.className.split(',')[0].trim());
         }
       }
+
+      if (matchedSub && matchedSub.id) {
+        const qList = await fetchQuestionsBySubject(matchedSub.id);
+        setQuestions(prev => {
+          const otherQuestions = prev.filter(q => q.subjectId && q.subjectId !== matchedSub.id);
+          return [...otherQuestions, ...(qList || [])];
+        });
+        const resList = await fetchExamResults(matchedSub.id);
+        setResults(prev => {
+          const otherResults = prev.filter(r => r.subjectId && r.subjectId !== matchedSub.id);
+          return [...(resList || []), ...otherResults];
+        });
+      }
+
+      // Selalu muat seluruh bank soal & database nilai secara asinkron untuk sesi guru / admin
+      fetchAllQuestions().then(allQ => {
+        if (allQ && allQ.length > 0) setQuestions(allQ);
+      }).catch(() => {});
+      fetchAllExamResults().then(allR => {
+        if (Array.isArray(allR)) setResults(allR);
+      }).catch(() => {});
     } catch (err) {
       console.warn('Gagal memuat mapel untuk guru/pengawas:', err);
     }

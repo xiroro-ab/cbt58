@@ -660,60 +660,93 @@ export async function deleteExamResult(
   studentName?: string,
   className?: string
 ): Promise<boolean> {
-  if (typeof window !== 'undefined' && subjectId) {
+  const cleanName = (studentName || '').toLowerCase().trim();
+  const cleanClass = (className || '').toLowerCase().trim();
+
+  // 1. PEMBERSIHAN MENYELURUH DI LOCALSTORAGE
+  if (typeof window !== 'undefined') {
     try {
-      const stored = localStorage.getItem(`cbt_results_${subjectId}`);
-      if (stored) {
-        const list: ExamResult[] = JSON.parse(stored);
-        localStorage.setItem(
-          `cbt_results_${subjectId}`,
-          JSON.stringify(
-            list.filter(r => {
-              if (resultId && r.id === resultId) return false;
-              if (studentName && r.studentName.toLowerCase().trim() === studentName.toLowerCase().trim()) return false;
-              return true;
-            })
-          )
-        );
-      }
-      if (studentName) {
-        const cleanName = studentName.toLowerCase().trim();
-        const cleanClass = (className || '').toLowerCase().trim();
-        if (cleanClass) {
-          localStorage.removeItem(`cbt_submitted_${subjectId}_${cleanClass}_${cleanName}`);
-          localStorage.removeItem(`cbt_blocked_${subjectId}_${cleanClass}_${cleanName}`);
-          localStorage.removeItem(`cbt_exam_state_${subjectId}_${cleanClass}_${cleanName}`);
-          localStorage.removeItem(`cbt_exam_questions_${subjectId}_${cleanClass}_${cleanName}`);
+      // A. Bersihkan dari SEMUA key cbt_results_* tanpa kecuali (mencegah data lama muncul kembali saat login admin)
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith('cbt_results_')) {
+          try {
+            const stored = localStorage.getItem(key);
+            if (stored) {
+              const list: ExamResult[] = JSON.parse(stored);
+              if (Array.isArray(list)) {
+                const filtered = list.filter(r => {
+                  if (resultId && r.id === resultId) return false;
+                  if (cleanName && r.studentName && r.studentName.toLowerCase().trim() === cleanName) {
+                    if (!subjectId || !r.subjectId || r.subjectId === subjectId) {
+                      return false;
+                    }
+                  }
+                  return true;
+                });
+                localStorage.setItem(key, JSON.stringify(filtered));
+              }
+            }
+          } catch {}
         }
-        localStorage.removeItem(`cbt_answers_${studentName}_${subjectId}`);
-        localStorage.removeItem(`cbt_blocked_${subjectId}_${cleanName}`);
-        localStorage.removeItem(`cbt_exam_state_${subjectId}_${cleanName}`);
-        localStorage.removeItem(`cbt_exam_questions_${subjectId}_${cleanName}`);
-        localStorage.removeItem(`cbt_submitted_${subjectId}_${cleanName}`);
       }
-    } catch {}
+
+      // B. Bersihkan seluruh token pengerjaan, kunci autolock, dan sesi aktif siswa tersebut
+      if (cleanName) {
+        const keysToRemove: string[] = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key && (
+            key.startsWith('cbt_submitted_') ||
+            key.startsWith('cbt_blocked_') ||
+            key.startsWith('cbt_exam_state_') ||
+            key.startsWith('cbt_exam_questions_') ||
+            key.startsWith('cbt_answers_')
+          )) {
+            if (key.toLowerCase().includes(cleanName)) {
+              keysToRemove.push(key);
+            }
+          }
+        }
+        keysToRemove.forEach(k => {
+          try {
+            localStorage.removeItem(k);
+          } catch {}
+        });
+      }
+    } catch (lsErr) {
+      console.warn('Error clearing localStorage in deleteExamResult:', lsErr);
+    }
   }
 
+  // 2. PEMBERSIHAN DI SUPABASE CLOUD
   try {
-    if (resultId && !resultId.startsWith('res-')) {
+    // Hapus langsung berdasarkan ID jika ID adalah valid UUID
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(resultId);
+    if (isUuid) {
       await supabase.from('exam_results').delete().eq('id', resultId);
     }
-    if (subjectId && studentName) {
+
+    // Hapus juga berdasarkan nama siswa & mapel
+    if (cleanName) {
       let delQuery = supabase
         .from('exam_results')
         .delete()
-        .eq('subject_id', subjectId)
-        .ilike('student_name', studentName.trim());
+        .ilike('student_name', studentName!.trim());
 
-      if (className && className.trim()) {
-        delQuery = delQuery.ilike('class_name', className.trim());
+      if (subjectId) {
+        delQuery = delQuery.eq('subject_id', subjectId);
+      }
+      if (cleanClass) {
+        delQuery = delQuery.ilike('class_name', className!.trim());
       }
 
       await delQuery;
 
       // Otomatis bersihkan notifikasi pelanggaran / autolock jika guru mereset hasil ujian siswa
-      await clearStudentAutolockInSupabase(subjectId, studentName);
+      await clearStudentAutolockInSupabase(subjectId || '', studentName!);
     }
+
     notifyResultChanged({
       action: 'DELETE',
       subjectId: subjectId || '',
@@ -869,7 +902,25 @@ export async function fetchAllExamResults(): Promise<ExamResult[]> {
       .select('*')
       .order('submitted_at', { ascending: false });
 
-    if (!error && data && data.length > 0) {
+    if (!error && Array.isArray(data)) {
+      if (data.length === 0) {
+        // Jika Supabase kosong (karena telah dihapus / belum ada nilai),
+        // sinkronkan juga cache lokal cbt_results_ agar tidak memunculkan data yang sudah dihapus
+        if (typeof window !== 'undefined') {
+          try {
+            const keysToRemove: string[] = [];
+            for (let i = 0; i < localStorage.length; i++) {
+              const k = localStorage.key(i);
+              if (k && k.startsWith('cbt_results_')) {
+                keysToRemove.push(k);
+              }
+            }
+            keysToRemove.forEach(k => localStorage.removeItem(k));
+          } catch {}
+        }
+        return [];
+      }
+
       const parsed: ExamResult[] = data.map(r => ({
         id: r.id,
         subjectId: r.subject_id,
@@ -954,7 +1005,16 @@ export async function fetchExamResults(subjectId?: string): Promise<ExamResult[]
       .eq('subject_id', subjectId)
       .order('submitted_at', { ascending: false });
 
-    if (!error && data && data.length > 0) {
+    if (!error && Array.isArray(data)) {
+      if (data.length === 0) {
+        if (typeof window !== 'undefined') {
+          try {
+            localStorage.removeItem('cbt_results_' + subjectId);
+          } catch {}
+        }
+        return [];
+      }
+
       const parsed: ExamResult[] = data.map(r => ({
         id: r.id,
         subjectId: r.subject_id,

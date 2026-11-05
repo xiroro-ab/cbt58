@@ -116,6 +116,381 @@ export const GEMINI_MODELS: GeminiModelOption[] = [
   }
 ];
 
+export type CognitiveDifficultyKey = 'Campuran' | 'Mudah' | 'Sedang' | 'Sukar (HOTS)';
+
+export interface BloomLevelDetail {
+  code: 'C1' | 'C2' | 'C3' | 'C4' | 'C5' | 'C6';
+  name: string;
+  category: 'LOTS' | 'MOTS' | 'HOTS';
+  percentage: number;
+  kko: string;
+  description: string;
+}
+
+export interface CognitiveDistributionConfig {
+  id: CognitiveDifficultyKey;
+  label: string;
+  sublabel: string;
+  lotsTotal: number;
+  motsTotal: number;
+  hotsTotal: number;
+  levels: Record<'C1' | 'C2' | 'C3' | 'C4' | 'C5' | 'C6', BloomLevelDetail>;
+}
+
+export const COGNITIVE_DISTRIBUTIONS: Record<string, CognitiveDistributionConfig> = {
+  Campuran: {
+    id: 'Campuran',
+    label: 'Campuran Proporsional (Standar Asesmen Nasional / AKM)',
+    sublabel: '30% LOTS (C1 10%, C2 20%), 40% MOTS (C3 40%), 30% HOTS (C4 15%, C5 10%, C6 5%)',
+    lotsTotal: 30,
+    motsTotal: 40,
+    hotsTotal: 30,
+    levels: {
+      C1: {
+        code: 'C1',
+        name: 'Mengingat (Remembering)',
+        category: 'LOTS',
+        percentage: 10,
+        kko: 'Menyebutkan, mengenali, mengidentifikasi, mencocokkan fakta/istilah',
+        description: 'Mengingat fakta esensial, terminologi keilmuan, simbol, dan rumus baku.'
+      },
+      C2: {
+        code: 'C2',
+        name: 'Memahami (Understanding)',
+        category: 'LOTS',
+        percentage: 20,
+        kko: 'Menjelaskan, membedakan, mengklasifikasikan, merangkum makna konsep',
+        description: 'Menerangkan konsep dengan kata sendiri, menginterpretasikan data grafik/tabel dasar.'
+      },
+      C3: {
+        code: 'C3',
+        name: 'Menerapkan (Applying)',
+        category: 'MOTS',
+        percentage: 40,
+        kko: 'Menghitung, memecahkan masalah kontekstual, menerapkan prosedur kerja',
+        description: 'Menggunakan konsep, prinsip, dan algoritma untuk memecahkan kasus konkret kehidupan nyata.'
+      },
+      C4: {
+        code: 'C4',
+        name: 'Menganalisis (Analyzing)',
+        category: 'HOTS',
+        percentage: 15,
+        kko: 'Menelaah hubungan sebab-akibat, membandingkan pola data, mendeteksi variabel kritis',
+        description: 'Memilah data/kasus kompleks, mengurai informasi tersembunyi, membedakan fakta vs opini.'
+      },
+      C5: {
+        code: 'C5',
+        name: 'Mengevaluasi (Evaluating)',
+        category: 'HOTS',
+        percentage: 10,
+        kko: 'Menilai efektivitas, mengkritisi argumen, memvalidasi kesimpulan berdasarkan kriteria',
+        description: 'Menentukan keputusan dan justifikasi logis berdasarkan bukti empiris dan standar validitas.'
+      },
+      C6: {
+        code: 'C6',
+        name: 'Berkreasi / Mencipta (Creating)',
+        category: 'HOTS',
+        percentage: 5,
+        kko: 'Merancang solusi alternatif, menyusun formulasi rencana, merumuskan hipotesis baru',
+        description: 'Mengintegrasikan ide menjadi rancangan solusi orisinal atau merumuskan strategi baru.'
+      }
+    }
+  },
+  Mudah: {
+    id: 'Mudah',
+    label: 'Mudah (Dominan Dasar / LOTS)',
+    sublabel: '80% LOTS (C1 30%, C2 50%), 20% MOTS (C3 20%), 0% HOTS',
+    lotsTotal: 80,
+    motsTotal: 20,
+    hotsTotal: 0,
+    levels: {
+      C1: {
+        code: 'C1',
+        name: 'Mengingat (Remembering)',
+        category: 'LOTS',
+        percentage: 30,
+        kko: 'Menyebutkan fakta, menuliskan istilah, mengenali definisi',
+        description: 'Uji ingatan terhadap istilah dasar dan definisi kunci.'
+      },
+      C2: {
+        code: 'C2',
+        name: 'Memahami (Understanding)',
+        category: 'LOTS',
+        percentage: 50,
+        kko: 'Menjelaskan, memberi contoh, mengelompokkan kategori',
+        description: 'Uji pemahaman langsung terhadap materi pembelajaran.'
+      },
+      C3: {
+        code: 'C3',
+        name: 'Menerapkan (Applying)',
+        category: 'MOTS',
+        percentage: 20,
+        kko: 'Menghitung langsung, menerapkan rumus dasar 1 langkah',
+        description: 'Penerapan langsung tanpa variasi kasus rumit.'
+      },
+      C4: {
+        code: 'C4',
+        name: 'Menganalisis (Analyzing)',
+        category: 'HOTS',
+        percentage: 0,
+        kko: '-',
+        description: 'Tidak diujikan pada level mudah.'
+      },
+      C5: {
+        code: 'C5',
+        name: 'Mengevaluasi (Evaluating)',
+        category: 'HOTS',
+        percentage: 0,
+        kko: '-',
+        description: 'Tidak diujikan pada level mudah.'
+      },
+      C6: {
+        code: 'C6',
+        name: 'Berkreasi / Mencipta (Creating)',
+        category: 'HOTS',
+        percentage: 0,
+        kko: '-',
+        description: 'Tidak diujikan pada level mudah.'
+      }
+    }
+  },
+  Sedang: {
+    id: 'Sedang',
+    label: 'Sedang (Dominan Terapan / MOTS)',
+    sublabel: '20% LOTS (C2 20%), 60% MOTS (C3 60%), 20% HOTS (C4 20%)',
+    lotsTotal: 20,
+    motsTotal: 60,
+    hotsTotal: 20,
+    levels: {
+      C1: {
+        code: 'C1',
+        name: 'Mengingat (Remembering)',
+        category: 'LOTS',
+        percentage: 0,
+        kko: '-',
+        description: 'Fakta dasar dianggap sudah dikuasai.'
+      },
+      C2: {
+        code: 'C2',
+        name: 'Memahami (Understanding)',
+        category: 'LOTS',
+        percentage: 20,
+        kko: 'Menerangkan konsep, menginterpretasi data tabel/grafik',
+        description: 'Pemahaman materi inti dalam konteks terarah.'
+      },
+      C3: {
+        code: 'C3',
+        name: 'Menerapkan (Applying)',
+        category: 'MOTS',
+        percentage: 60,
+        kko: 'Menghitung dengan rumus, menerapkan prosedur pada situasi nyata',
+        description: 'Penyelesaian masalah kontekstual melalui prosedur baku.'
+      },
+      C4: {
+        code: 'C4',
+        name: 'Menganalisis (Analyzing)',
+        category: 'HOTS',
+        percentage: 20,
+        kko: 'Menelaah relasi sebab-akibat, membandingkan data alternatif',
+        description: 'Analisis sederhana terhadap data atau situasi.'
+      },
+      C5: {
+        code: 'C5',
+        name: 'Mengevaluasi (Evaluating)',
+        category: 'HOTS',
+        percentage: 0,
+        kko: '-',
+        description: 'Tidak diujikan pada level sedang.'
+      },
+      C6: {
+        code: 'C6',
+        name: 'Berkreasi / Mencipta (Creating)',
+        category: 'HOTS',
+        percentage: 0,
+        kko: '-',
+        description: 'Tidak diujikan pada level sedang.'
+      }
+    }
+  },
+  'Sukar (HOTS)': {
+    id: 'Sukar (HOTS)',
+    label: 'Sukar (Dominan Penalaran Kritis / HOTS)',
+    sublabel: '0% LOTS, 20% MOTS (C3 20%), 80% HOTS (C4 45%, C5 25%, C6 10%)',
+    lotsTotal: 0,
+    motsTotal: 20,
+    hotsTotal: 80,
+    levels: {
+      C1: {
+        code: 'C1',
+        name: 'Mengingat (Remembering)',
+        category: 'LOTS',
+        percentage: 0,
+        kko: '-',
+        description: 'Tidak diujikan pada level HOTS.'
+      },
+      C2: {
+        code: 'C2',
+        name: 'Memahami (Understanding)',
+        category: 'LOTS',
+        percentage: 0,
+        kko: '-',
+        description: 'Tidak diujikan pada level HOTS.'
+      },
+      C3: {
+        code: 'C3',
+        name: 'Menerapkan (Applying)',
+        category: 'MOTS',
+        percentage: 20,
+        kko: 'Menerapkan prosedur multi-langkah pada kasus baru',
+        description: 'Aplikasi konsep sebagai landasan pemecahan kasus kompleks.'
+      },
+      C4: {
+        code: 'C4',
+        name: 'Menganalisis (Analyzing)',
+        category: 'HOTS',
+        percentage: 45,
+        kko: 'Mendiagnosis anomali kasus, membedakan pola tersembunyi, menelaah variabel kritis',
+        description: 'Dekomposisi informasi kompleks dan pengujian logika sebab-akibat.'
+      },
+      C5: {
+        code: 'C5',
+        name: 'Mengevaluasi (Evaluating)',
+        category: 'HOTS',
+        percentage: 25,
+        kko: 'Menguji keabsahan hipotesis, mengevaluasi argumen, memvalidasi solusi terbaik',
+        description: 'Penilaian kritis atas keputusan atau bukti ilmiah.'
+      },
+      C6: {
+        code: 'C6',
+        name: 'Berkreasi / Mencipta (Creating)',
+        category: 'HOTS',
+        percentage: 10,
+        kko: 'Merancang model/skema alternatif, menyusun strategi pemecahan masalah orisinal',
+        description: 'Merumuskan sintesis dan inovasi solusi yang teruji.'
+      }
+    }
+  }
+};
+
+export function getCognitiveConfig(difficultyKey?: string): CognitiveDistributionConfig {
+  const normKey = (difficultyKey || 'Campuran').trim().toLowerCase();
+  if (normKey.includes('mudah')) {
+    return COGNITIVE_DISTRIBUTIONS['Mudah'];
+  }
+  if (normKey.includes('sedang')) {
+    return COGNITIVE_DISTRIBUTIONS['Sedang'];
+  }
+  if (normKey.includes('sukar') || normKey.includes('hots')) {
+    return COGNITIVE_DISTRIBUTIONS['Sukar (HOTS)'];
+  }
+  return COGNITIVE_DISTRIBUTIONS['Campuran'];
+}
+
+export function calculateCognitiveItemCounts(
+  difficultyKey: string,
+  totalCount: number
+): Record<'C1' | 'C2' | 'C3' | 'C4' | 'C5' | 'C6', number> {
+  const config = getCognitiveConfig(difficultyKey);
+  const result: Record<'C1' | 'C2' | 'C3' | 'C4' | 'C5' | 'C6', number> = {
+    C1: 0, C2: 0, C3: 0, C4: 0, C5: 0, C6: 0
+  };
+
+  if (totalCount <= 0) return result;
+
+  const codes: ('C1' | 'C2' | 'C3' | 'C4' | 'C5' | 'C6')[] = ['C1', 'C2', 'C3', 'C4', 'C5', 'C6'];
+  const items = codes.map(c => {
+    const pct = config.levels[c].percentage;
+    const rawVal = (pct / 100) * totalCount;
+    return {
+      code: c,
+      pct,
+      floor: Math.floor(rawVal),
+      remainder: rawVal - Math.floor(rawVal)
+    };
+  });
+
+  const sum = items.reduce((acc, it) => acc + it.floor, 0);
+  let remainderCount = totalCount - sum;
+
+  items.forEach(it => {
+    result[it.code] = it.floor;
+  });
+
+  const eligible = [...items]
+    .filter(it => it.pct > 0)
+    .sort((a, b) => b.remainder - a.remainder);
+
+  let idx = 0;
+  while (remainderCount > 0 && eligible.length > 0) {
+    const target = eligible[idx % eligible.length];
+    result[target.code] += 1;
+    remainderCount--;
+    idx++;
+  }
+
+  return result;
+}
+
+export function getCognitiveBadgeInfo(code?: string): {
+  code: string;
+  name: string;
+  category: 'LOTS' | 'MOTS' | 'HOTS';
+  badgeClass: string;
+} {
+  const c = (code || '').toUpperCase().trim();
+  switch (c) {
+    case 'C1':
+      return {
+        code: 'C1',
+        name: 'Mengingat',
+        category: 'LOTS',
+        badgeClass: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/70 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800'
+      };
+    case 'C2':
+      return {
+        code: 'C2',
+        name: 'Memahami',
+        category: 'LOTS',
+        badgeClass: 'bg-teal-100 text-teal-800 dark:bg-teal-950/70 dark:text-teal-300 border-teal-300 dark:border-teal-800'
+      };
+    case 'C3':
+      return {
+        code: 'C3',
+        name: 'Menerapkan',
+        category: 'MOTS',
+        badgeClass: 'bg-sky-100 text-sky-800 dark:bg-sky-950/70 dark:text-sky-300 border-sky-300 dark:border-sky-800'
+      };
+    case 'C4':
+      return {
+        code: 'C4',
+        name: 'Menganalisis',
+        category: 'HOTS',
+        badgeClass: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-950/70 dark:text-indigo-300 border-indigo-300 dark:border-indigo-800'
+      };
+    case 'C5':
+      return {
+        code: 'C5',
+        name: 'Mengevaluasi',
+        category: 'HOTS',
+        badgeClass: 'bg-amber-100 text-amber-800 dark:bg-amber-950/70 dark:text-amber-300 border-amber-300 dark:border-amber-800'
+      };
+    case 'C6':
+      return {
+        code: 'C6',
+        name: 'Berkreasi',
+        category: 'HOTS',
+        badgeClass: 'bg-rose-100 text-rose-800 dark:bg-rose-950/70 dark:text-rose-300 border-rose-300 dark:border-rose-800'
+      };
+    default:
+      return {
+        code: c || 'Kognitif',
+        name: c || 'Level',
+        category: 'MOTS',
+        badgeClass: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border-slate-300 dark:border-slate-700'
+      };
+  }
+}
+
 /**
  * Normalisasi jawaban Benar/Salah dari berbagai variasi input (B/S, True/False, Ya/Tidak, dll)
  */
@@ -391,6 +766,44 @@ export function buildAiQuestionPrompt(params: PromptBuildParams): string {
 
   const contextExample = getSubjectContextExample(targetDiscipline);
 
+  const cogConfig = getCognitiveConfig(difficulty);
+  const cogCounts = calculateCognitiveItemCounts(difficulty, totalCount);
+
+  const cognitiveBreakdownPrompt = `
+========================================================================
+DISTRIBUSI TINGKAT KESULITAN & TAKSONOMI KOGNITIF BLOOM (WAJIB DIIKUTI SECARA AKURAT):
+========================================================================
+Mode Kesulitan Dipilih: "${difficulty}" (${cogConfig.label})
+Total Butir Soal: ${totalCount} butir
+
+KOMPOSISI DAN KUOTA BUTIR SOAL BERDASARKAN LEVEL KOGNITIF:
+1. LOTS (Lower Order Thinking Skills) ${cogConfig.lotsTotal}% - Total ${cogCounts.C1 + cogCounts.C2} butir:
+   - C1 Mengingat (${cogConfig.levels.C1.percentage}%): WAJIB buat ${cogCounts.C1} butir.
+     KKO: ${cogConfig.levels.C1.kko}.
+     Karakteristik: ${cogConfig.levels.C1.description}
+   - C2 Memahami (${cogConfig.levels.C2.percentage}%): WAJIB buat ${cogCounts.C2} butir.
+     KKO: ${cogConfig.levels.C2.kko}.
+     Karakteristik: ${cogConfig.levels.C2.description}
+
+2. MOTS (Middle Order Thinking Skills) ${cogConfig.motsTotal}% - Total ${cogCounts.C3} butir:
+   - C3 Menerapkan (${cogConfig.levels.C3.percentage}%): WAJIB buat ${cogCounts.C3} butir.
+     KKO: ${cogConfig.levels.C3.kko}.
+     Karakteristik: ${cogConfig.levels.C3.description}
+
+3. HOTS (Higher Order Thinking Skills) ${cogConfig.hotsTotal}% - Total ${cogCounts.C4 + cogCounts.C5 + cogCounts.C6} butir:
+   - C4 Menganalisis (${cogConfig.levels.C4.percentage}%): WAJIB buat ${cogCounts.C4} butir.
+     KKO: ${cogConfig.levels.C4.kko}.
+     Karakteristik: ${cogConfig.levels.C4.description}
+   - C5 Mengevaluasi (${cogConfig.levels.C5.percentage}%): WAJIB buat ${cogCounts.C5} butir.
+     KKO: ${cogConfig.levels.C5.kko}.
+     Karakteristik: ${cogConfig.levels.C5.description}
+   - C6 Berkreasi / Mencipta (${cogConfig.levels.C6.percentage}%): WAJIB buat ${cogCounts.C6} butir.
+     KKO: ${cogConfig.levels.C6.kko}.
+     Karakteristik: ${cogConfig.levels.C6.description}
+
+ATURAN WAJIB PROPERTI "cognitiveLevel":
+Pada SETIAP butir soal dalam array JSON yang Anda hasilkan, Anda WAJIB menyertakan properti "cognitiveLevel" dengan nilai salah satu string: "C1", "C2", "C3", "C4", "C5", atau "C6" sesuai rincian kuota kognitif di atas.`;
+
   return `Anda adalah Pakar Asesmen Pendidikan Nasional dan Pembuat Soal Ujian Berbasis Komputer (CBT) SMP Indonesia yang menguasai Kurikulum Merdeka, Standar AKM (Kemendikbud), Standar PISA (OECD), Standar TKA (Akademik/ASAS), dan Soal Harian Formatif.
 
 ========================================================================
@@ -399,7 +812,7 @@ PERINGATAN SANGAT PENTING: BATASAN DISIPLIN ILMU MATA PELAJARAN
 1. MATA PELAJARAN INTI (DISIPLIN ILMU): "${targetDiscipline}"
 2. TINGKAT / JENJANG SISWA: "${targetGrade}"
 3. MATERI / TOPIK POKOK: "${resolvedTopic}"
-4. TINGKAT KESULITAN: "${difficulty}"
+4. TINGKAT KESULITAN: "${difficulty}" (${cogConfig.label})
 5. STANDAR KEDALAMAN: "${standardNames}"
 
 ATURAN WAJIB DISIPLIN ILMU:
@@ -415,7 +828,7 @@ Buatkan ${totalCount} butir soal ujian dengan komposisi tipe dan tingkat kedalam
 - Bidang Studi / Mata Pelajaran: ${targetDiscipline} (Label Ujian: ${subjectTitle})
 - Jenjang: ${targetGrade} (Target Rombel: ${className})
 - Topik / Materi Pokok: ${resolvedTopic}
-- Tingkat Kesulitan: ${difficulty}
+- Tingkat Kesulitan: ${difficulty} (${cogConfig.sublabel})
 - Standar Kedalaman: ${standardNames}
 ${customInstructions ? `- Catatan Khusus Guru: ${customInstructions}` : ''}
 
@@ -430,6 +843,7 @@ KOMPOSISI TIPE SOAL YANG WAJIB DIBUAT (TOTAL: ${totalCount} BUTIR):
 - Menjodohkan (Jodoh): ${counts.jodoh || 0} butir
 - Isian Singkat: ${counts.isian || 0} butir
 - Esai: ${counts.esai || 0} butir
+${cognitiveBreakdownPrompt}
 
 ATURAN STRUKTUR JSON (PENTING! KEMBALIKAN HANYA ARRAY JSON VALID TANPA MARKDOWN / TEKS LAIN):
 Setiap butir soal dalam array JSON harus memiliki format persis:
@@ -437,6 +851,7 @@ Setiap butir soal dalam array JSON harus memiliki format persis:
 1. Tipe "Pilihan Ganda":
 {
   "type": "Pilihan Ganda",
+  "cognitiveLevel": "C3",
   "questionText": "Teks stimulus kontekstual / pertanyaan...",
   "options": [
     { "text": "Pilihan A" },
@@ -446,11 +861,12 @@ Setiap butir soal dalam array JSON harus memiliki format persis:
   ],
   "answer": "A"
 }
-Catatan: answer bernilai huruf kapital tunggal "A", "B", "C", atau "D".
+Catatan: answer bernilai huruf kapital tunggal "A", "B", "C", atau "D". "cognitiveLevel" bernilai "C1", "C2", "C3", "C4", "C5", atau "C6".
 
 2. Tipe "Pilihan Ganda Kompleks":
 {
   "type": "Pilihan Ganda Kompleks",
+  "cognitiveLevel": "C4",
   "questionText": "Teks stimulus dan instruksi memilih opsi yang tepat (misal: 'Pilihlah dua atau tiga pernyataan yang sesuai:')...",
   "options": [
     { "text": "Pernyataan / Pilihan 1" },
@@ -460,11 +876,12 @@ Catatan: answer bernilai huruf kapital tunggal "A", "B", "C", atau "D".
   ],
   "answer": ["A", "C"]
 }
-Catatan: answer bernilai array huruf kapital opsi benar, misal ["A", "C"] atau ["B", "C", "D"].
+Catatan: answer bernilai array huruf kapital opsi benar, misal ["A", "C"] atau ["B", "C", "D"]. "cognitiveLevel" bernilai "C1"-"C6".
 
 3. Tipe "Benar/Salah":
 {
   "type": "Benar/Salah",
+  "cognitiveLevel": "C2",
   "questionText": "Teks stimulus konteks / data...",
   "options": [
     { "text": "Pernyataan 1" },
@@ -473,11 +890,12 @@ Catatan: answer bernilai array huruf kapital opsi benar, misal ["A", "C"] atau [
   ],
   "answer": ["Benar", "Salah", "Benar"]
 }
-Catatan: options adalah array berisi pernyataan, answer adalah array string bernilai "Benar" atau "Salah" dengan jumlah yang sama persis dengan opsi pernyataan.
+Catatan: options adalah array berisi pernyataan, answer adalah array string bernilai "Benar" atau "Salah" dengan jumlah yang sama persis dengan opsi pernyataan. "cognitiveLevel" bernilai "C1"-"C6".
 
 4. Tipe "Menjodohkan":
 {
   "type": "Menjodohkan",
+  "cognitiveLevel": "C3",
   "questionText": "Petunjuk menjodohkan premis di kolom kiri dengan pasangan di kolom kanan...",
   "options": [
     { "q": { "text": "Premis Kiri 1" }, "a": { "text": "Pasangan Kanan 1" } },
@@ -486,25 +904,27 @@ Catatan: options adalah array berisi pernyataan, answer adalah array string bern
   ],
   "answer": null
 }
-Catatan: options adalah array objek { q: { text: "..." }, a: { text: "..." } }, answer bernilai null.
+Catatan: options adalah array objek { q: { text: "..." }, a: { text: "..." } }, answer bernilai null. "cognitiveLevel" bernilai "C1"-"C6".
 
 5. Tipe "Isian Singkat":
 {
   "type": "Isian Singkat",
+  "cognitiveLevel": "C1",
   "questionText": "Pertanyaan dengan jawaban kata kunci atau istilah tepat...",
   "options": [],
   "answer": ["Jawaban Utama", "sinonim / variasi huruf kecil"]
 }
-Catatan: options selalu array kosong [], answer adalah array kata kunci.
+Catatan: options selalu array kosong [], answer adalah array kata kunci. "cognitiveLevel" bernilai "C1"-"C6".
 
 6. Tipe "Esai":
 {
   "type": "Esai",
+  "cognitiveLevel": "C5",
   "questionText": "Pertanyaan uraian atau telaah analitis mendalam...",
   "options": [],
   "answer": "Rubrik penilaian dan poin-poin kunci jawaban guru..."
 }
-Catatan: options selalu array kosong [], answer adalah string rubrik penilaian.
+Catatan: options selalu array kosong [], answer adalah string rubrik penilaian. "cognitiveLevel" bernilai "C1"-"C6".
 
 KUALITAS AKADEMIK:
 1. Pastikan butir soal bebas dari kekeliruan konsep keilmuan.
@@ -696,6 +1116,14 @@ export function validateAndConvertRawQuestions(
       finalAnswer = typeof raw.answer === 'string' ? raw.answer.trim() : 'Rubrik penilaian';
     }
 
+    // Ekstraksi tingkat kognitif Bloom (C1 - C6)
+    let cognitiveLevel: string | undefined = undefined;
+    const rawCog = String(raw.cognitiveLevel || raw.bloomLevel || raw.bloom || raw.level || raw.kognitif || '').toUpperCase().trim();
+    const cogMatch = rawCog.match(/\b(C[1-6])\b/);
+    if (cogMatch) {
+      cognitiveLevel = cogMatch[1];
+    }
+
     const uniqueId = `q-ai-${Date.now()}-${idx + 1}-${Math.random().toString(36).substring(2, 6)}`;
 
     results.push({
@@ -706,6 +1134,7 @@ export function validateAndConvertRawQuestions(
       options: finalOptions,
       answer: finalAnswer,
       orderIndex: startOrderIndex + idx,
+      cognitiveLevel,
       createdAt: Date.now()
     });
   });

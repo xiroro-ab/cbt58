@@ -4934,6 +4934,11 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                             <span className="text-xs px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold border border-slate-200 dark:border-slate-700">
                               {q.type}
                             </span>
+                            {q.cognitiveLevel && (
+                              <span className="text-[10px] px-2 py-0.5 rounded-full bg-violet-100 dark:bg-violet-950 text-violet-700 dark:text-violet-300 font-bold border border-violet-200 dark:border-violet-800">
+                                {q.cognitiveLevel}
+                              </span>
+                            )}
                             <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 font-bold border border-emerald-200/60 dark:border-emerald-800/60">
                               Bobot: {weight} Poin
                             </span>

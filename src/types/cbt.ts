@@ -32,6 +32,7 @@ export interface Question {
   options: QuestionOptions;
   answer?: QuestionAnswer; // Jawaban benar (hanya ada di server/guru)
   orderIndex: number;
+  cognitiveLevel?: string; // Level Taksonomi Bloom: "C1", "C2", "C3", "C4", "C5", "C6"
   createdAt?: number;
 }
 

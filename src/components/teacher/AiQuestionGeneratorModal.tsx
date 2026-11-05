@@ -10,7 +10,12 @@ import {
   buildAiQuestionPrompt,
   validateAndConvertRawQuestions,
   sanitizeAndParseAiJson,
-  extractSubjectAndGrade
+  extractSubjectAndGrade,
+  COGNITIVE_DISTRIBUTIONS,
+  getCognitiveConfig,
+  calculateCognitiveItemCounts,
+  getCognitiveBadgeInfo,
+  CognitiveDifficultyKey
 } from '@/lib/aiQuestionGenerator';
 import {
   Sparkles,
@@ -180,6 +185,15 @@ export function AiQuestionGeneratorModal({
   // Total butir soal
   const totalQuestions =
     counts.pg + counts.pgk + counts.bs + counts.jodoh + counts.isian + counts.esai;
+
+  // Konfigurasi Taksonomi Kognitif Bloom & Perhitungan Kuota Butir Soal Real-Time
+  const activeCognitiveConfig = useMemo(() => {
+    return getCognitiveConfig(difficulty);
+  }, [difficulty]);
+
+  const cognitiveCounts = useMemo(() => {
+    return calculateCognitiveItemCounts(difficulty, totalQuestions);
+  }, [difficulty, totalQuestions]);
 
   // Toggle Checkbox Standar (Bisa pilih 1, 2, atau semuanya)
   const toggleStandard = (stdId: StandardBadge) => {
@@ -720,6 +734,118 @@ export function AiQuestionGeneratorModal({
                 </div>
               </div>
 
+              {/* CARD RINCIAN TAKSONOMI BLOOM & DISTRIBUSI KOGNITIF */}
+              <div className="p-3.5 sm:p-4 rounded-2xl border border-violet-200/90 dark:border-violet-900/60 bg-gradient-to-br from-violet-50/70 via-white to-indigo-50/40 dark:from-violet-950/25 dark:via-slate-900 dark:to-indigo-950/20 shadow-2xs space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-xl bg-violet-600/10 dark:bg-violet-500/20 text-violet-600 dark:text-violet-400 flex items-center justify-center shrink-0">
+                      <Brain className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <div className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5 flex-wrap">
+                        <span>Distribusi Taksonomi Kognitif Bloom</span>
+                        <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-violet-100 dark:bg-violet-950 text-violet-700 dark:text-violet-300 border border-violet-200 dark:border-violet-800">
+                          {activeCognitiveConfig.id}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                        {activeCognitiveConfig.sublabel}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* 3 Badge Kategori: LOTS - MOTS - HOTS */}
+                  <div className="flex items-center gap-1.5 flex-wrap shrink-0">
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-100 dark:bg-emerald-950/70 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">
+                      LOTS {activeCognitiveConfig.lotsTotal}% ({cognitiveCounts.C1 + cognitiveCounts.C2} Soal)
+                    </span>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-sky-100 dark:bg-sky-950/70 text-sky-800 dark:text-sky-300 border border-sky-300 dark:border-sky-800">
+                      MOTS {activeCognitiveConfig.motsTotal}% ({cognitiveCounts.C3} Soal)
+                    </span>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-violet-100 dark:bg-violet-950/70 text-violet-800 dark:text-violet-300 border border-violet-300 dark:border-violet-800">
+                      HOTS {activeCognitiveConfig.hotsTotal}% ({cognitiveCounts.C4 + cognitiveCounts.C5 + cognitiveCounts.C6} Soal)
+                    </span>
+                  </div>
+                </div>
+
+                {/* Progress bar proporsi 3 segmen */}
+                <div className="h-2 w-full rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden flex shadow-inner">
+                  {activeCognitiveConfig.lotsTotal > 0 && (
+                    <div
+                      style={{ width: `${activeCognitiveConfig.lotsTotal}%` }}
+                      className="h-full bg-emerald-500 transition-all duration-300"
+                      title={`LOTS: ${activeCognitiveConfig.lotsTotal}%`}
+                    />
+                  )}
+                  {activeCognitiveConfig.motsTotal > 0 && (
+                    <div
+                      style={{ width: `${activeCognitiveConfig.motsTotal}%` }}
+                      className="h-full bg-sky-500 transition-all duration-300"
+                      title={`MOTS: ${activeCognitiveConfig.motsTotal}%`}
+                    />
+                  )}
+                  {activeCognitiveConfig.hotsTotal > 0 && (
+                    <div
+                      style={{ width: `${activeCognitiveConfig.hotsTotal}%` }}
+                      className="h-full bg-violet-600 transition-all duration-300"
+                      title={`HOTS: ${activeCognitiveConfig.hotsTotal}%`}
+                    />
+                  )}
+                </div>
+
+                {/* Grid 6 Level Bloom: C1 s.d C6 */}
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 pt-0.5">
+                  {(['C1', 'C2', 'C3', 'C4', 'C5', 'C6'] as const).map(code => {
+                    const detail = activeCognitiveConfig.levels[code];
+                    const count = cognitiveCounts[code];
+                    const isZero = detail.percentage === 0;
+                    return (
+                      <div
+                        key={code}
+                        className={`p-2.5 rounded-xl border transition-all ${
+                          isZero
+                            ? 'opacity-35 bg-slate-100/60 dark:bg-slate-800/20 border-slate-200 dark:border-slate-800'
+                            : detail.category === 'LOTS'
+                            ? 'bg-emerald-50/70 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800/60'
+                            : detail.category === 'MOTS'
+                            ? 'bg-sky-50/70 dark:bg-sky-950/20 border-sky-200 dark:border-sky-800/60'
+                            : 'bg-violet-50/70 dark:bg-violet-950/20 border-violet-200 dark:border-violet-800/60'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-1 mb-1">
+                          <span className="text-[11px] font-extrabold px-1.5 py-0.2 rounded bg-white dark:bg-slate-800 shadow-2xs border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200">
+                            {code}
+                          </span>
+                          <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400">
+                            {detail.percentage}%
+                          </span>
+                        </div>
+                        <div className="text-[11px] font-bold text-slate-800 dark:text-slate-200 truncate">
+                          {code === 'C1' ? 'Mengingat' :
+                           code === 'C2' ? 'Memahami' :
+                           code === 'C3' ? 'Menerapkan' :
+                           code === 'C4' ? 'Menganalisis' :
+                           code === 'C5' ? 'Mengevaluasi' : 'Berkreasi'}
+                        </div>
+                        <div className="text-[10px] font-extrabold text-violet-700 dark:text-violet-300 mt-0.5">
+                          {count} Butir Soal
+                        </div>
+                        <div className="text-[9px] text-slate-500 dark:text-slate-400 line-clamp-2 mt-1 leading-tight" title={detail.kko}>
+                          {detail.kko !== '-' ? detail.kko : 'Tidak diujikan'}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div className="flex items-center gap-1.5 text-[10px] text-slate-500 dark:text-slate-400 bg-white/70 dark:bg-slate-900/60 p-2 rounded-lg border border-slate-200/80 dark:border-slate-800">
+                  <Info className="w-3.5 h-3.5 text-violet-600 shrink-0" />
+                  <span>
+                    Rincian kuota C1–C6 di atas otomatis dipasok ke prompt AI (baik saat Generate API maupun Salin Prompt AI) agar sebaran tingkat penalaran soal presisi sesuai standar asesmen nasional.
+                  </span>
+                </div>
+              </div>
+
               {/* 3. JUMLAH & TIPE SOAL (DITENTUKAN OLEH GURU) */}
               <div className="space-y-3">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
@@ -1015,6 +1141,25 @@ export function AiQuestionGeneratorModal({
                     <p className="text-xs text-emerald-700 dark:text-emerald-400">
                       Standar: {standardsSummaryText} • Centang soal yang ingin disimpan ke Bank Soal.
                     </p>
+                    {/* Ringkasan Sebaran Level Kognitif Terbuat */}
+                    <div className="flex items-center gap-1.5 flex-wrap pt-1">
+                      <span className="text-[10px] font-semibold text-emerald-800 dark:text-emerald-300">
+                        Sebaran Kognitif Terbuat:
+                      </span>
+                      {(['C1', 'C2', 'C3', 'C4', 'C5', 'C6'] as const).map(code => {
+                        const count = generatedQuestions.filter(q => q.cognitiveLevel === code).length;
+                        if (count === 0) return null;
+                        const info = getCognitiveBadgeInfo(code);
+                        return (
+                          <span
+                            key={code}
+                            className={`text-[9px] font-bold px-1.5 py-0.5 rounded border ${info.badgeClass}`}
+                          >
+                            {code} ({count} soal)
+                          </span>
+                        );
+                      })}
+                    </div>
                   </div>
                 </div>
 
@@ -1078,6 +1223,15 @@ export function AiQuestionGeneratorModal({
                           <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-md bg-violet-100 dark:bg-violet-950 text-violet-700 dark:text-violet-300 border border-violet-200 dark:border-violet-800">
                             {q.type}
                           </span>
+                          {q.cognitiveLevel && (
+                            <span
+                              className={`text-[10px] font-bold px-2 py-0.5 rounded-md border ${
+                                getCognitiveBadgeInfo(q.cognitiveLevel).badgeClass
+                              }`}
+                            >
+                              {q.cognitiveLevel} - {getCognitiveBadgeInfo(q.cognitiveLevel).name}
+                            </span>
+                          )}
                         </div>
 
                         <button

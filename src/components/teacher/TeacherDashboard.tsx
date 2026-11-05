@@ -1529,7 +1529,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
     if (isTokenTaken) {
       showThemedAlert(
         'Token Sudah Digunakan',
-        `Token "${cleanToken}" sudah digunakan oleh jadwal ujian lain yang sedang aktif! Silakan klik tombol ðŸŽ² Acak untuk menghasilkan token unik.`,
+        `Token "${cleanToken}" sudah digunakan oleh jadwal ujian lain yang sedang aktif! Silakan klik tombol 🎲 Acak untuk menghasilkan token unik.`,
         'warning'
       );
       return;
@@ -2606,7 +2606,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                     {results.length > 0 ? (
                       <>
                         <span className="text-emerald-600 dark:text-emerald-400 font-bold">{passedStudentsCount} Tuntas</span>
-                        <span>â€¢</span>
+                        <span>•</span>
                         <span className="text-rose-500 dark:text-rose-400">{remedialStudentsCount} Remedial</span>
                       </>
                     ) : (
@@ -2616,7 +2616,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                 </div>
                 <div className="flex items-center gap-2 pt-1 text-[11px] text-slate-400 dark:text-slate-500">
                   <span className="w-5 h-5 rounded-md bg-violet-100 dark:bg-violet-950/60 text-violet-600 dark:text-violet-400 flex items-center justify-center font-bold">
-                    âœ“
+                    ✓
                   </span>
                   <span>Standar Ketuntasan Minimal: KKM 75</span>
                 </div>
@@ -3093,29 +3093,29 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
               <div className="flex items-center justify-between">
                 <span className="text-xs font-semibold text-slate-400">Rata-Rata Capaian Ujian</span>
                 <span className="w-8 h-8 rounded-xl bg-violet-100 dark:bg-violet-950/60 text-violet-600 flex items-center justify-center font-bold text-xs">
-                  ðŸ“Š
+                  📊
                 </span>
               </div>
               <h4 className="text-2xl font-bold text-slate-900 dark:text-white">{avgScore} Poin</h4>
-              <p className="text-xs text-slate-500">{results.length} lembar ujian terkumpul â€¢ KKM 75</p>
+              <p className="text-xs text-slate-500">{results.length} lembar ujian terkumpul • KKM 75</p>
             </div>
 
             <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-1 hover:border-emerald-300 dark:hover:border-emerald-700 transition">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-semibold text-slate-400">Ketuntasan Klasikal KKM</span>
                 <span className="w-8 h-8 rounded-xl bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 flex items-center justify-center font-bold text-xs">
-                  âœ“
+                  ✓
                 </span>
               </div>
               <h4 className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">{passRate}% Tuntas</h4>
-              <p className="text-xs text-slate-500">{passedStudentsCount} tuntas â€¢ {remedialStudentsCount} remedial</p>
+              <p className="text-xs text-slate-500">{passedStudentsCount} tuntas • {remedialStudentsCount} remedial</p>
             </div>
 
             <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-1 hover:border-sky-300 dark:hover:border-sky-700 transition">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-semibold text-slate-400">Partisipasi Peserta</span>
                 <span className="w-8 h-8 rounded-xl bg-sky-100 dark:bg-sky-950/60 text-sky-600 flex items-center justify-center font-bold text-xs">
-                  ðŸ‘¥
+                  👥
                 </span>
               </div>
               <h4 className="text-2xl font-bold text-sky-600 dark:text-sky-400">
@@ -3130,7 +3130,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
               <div className="flex items-center justify-between">
                 <span className="text-xs font-semibold text-slate-400">Audit Integritas Anti-Cheat</span>
                 <span className="w-8 h-8 rounded-xl bg-rose-100 dark:bg-rose-950/60 text-rose-600 flex items-center justify-center font-bold text-xs">
-                  ðŸ›¡ï¸
+                  🛡️
                 </span>
               </div>
               <h4 className="text-2xl font-bold text-slate-900 dark:text-white">
@@ -3261,7 +3261,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                 <div className="w-full flex flex-col sm:flex-row sm:items-center justify-between text-xs text-slate-400 dark:text-slate-500 p-3 rounded-2xl bg-slate-50/70 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800/80 gap-2">
                   <span className="flex items-center gap-1.5">
                     <Sparkles className="w-3.5 h-3.5 text-violet-500 flex-shrink-0" />
-                    <span>Sentuh atau arahkan kursor pada kurva &amp; batang untuk inspeksi detail â€¢ Klik titik untuk filter data tabel.</span>
+                    <span>Sentuh atau arahkan kursor pada kurva &amp; batang untuk inspeksi detail • Klik titik untuk filter data tabel.</span>
                   </span>
                   {statsFilterClass !== 'Semua Kelas' && (
                     <span className="font-bold text-violet-600 dark:text-violet-400 flex items-center gap-1 flex-shrink-0">
@@ -3503,7 +3503,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                     <span>Distribusi Predikat Nilai Siswa</span>
                   </h4>
                   <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">
-                    Pengelompokan hasil belajar berdasarkan standar KKM 75 â€¢ Klik predikat untuk filter tabel
+                    Pengelompokan hasil belajar berdasarkan standar KKM 75 • Klik predikat untuk filter tabel
                   </p>
                 </div>
                 {statsFilterGrade !== 'all' && (
@@ -3634,7 +3634,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                     <span>Proporsi Indeks Kesukaran Butir Soal</span>
                   </h4>
                   <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">
-                    Evaluasi rasio jawaban benar seluruh siswa ({questionItemAnalysis.length} butir) â€¢ Klik untuk filter
+                    Evaluasi rasio jawaban benar seluruh siswa ({questionItemAnalysis.length} butir) • Klik untuk filter
                   </p>
                 </div>
                 {statsQuestionCategory !== 'all' && (
@@ -3913,7 +3913,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                         onClick={() => setStatsSearchQuery('')}
                         className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs"
                       >
-                        âœ•
+                        ✕
                       </button>
                     )}
                   </div>
@@ -3981,7 +3981,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                           </td>
                           <td className="py-3 px-4 text-center">
                             {res.violationCount === 0 ? (
-                              <span className="text-emerald-600 font-bold text-[11px]">âœ“ 100% Tertib</span>
+                              <span className="text-emerald-600 font-bold text-[11px]">✓ 100% Tertib</span>
                             ) : (
                               <span className="text-rose-500 font-bold text-[11px]">{res.violationCount}x Alih Tab</span>
                             )}
@@ -4199,7 +4199,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                 <div className="flex items-center gap-2 flex-wrap">
                   <Lock className="w-3.5 h-3.5 text-violet-600 dark:text-violet-400 shrink-0" />
                   <span className="text-violet-800 dark:text-violet-300 font-medium">
-                    Mode Guru: <strong>{currentTeacher.name}</strong> ({currentTeacher.subject}) â€¢ {onlyMyAssignedSubjects ? 'Hanya Menampilkan Nilai Mapel Anda' : 'Menampilkan Semua Mapel Sekolah'}
+                    Mode Guru: <strong>{currentTeacher.name}</strong> ({currentTeacher.subject}) • {onlyMyAssignedSubjects ? 'Hanya Menampilkan Nilai Mapel Anda' : 'Menampilkan Semua Mapel Sekolah'}
                   </span>
                 </div>
                 <button
@@ -4223,8 +4223,8 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                 >
                   <option value="ALL">
                     {!isSuperAdmin && onlyMyAssignedSubjects && effectiveSchoolSettings.isolateTeacherDossier !== false
-                      ? `Semua Mapel Saya â€¢ ${totalStudentsForResults} Siswa`
-                      : `Semua Mapel (1 Sekolah) â€¢ ${totalStudentsForResults} Siswa`}
+                      ? `Semua Mapel Saya • ${totalStudentsForResults} Siswa`
+                      : `Semua Mapel (1 Sekolah) • ${totalStudentsForResults} Siswa`}
                   </option>
                   {filterSubjectsForResults.length === 0 && !isSuperAdmin && onlyMyAssignedSubjects && (
                     <option value="" disabled>
@@ -4473,7 +4473,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                               </span>
                               {r.subjectTitle && (
                                 <span className="text-[10px] text-violet-600 dark:text-violet-400 font-medium truncate max-w-[150px]">
-                                  â€¢ {r.subjectTitle}
+                                  • {r.subjectTitle}
                                 </span>
                               )}
                             </div>
@@ -4900,7 +4900,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                         className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-violet-600 via-fuchsia-600 to-pink-600 hover:opacity-90 text-white font-semibold text-xs shadow-md shadow-violet-600/20 transition cursor-pointer"
                       >
                         <Sparkles className="w-4 h-4" />
-                        <span>âœ¨ Buat Soal Otomatis AI (Gemini)</span>
+                        <span>Buat Soal Otomatis AI (Gemini)</span>
                       </button>
                       <button
                         type="button"
@@ -4908,7 +4908,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                         className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs shadow-md shadow-emerald-600/20 transition cursor-pointer"
                       >
                         <FileUp className="w-4 h-4" />
-                        <span>ðŸ“„ Import Naskah Soal (PDF / Dokumen)</span>
+                        <span>Import Naskah Soal (PDF / Dokumen)</span>
                       </button>
                       <button
                         type="button"
@@ -5053,7 +5053,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                                   )}
                                 </div>
                                 <div className="space-y-1 text-right">
-                                  <span className="text-violet-600 dark:text-violet-400 font-bold">âž” {pair.a?.text}</span>
+                                  <span className="text-violet-600 dark:text-violet-400 font-bold">➔ {pair.a?.text}</span>
                                   {pair.a?.img && (
                                     <img src={pair.a.img} alt="Gambar Kanan" className="max-h-20 rounded border object-contain block ml-auto" />
                                   )}
@@ -5157,10 +5157,10 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 print:hidden">
             <div className="flex items-center gap-2 overflow-x-auto pb-1">
               {[
-                { id: 'bap', label: 'ðŸ“‹ Berita Acara Ujian (BAP)' },
-                { id: 'attendance', label: 'ðŸ“ Daftar Hadir Peserta' },
-                { id: 'cards', label: 'ðŸªª Kartu Ujian Siswa' },
-                { id: 'ledger', label: 'ðŸ“Š Leger Rekap Nilai' }
+                { id: 'bap', label: '📋 Berita Acara Ujian (BAP)' },
+                { id: 'attendance', label: '📝 Daftar Hadir Peserta' },
+                { id: 'cards', label: '🪪 Kartu Ujian Siswa' },
+                { id: 'ledger', label: '📊 Leger Rekap Nilai' }
               ].map(tab => (
                 <button
                   key={tab.id}
@@ -5412,7 +5412,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                   }`}
                   title="Format tanda dalam kurung kosong untuk dicentang manual saat siswa hadir"
                 >
-                  âœï¸ ( &nbsp; ) Centang Manual
+                  ✍️ ( &nbsp; ) Centang Manual
                 </button>
                 <button
                   type="button"
@@ -5424,7 +5424,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                   }`}
                   title="Format teks Hadir / Tdk Hadir untuk dicoret manual jika siswa tidak hadir"
                 >
-                  ðŸ“ Hadir / Tdk Hadir (Coret)
+                  📝 Hadir / Tdk Hadir (Coret)
                 </button>
                 <button
                   type="button"
@@ -5436,7 +5436,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                   }`}
                   title="Format status submit digital real-time dari server CBT"
                 >
-                  ðŸ“Š Status Submit CBT
+                  📊 Status Submit CBT
                 </button>
               </div>
             </div>
@@ -5469,7 +5469,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                       : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
                   }`}
                 >
-                  ðŸªª Kartu Resmi (Semua Mapel - 1 Kartu)
+                  🪪 Kartu Resmi (Semua Mapel - 1 Kartu)
                 </button>
                 <button
                   type="button"
@@ -5480,7 +5480,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                       : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
                   }`}
                 >
-                  ðŸ“Œ Kartu Khusus Mapel Ini ({selectedDocSubject.token})
+                  📌 Kartu Khusus Mapel Ini ({selectedDocSubject.token})
                 </button>
               </div>
             </div>
@@ -5540,7 +5540,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                     BERITA ACARA PELAKSANAAN {bapExamTitle}
                   </h3>
                   <p className="text-xs font-sans text-slate-600">
-                    Tahun Ajaran {bapAcademicYear} â€¢ {bapSemester} â€¢ Berbasis Komputer & Android (CBT)
+                    Tahun Ajaran {bapAcademicYear} • {bapSemester} • Berbasis Komputer & Android (CBT)
                   </p>
                 </div>
 
@@ -5575,12 +5575,12 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                     </div>
                     <div>
                       <span className="text-slate-500 block text-[11px]">Durasi Ujian & Token Rilis:</span>
-                      <strong className="text-sm font-bold text-slate-900">{selectedDocSubject.durationMinutes} Menit â€¢ Token: {selectedDocSubject.token}</strong>
+                      <strong className="text-sm font-bold text-slate-900">{selectedDocSubject.durationMinutes} Menit • Token: {selectedDocSubject.token}</strong>
                     </div>
                     <div>
                       <span className="text-slate-500 block text-[11px]">ID Server & Jumlah Butir Soal:</span>
                       <strong className="text-sm font-bold text-slate-900">
-                        {bapServerId} â€¢ {questions.filter(q => q.subjectId === selectedDocSubject.id).length} Soal
+                        {bapServerId} • {questions.filter(q => q.subjectId === selectedDocSubject.id).length} Soal
                       </strong>
                     </div>
                   </div>
@@ -5630,7 +5630,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                               <div key={std.id} className="p-1.5 rounded bg-white border border-rose-200 text-slate-800">
                                 <span className="font-bold text-rose-700 mr-1">{idx + 1}.</span>
                                 <span className="font-semibold">{std.name}</span>
-                                <span className="text-slate-500 block text-[9px] font-mono">NISN: {std.nisn || '-'} â€¢ Kls: {std.className}</span>
+                                <span className="text-slate-500 block text-[9px] font-mono">NISN: {std.nisn || '-'} • Kls: {std.className}</span>
                               </div>
                             ))}
                           </div>
@@ -5655,7 +5655,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                         <span>{docSignatureMode === 'tte' ? 'Dokumen Berita Acara Resmi Terverifikasi' : 'Dokumen Berita Acara Resmi (Blanko Fisik)'}</span>
                       </div>
                       <p className="text-[10px] text-slate-500 font-mono">
-                        ID BAP: CBT58-BAP-{(selectedDocSubject.token || '58').toUpperCase()} â€¢ Server: {bapServerId}
+                        ID BAP: CBT58-BAP-{(selectedDocSubject.token || '58').toUpperCase()} • Server: {bapServerId}
                       </p>
                       <p className="text-[9.5px] text-slate-500">
                         {docSignatureMode === 'tte'
@@ -5817,7 +5817,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                         <span>Dokumen Berita Acara Resmi Terverifikasi TTE Elektronik Server CBT {effectiveSchoolSettings.schoolName}</span>
                       </div>
                       <div className="font-mono text-[9px] text-slate-400">
-                        ID: CBT58-BAP-{(selectedDocSubject.token || '58').toUpperCase()} â€¢ Dicetak: {bapDateFormatted}
+                        ID: CBT58-BAP-{(selectedDocSubject.token || '58').toUpperCase()} • Dicetak: {bapDateFormatted}
                       </div>
                     </div>
                   </div>
@@ -5833,7 +5833,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                     DAFTAR HADIR PESERTA ASESMEN SUMATIF
                   </h3>
                   <p className="text-xs text-slate-600">
-                    Mata Pelajaran: <strong>{selectedDocSubject.title}</strong> â€¢ Rombel: <strong>{selectedDocClass === 'Semua Kelas' ? (subjectDetectedGrade ? `Seluruh Rombel Kelas ${subjectDetectedGrade}` : 'Semua Kelas') : `Kelas ${selectedDocClass}`}</strong>
+                    Mata Pelajaran: <strong>{selectedDocSubject.title}</strong> • Rombel: <strong>{selectedDocClass === 'Semua Kelas' ? (subjectDetectedGrade ? `Seluruh Rombel Kelas ${subjectDetectedGrade}` : 'Semua Kelas') : `Kelas ${selectedDocClass}`}</strong>
                   </p>
                 </div>
 
@@ -5974,7 +5974,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                     <span>Dokumen Resmi Terverifikasi TTE Elektronik Server CBT {effectiveSchoolSettings.schoolName}</span>
                   </div>
                   <div className="font-mono text-[8.5px] sm:text-[9px] text-slate-400">
-                    ID: CBT58-PRESENSI-{(selectedDocSubject.token || '58').toUpperCase()} â€¢ Dicetak: {bapDateFormatted}
+                    ID: CBT58-PRESENSI-{(selectedDocSubject.token || '58').toUpperCase()} • Dicetak: {bapDateFormatted}
                   </div>
                 </div>
               </div>
@@ -5989,8 +5989,8 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                   </h3>
                   <p className="text-xs text-slate-600">
                     {cardMode === 'general'
-                      ? `${effectiveSchoolSettings.schoolName} â€¢ Berlaku untuk Seluruh Sesi Asesmen â€¢ Rombel: ${selectedDocClass === 'Semua Kelas' ? (subjectDetectedGrade ? `Seluruh Rombel Kelas ${subjectDetectedGrade}` : 'Semua Kelas') : `Kelas ${selectedDocClass}`}`
-                      : `${effectiveSchoolSettings.schoolName} â€¢ Mata Pelajaran: ${selectedDocSubject.title} â€¢ Rombel: ${selectedDocClass === 'Semua Kelas' ? (subjectDetectedGrade ? `Seluruh Rombel Kelas ${subjectDetectedGrade}` : 'Semua Kelas') : `Kelas ${selectedDocClass}`}`}
+                      ? `${effectiveSchoolSettings.schoolName} • Berlaku untuk Seluruh Sesi Asesmen • Rombel: ${selectedDocClass === 'Semua Kelas' ? (subjectDetectedGrade ? `Seluruh Rombel Kelas ${subjectDetectedGrade}` : 'Semua Kelas') : `Kelas ${selectedDocClass}`}`
+                      : `${effectiveSchoolSettings.schoolName} • Mata Pelajaran: ${selectedDocSubject.title} • Rombel: ${selectedDocClass === 'Semua Kelas' ? (subjectDetectedGrade ? `Seluruh Rombel Kelas ${subjectDetectedGrade}` : 'Semua Kelas') : `Kelas ${selectedDocClass}`}`}
                   </p>
                 </div>
 
@@ -6033,7 +6033,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                               </span>
                               {cardMode === 'general' ? (
                                 <span className="font-medium text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded text-[10px]">
-                                  {bapRoom} â€¢ Token diumumkan di ruang
+                                  {bapRoom} • Token diumumkan di ruang
                                 </span>
                               ) : (
                                 <span className="font-mono font-bold text-violet-700 bg-violet-50 px-1 rounded">
@@ -6059,7 +6059,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                     <span>Kartu Peserta Resmi Terverifikasi Server CBT {effectiveSchoolSettings.schoolName}</span>
                   </div>
                   <div className="font-mono text-[9px] text-slate-400">
-                    ID: CBT58-KARTU-{(selectedDocClass || 'ALL').replace(/\s+/g, '')} â€¢ Dicetak: {bapDateFormatted}
+                    ID: CBT58-KARTU-{(selectedDocClass || 'ALL').replace(/\s+/g, '')} • Dicetak: {bapDateFormatted}
                   </div>
                 </div>
               </div>
@@ -6073,7 +6073,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                     LEGER HASIL ASESMEN SUMATIF RESMI
                   </h3>
                   <p className="text-xs text-slate-600">
-                    Mata Pelajaran: <strong>{selectedDocSubject.title}</strong> â€¢ Standar KKM: <strong>75</strong> â€¢ Rombel: <strong>{selectedDocClass === 'Semua Kelas' ? (subjectDetectedGrade ? `Seluruh Rombel Kelas ${subjectDetectedGrade}` : 'Semua Kelas') : `Kelas ${selectedDocClass}`}</strong>
+                    Mata Pelajaran: <strong>{selectedDocSubject.title}</strong> • Standar KKM: <strong>75</strong> • Rombel: <strong>{selectedDocClass === 'Semua Kelas' ? (subjectDetectedGrade ? `Seluruh Rombel Kelas ${subjectDetectedGrade}` : 'Semua Kelas') : `Kelas ${selectedDocClass}`}</strong>
                   </p>
                 </div>
 
@@ -6232,10 +6232,10 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                 {/* Catatan Kaki Leger Nilai */}
                 <div className="mt-8 pt-3 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between text-[9px] sm:text-[10px] text-slate-500 font-sans gap-2 print:border-slate-300">
                   <div className="text-slate-600 font-medium">
-                    {effectiveSchoolSettings.schoolName} â€¢ Leger Asesmen Sumatif Mata Pelajaran: {selectedDocSubject.title}
+                    {effectiveSchoolSettings.schoolName} • Leger Asesmen Sumatif Mata Pelajaran: {selectedDocSubject.title}
                   </div>
                   <div className="font-mono text-[8.5px] sm:text-[9px] text-slate-400">
-                    ID: CBT58-LEGER-{(selectedDocSubject.token || '58').toUpperCase()} â€¢ Dicetak: {bapDateFormatted}
+                    ID: CBT58-LEGER-{(selectedDocSubject.token || '58').toUpperCase()} • Dicetak: {bapDateFormatted}
                   </div>
                 </div>
               </div>
@@ -6350,7 +6350,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                         <p className="text-xs text-slate-400 mt-0.5 flex items-center gap-2 flex-wrap">
                           <span>ID Paket: <code className="font-mono text-[11px]">{subItem.id}</code></span>
                           {subItem.examDate && (
-                            <span>â€¢ Tanggal Ujian: <strong className="text-slate-700 dark:text-slate-300 font-mono">{subItem.examDate}</strong></span>
+                            <span>• Tanggal Ujian: <strong className="text-slate-700 dark:text-slate-300 font-mono">{subItem.examDate}</strong></span>
                           )}
                         </p>
                       </div>
@@ -6396,7 +6396,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                           <button
                             onClick={() => handleRandomizeToken(subItem)}
                             className="p-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 hover:bg-violet-50 dark:hover:bg-violet-950 text-slate-600 dark:text-slate-300 hover:text-violet-600 transition cursor-pointer"
-                            title="Acak Token Baru (ðŸŽ²)"
+                            title="Acak Token Baru (🎲)"
                           >
                             <Shuffle className="w-3.5 h-3.5" />
                           </button>
@@ -6538,7 +6538,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                   <Check className="w-4 h-4" />
                   <span>{monitoringActionToast}</span>
                 </div>
-                <button onClick={() => setMonitoringActionToast(null)} className="text-white hover:text-slate-200 ml-3">âœ•</button>
+                <button onClick={() => setMonitoringActionToast(null)} className="text-white hover:text-slate-200 ml-3">✕</button>
               </div>
             )}
 
@@ -7011,7 +7011,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                       Multi-Mapel & Rombel
                     </span>
                     <span className="px-2.5 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 text-[10px] font-bold border border-emerald-200/60 dark:border-emerald-800/60 flex items-center gap-1">
-                      <span>â˜ï¸</span>
+                      <span>☁️</span>
                       <span>Cloud Database Supabase</span>
                     </span>
                   </div>
@@ -7028,7 +7028,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                   className="px-3.5 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-semibold text-xs transition cursor-pointer flex items-center gap-1.5"
                 >
                   <span>{isAssignmentSectionOpen ? 'Tutup Formulir' : 'Buka Formulir'}</span>
-                  <span>{isAssignmentSectionOpen ? 'â–²' : 'â–¼'}</span>
+                  <span>{isAssignmentSectionOpen ? '▲' : '▼'}</span>
                 </button>
 
                 <button
@@ -7067,7 +7067,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                       >
                         {currentTeacher && (
                           <option value={currentTeacher.id}>
-                            â˜… {currentTeacher.name} (Saya Sendiri - {currentTeacher.role})
+                            ★ {currentTeacher.name} (Saya Sendiri - {currentTeacher.role})
                           </option>
                         )}
                         {(teachers || [])
@@ -7098,7 +7098,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                         </span>
                       </div>
                       <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                        Total {assignmentsForm.length} mata pelajaran aktif diampu â€¢ Tersinkron otomatis ke Supabase Cloud
+                        Total {assignmentsForm.length} mata pelajaran aktif diampu • Tersinkron otomatis ke Supabase Cloud
                       </p>
                     </div>
                   </div>
@@ -7179,7 +7179,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                                 </option>
                               ))}
                               <option value="__custom__">
-                                âœŽ Mapel Kustom / Ketik Manual Lainnya...
+                                ✎ Mapel Kustom / Ketik Manual Lainnya...
                               </option>
                             </select>
                           </div>
@@ -7276,7 +7276,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
 
                           {selectedClassesCount === 0 && (
                             <p className="text-[11px] text-rose-500 font-medium pt-1">
-                              âš ï¸ Harap centang minimal satu rombel kelas di atas agar soal Anda dapat diakses oleh siswa di kelas tersebut.
+                              ⚠️ Harap centang minimal satu rombel kelas di atas agar soal Anda dapat diakses oleh siswa di kelas tersebut.
                             </p>
                           )}
                         </div>
@@ -7287,7 +7287,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
 
                 {/* Info Note Keamanan */}
                 <div className="p-4 rounded-2xl bg-blue-50/60 dark:bg-blue-950/20 border border-blue-200/60 dark:border-blue-800/40 text-[11px] text-blue-800 dark:text-blue-300 leading-relaxed flex items-start gap-2.5">
-                  <span className="text-base shrink-0">ðŸ’¡</span>
+                  <span className="text-base shrink-0">💡</span>
                   <div>
                     <strong>Keamanan Bank Soal & Privasi:</strong> Mengubah rombel kelas atau menambahkan mata pelajaran baru tidak akan pernah menghapus bank soal yang sudah dibuat sebelumnya. Di CBT 58, soal disimpan mandiri di Supabase Cloud berdasarkan ID mata pelajaran resmi, sehingga tidak akan bentrok atau tertukar dengan dewan guru lainnya.
                   </div>
@@ -7327,7 +7327,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                       Global Cetak
                     </span>
                     <span className="px-2.5 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 text-[10px] font-bold border border-emerald-200/60 dark:border-emerald-800/60 flex items-center gap-1">
-                      <span>â˜ï¸</span>
+                      <span>☁️</span>
                       <span>Cloud Database Supabase</span>
                     </span>
                     <span className="px-2.5 py-0.5 rounded-full bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 text-[10px] font-bold border border-blue-200/60 dark:border-blue-800/60 uppercase">
@@ -7347,7 +7347,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                   className="px-3.5 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-semibold text-xs transition cursor-pointer flex items-center gap-1.5"
                 >
                   <span>{isKopSettingsOpen ? 'Tutup Pengaturan' : 'Buka Pengaturan'}</span>
-                  <span>{isKopSettingsOpen ? 'â–²' : 'â–¼'}</span>
+                  <span>{isKopSettingsOpen ? '▲' : '▼'}</span>
                 </button>
 
                 <button
@@ -7798,7 +7798,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                     <span>Identitas Pejabat Satuan Pendidikan & TTE Barcode/QR</span>
                   </h4>
                   <span className="px-2.5 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 text-[10px] font-bold border border-emerald-200/60 dark:border-emerald-800/60 flex items-center gap-1">
-                    <span>â˜ï¸</span>
+                    <span>☁️</span>
                     <span>Database Cloud Supabase</span>
                   </span>
                 </div>
@@ -7869,7 +7869,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                       </h5>
                     </div>
                     <span className="text-[10px] font-semibold text-violet-600 dark:text-violet-400 bg-violet-50 dark:bg-violet-950/60 px-2 py-0.5 rounded-full border border-violet-200 dark:border-violet-800">
-                      ðŸ›ï¸ Digunakan pada Cetak Sertifikat Siswa
+                      🏛️ Digunakan pada Cetak Sertifikat Siswa
                     </span>
                   </div>
 
@@ -7948,7 +7948,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                         </button>
                       )}
                       <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800">
-                        ðŸ‘¨â€ðŸ« Digunakan pada Cetak Dossier Siswa
+                        👨‍🏫 Digunakan pada Cetak Dossier Siswa
                       </span>
                     </div>
                   </div>
@@ -8108,7 +8108,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                             : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
                         }`}
                       >
-                        ðŸ›ï¸ Kepsek (Sertifikat)
+                        🏛️ Kepsek (Sertifikat)
                       </button>
                       <button
                         type="button"
@@ -8119,7 +8119,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                             : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
                         }`}
                       >
-                        ðŸ‘¨â€ðŸ« Guru (Dossier)
+                        👨‍🏫 Guru (Dossier)
                       </button>
                     </div>
                   </div>
@@ -8147,10 +8147,10 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
 
                 <div className="text-[10px] text-slate-500 dark:text-slate-400 leading-relaxed bg-white/60 dark:bg-slate-900/60 p-2.5 rounded-xl border border-slate-200/60 dark:border-slate-800/60 space-y-1">
                   <p>
-                    ðŸ“Œ <strong>TTE Kepala Sekolah:</strong> Dicantumkan pada Sertifikat Kelulusan & Nilai Resmi Siswa.
+                    📌 <strong>TTE Kepala Sekolah:</strong> Dicantumkan pada Sertifikat Kelulusan & Nilai Resmi Siswa.
                   </p>
                   <p>
-                    ðŸ“Œ <strong>TTE Guru/Proktor:</strong> Dicantumkan pada Dossier Lembar Hasil Ujian per butir soal siswa.
+                    📌 <strong>TTE Guru/Proktor:</strong> Dicantumkan pada Dossier Lembar Hasil Ujian per butir soal siswa.
                   </p>
                 </div>
               </div>
@@ -8239,7 +8239,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                 onClick={handleCloseQuestionModal}
                 className="p-1 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 cursor-pointer"
               >
-                âœ•
+                ✕
               </button>
             </div>
 
@@ -8436,7 +8436,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                                 className="text-rose-500 hover:text-rose-700 p-1 cursor-pointer"
                                 title="Hapus Opsi ini"
                               >
-                                âœ•
+                                ✕
                               </button>
                             )}
                           </div>
@@ -8458,7 +8458,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                                 }}
                                 className="text-rose-500 hover:text-rose-600 text-[10px] font-bold p-1"
                               >
-                                âœ• Hapus
+                                ✕ Hapus
                               </button>
                             </div>
                           )}
@@ -8548,7 +8548,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                                 onClick={() => setPgOptions(prev => prev.filter((_, i) => i !== idx))}
                                 className="text-rose-500 hover:text-rose-700 p-1 cursor-pointer"
                               >
-                                âœ•
+                                ✕
                               </button>
                             )}
                           </div>
@@ -8570,7 +8570,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                                 }}
                                 className="text-rose-500 hover:text-rose-600 text-[10px] font-bold p-1"
                               >
-                                âœ• Hapus
+                                ✕ Hapus
                               </button>
                             </div>
                           )}
@@ -8674,7 +8674,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                                 onClick={() => setBsStatements(prev => prev.filter((_, idx) => idx !== sIdx))}
                                 className="text-rose-500 hover:text-rose-700 px-1 cursor-pointer"
                               >
-                                âœ•
+                                ✕
                               </button>
                             )}
                           </div>
@@ -8695,7 +8695,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                                 }}
                                 className="text-rose-500 hover:text-rose-600 text-[10px] font-bold p-1"
                               >
-                                âœ• Hapus
+                                ✕ Hapus
                               </button>
                             </div>
                           )}
@@ -8733,7 +8733,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
               {modalType === 'Menjodohkan' && (
                 <div className="space-y-3.5 p-4 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-violet-500/20">
                   <label className="block text-slate-700 dark:text-slate-300 font-bold">
-                    Pasangan Menjodohkan (Kiri: Pertanyaan/Pernyataan âž” Kanan: Jawaban Tepat):
+                    Pasangan Menjodohkan (Kiri: Pertanyaan/Pernyataan ➔ Kanan: Jawaban Tepat):
                   </label>
 
                   <div className="space-y-3">
@@ -8786,7 +8786,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                                   }}
                                   className="text-rose-500 text-[10px] font-bold"
                                 >
-                                  âœ•
+                                  ✕
                                 </button>
                               </div>
                             )}
@@ -8795,7 +8795,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                           {/* Sisi Kanan */}
                           <div className="space-y-1">
                             <div className="flex items-center gap-1.5">
-                              <span className="font-bold text-emerald-600 text-xs">âž”</span>
+                              <span className="font-bold text-emerald-600 text-xs">➔</span>
                               <input
                                 type="text"
                                 value={pair.aText}
@@ -8831,7 +8831,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                                   onClick={() => setMatchingPairs(prev => prev.filter((_, i) => i !== pIdx))}
                                   className="text-rose-500 hover:text-rose-700 p-1 cursor-pointer"
                                 >
-                                  âœ•
+                                  ✕
                                 </button>
                               )}
                             </div>
@@ -8847,7 +8847,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                                   }}
                                   className="text-rose-500 text-[10px] font-bold"
                                 >
-                                  âœ•
+                                  ✕
                                 </button>
                               </div>
                             )}
@@ -9011,7 +9011,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                     {formatProperName(selectedResult.studentName)}
                   </h3>
                   <p className="text-xs text-slate-500 dark:text-slate-400 print:text-slate-700">
-                    NISN: <strong className="text-slate-800 dark:text-slate-200 print:text-black font-mono">{dossierNisn}</strong> â€¢ Kelas: <strong className="text-slate-800 dark:text-slate-200 print:text-black">{cleanDossierClass}</strong> â€¢ Mapel: <strong className="text-slate-800 dark:text-slate-200 print:text-black">{cleanDossierSubjectName}</strong> â€¢ Waktu Kumpul: <strong className="text-slate-800 dark:text-slate-200 print:text-black">{selectedResult.submittedAt}</strong>
+                    NISN: <strong className="text-slate-800 dark:text-slate-200 print:text-black font-mono">{dossierNisn}</strong> • Kelas: <strong className="text-slate-800 dark:text-slate-200 print:text-black">{cleanDossierClass}</strong> • Mapel: <strong className="text-slate-800 dark:text-slate-200 print:text-black">{cleanDossierSubjectName}</strong> • Waktu Kumpul: <strong className="text-slate-800 dark:text-slate-200 print:text-black">{selectedResult.submittedAt}</strong>
                   </p>
                   {rawDossierSubjectTitle !== cleanDossierSubjectName && (
                     <p className="text-[11px] text-slate-400 print:text-slate-600">
@@ -9039,7 +9039,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                 {/* 1. Benar */}
                 <div className="p-2.5 rounded-xl bg-white dark:bg-slate-900 print:bg-white border border-emerald-200 dark:border-emerald-800 print:border-slate-300 flex items-center gap-2">
                   <div className="w-8 h-8 rounded-lg bg-emerald-100 dark:bg-emerald-950/80 text-emerald-600 flex items-center justify-center font-bold text-sm shrink-0">
-                    âœ”
+                    ✔
                   </div>
                   <div>
                     <span className="text-[10px] text-slate-500 font-semibold block">Jawaban Benar</span>
@@ -9052,7 +9052,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                 {/* 2. Salah */}
                 <div className="p-2.5 rounded-xl bg-white dark:bg-slate-900 print:bg-white border border-rose-200 dark:border-rose-800 print:border-slate-300 flex items-center gap-2">
                   <div className="w-8 h-8 rounded-lg bg-rose-100 dark:bg-rose-950/80 text-rose-600 flex items-center justify-center font-bold text-sm shrink-0">
-                    âœ˜
+                    ✘
                   </div>
                   <div>
                     <span className="text-[10px] text-slate-500 font-semibold block">Jawaban Salah</span>
@@ -9065,7 +9065,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                 {/* 3. Sebagian Benar */}
                 <div className="p-2.5 rounded-xl bg-white dark:bg-slate-900 print:bg-white border border-amber-200 dark:border-amber-800 print:border-slate-300 flex items-center gap-2">
                   <div className="w-8 h-8 rounded-lg bg-amber-100 dark:bg-amber-950/80 text-amber-600 flex items-center justify-center font-bold text-sm shrink-0">
-                    âš 
+                    ⚠️
                   </div>
                   <div>
                     <span className="text-[10px] text-slate-500 font-semibold block">Sebagian Benar</span>
@@ -9078,7 +9078,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                 {/* 4. Tidak Dijawab */}
                 <div className="p-2.5 rounded-xl bg-white dark:bg-slate-900 print:bg-white border border-slate-200 dark:border-slate-700 print:border-slate-300 flex items-center gap-2">
                   <div className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-500 flex items-center justify-center font-bold text-sm shrink-0">
-                    âšª
+                    ⚪
                   </div>
                   <div>
                     <span className="text-[10px] text-slate-500 font-semibold block">Tidak Dijawab</span>
@@ -9129,7 +9129,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                         >
                           <span className="leading-none text-[8.5px] font-sans text-slate-500">{item.qNum}</span>
                           <span className="leading-none font-bold">
-                            {isCor ? 'âœ”' : isWro ? 'âœ˜' : isPar ? 'Â½' : isEss ? 'âœŽ' : 'â€”'}
+                            {isCor ? '✔' : isWro ? '✘' : isPar ? '½' : isEss ? '✎' : '—'}
                           </span>
                         </div>
                       );
@@ -9142,7 +9142,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
               {essayMaxNotice && (
                 <div className="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 rounded-xl text-xs font-semibold flex items-center justify-between animate-in fade-in print:hidden">
                   <span>{essayMaxNotice}</span>
-                  <button onClick={() => setEssayMaxNotice(null)} className="text-rose-500 font-bold ml-2">âœ•</button>
+                  <button onClick={() => setEssayMaxNotice(null)} className="text-rose-500 font-bold ml-2">✕</button>
                 </div>
               )}
 
@@ -9205,26 +9205,26 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                         <div>
                           {isEssay ? (
                             <span className="px-3 py-1 rounded-full bg-amber-50 dark:bg-amber-950/60 print:bg-slate-100 text-amber-700 dark:text-amber-300 print:text-slate-900 font-bold text-[11px] border border-amber-200 dark:border-amber-800 print:border-slate-300">
-                              ðŸ“ Nilai Uraian: {earned} / {maxPoints} Poin
+                              📝 Nilai Uraian: {earned} / {maxPoints} Poin
                             </span>
                           ) : isFull ? (
                             <span className="px-3 py-1 rounded-full bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 print:bg-emerald-50 print:text-emerald-900 font-extrabold text-[11px] border border-emerald-300 dark:border-emerald-800 print:border-emerald-300 flex items-center gap-1 shadow-xs">
-                              <span>âœ” JAWABAN BENAR</span>
+                              <span>✔ JAWABAN BENAR</span>
                               <span>(+{earned} Poin)</span>
                             </span>
                           ) : isPartial ? (
                             <span className="px-3 py-1 rounded-full bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 print:bg-amber-50 print:text-amber-900 font-extrabold text-[11px] border border-amber-300 dark:border-amber-800 print:border-amber-300 flex items-center gap-1">
-                              <span>âš  SEBAGIAN BENAR</span>
+                              <span>⚠️ SEBAGIAN BENAR</span>
                               <span>(+{earned} / {maxPoints} Poin)</span>
                             </span>
                           ) : isUnanswered ? (
                             <span className="px-3 py-1 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 print:bg-slate-100 print:text-slate-800 font-extrabold text-[11px] border border-slate-300 dark:border-slate-600 print:border-slate-300 flex items-center gap-1">
-                              <span>âšª TIDAK DIJAWAB</span>
+                              <span>⚪ TIDAK DIJAWAB</span>
                               <span>(0 Poin)</span>
                             </span>
                           ) : (
                             <span className="px-3 py-1 rounded-full bg-rose-100 dark:bg-rose-950/80 text-rose-800 dark:text-rose-300 print:bg-rose-50 print:text-rose-900 font-extrabold text-[11px] border border-rose-300 dark:border-rose-900 print:border-rose-300 flex items-center gap-1 shadow-xs">
-                              <span>âœ˜ JAWABAN SALAH</span>
+                              <span>✘ JAWABAN SALAH</span>
                               <span>(0 / {maxPoints} Poin)</span>
                             </span>
                           )}
@@ -9265,15 +9265,15 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                             </span>
                             {isFull ? (
                               <span className="px-1.5 py-0.5 rounded bg-emerald-200 dark:bg-emerald-900 text-emerald-800 dark:text-emerald-200 font-bold text-[9px]">
-                                âœ” Tepat
+                                ✔ Tepat
                               </span>
                             ) : isWrong ? (
                               <span className="px-1.5 py-0.5 rounded bg-rose-200 dark:bg-rose-900 text-rose-800 dark:text-rose-200 font-bold text-[9px]">
-                                âœ˜ Tidak Tepat
+                                ✘ Tidak Tepat
                               </span>
                             ) : isPartial ? (
                               <span className="px-1.5 py-0.5 rounded bg-amber-200 dark:bg-amber-900 text-amber-800 dark:text-amber-200 font-bold text-[9px]">
-                                âš  Parsial
+                                ⚠️ Parsial
                               </span>
                             ) : null}
                           </div>
@@ -9300,7 +9300,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                                         return (
                                           <span key={idx} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-violet-50 dark:bg-violet-950/50 print:bg-white text-violet-700 dark:text-violet-300 print:text-black border border-violet-200 dark:border-violet-800 print:border-slate-300 text-xs font-bold">
                                             <span>{left}</span>
-                                            <span className="text-slate-400">âž”</span>
+                                            <span className="text-slate-400">➔</span>
                                             <span className="text-slate-900 dark:text-white print:text-black">{right}</span>
                                           </span>
                                         );
@@ -9324,7 +9324,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                                   return (
                                     <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-violet-50 dark:bg-violet-950/50 print:bg-white text-violet-700 dark:text-violet-300 print:text-black border border-violet-200 dark:border-violet-800 print:border-slate-300 text-xs font-bold">
                                       <span>{objAns.questionItem}</span>
-                                      <span className="text-slate-400">âž”</span>
+                                      <span className="text-slate-400">➔</span>
                                       <span className="text-slate-900 dark:text-white print:text-black">{objAns.answerItem}</span>
                                     </span>
                                   );
@@ -9694,7 +9694,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                 onClick={() => setIsAddScheduleModalOpen(false)}
                 className="p-1 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
               >
-                âœ•
+                ✕
               </button>
             </div>
 
@@ -9752,7 +9752,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                   }}
                   className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white font-semibold cursor-pointer text-xs"
                 >
-                  <option value="ALL">ðŸŒ Semua Kelas (Seluruh Siswa)</option>
+                  <option value="ALL">🌐 Semua Kelas (Seluruh Siswa)</option>
                   <optgroup label="Pilihan Cepat per Tingkat">
                     <option value="VII_ALL">Seluruh Kelas VII (VII.1, VII.2, VII.3, ...)</option>
                     <option value="VIII_ALL">Seluruh Kelas VIII (VIII.1, VIII.2, VIII.3, ...)</option>
@@ -9778,7 +9778,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                       >
                         Semua Kelas
                       </button>
-                      <span>â€¢</span>
+                      <span>•</span>
                       <button
                         type="button"
                         onClick={() => setNewSubClass(studentClasses[0] || 'VII.1')}
@@ -9870,7 +9870,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                       onClick={() => setNewSubToken('SMP58' + Math.floor(100 + Math.random() * 900))}
                       className="text-violet-600 dark:text-violet-400 text-[11px] font-bold hover:underline"
                     >
-                      ðŸŽ² Acak
+                      🎲 Acak
                     </button>
                   </label>
                   <input
@@ -9973,7 +9973,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                 onClick={() => setIsEditScheduleModalOpen(false)}
                 className="p-1 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
               >
-                âœ•
+                ✕
               </button>
             </div>
 
@@ -10030,7 +10030,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                   }}
                   className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white font-semibold cursor-pointer text-xs"
                 >
-                  <option value="ALL">ðŸŒ Semua Kelas (Seluruh Siswa)</option>
+                  <option value="ALL">🌐 Semua Kelas (Seluruh Siswa)</option>
                   <optgroup label="Pilihan Cepat per Tingkat">
                     <option value="VII_ALL">Seluruh Kelas VII (VII.1, VII.2, VII.3, ...)</option>
                     <option value="VIII_ALL">Seluruh Kelas VIII (VIII.1, VIII.2, VIII.3, ...)</option>
@@ -10056,7 +10056,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                       >
                         Semua Kelas
                       </button>
-                      <span>â€¢</span>
+                      <span>•</span>
                       <button
                         type="button"
                         onClick={() => setEditSubClass(studentClasses[0] || 'VII.1')}
@@ -10154,7 +10154,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                       }}
                       className="text-violet-600 dark:text-violet-400 text-[11px] font-bold hover:underline"
                     >
-                      ðŸŽ² Acak
+                      🎲 Acak
                     </button>
                   </label>
                   <input

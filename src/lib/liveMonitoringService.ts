@@ -359,7 +359,7 @@ export function sendProctorCommand(cmd: { action: ProctorActionType; studentName
     localStorage.setItem(COMMAND_STORAGE_KEY, JSON.stringify(payload));
   } catch {}
 
-  // 2. Siarkan via BroadcastChannel
+  // 2. Siarkan via BroadcastChannel (same-device, antar-tab)
   const bc = getSharedBroadcastChannel();
   if (bc) {
     try {
@@ -367,7 +367,19 @@ export function sendProctorCommand(cmd: { action: ProctorActionType; studentName
     } catch {}
   }
 
-  // 3. Update sesi lokal seketika
+  // 3. Siarkan via Supabase Realtime Channel (lintas perangkat: laptop guru → HP siswa)
+  const supa = initSupabaseChannel();
+  if (supa) {
+    try {
+      supa.send({
+        type: 'broadcast',
+        event: 'proctor_command',
+        payload
+      });
+    } catch {}
+  }
+
+  // 4. Update sesi lokal seketika
   if (cmd.action === 'RESET_VIOLATION') {
     const cleanName = cmd.studentName.toLowerCase().trim();
     if (typeof window !== 'undefined') {

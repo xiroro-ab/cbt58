@@ -6663,6 +6663,18 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                           const result = await clearAllLockedStudents(targetSubId);
                           
                           if (result.success) {
+                            const resetAt = Date.now();
+                            setLiveSessions(prev => prev.map(session => (
+                              session.subjectId === targetSubId && session.status === 'blocked'
+                                ? {
+                                    ...session,
+                                    violationCount: 0,
+                                    status: 'ongoing' as const,
+                                    isFocus: true,
+                                    lastHeartbeat: resetAt
+                                  }
+                                : session
+                            )));
                             // Kirim command RESET_VIOLATION ke semua siswa terkunci
                             filteredSessions.filter(s => s.status === 'blocked').forEach(s => {
                               sendProctorCommand({
@@ -6947,6 +6959,20 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                                       subjectId: s.subjectId,
                                       className: s.className
                                     });
+                                    const resetAt = Date.now();
+                                    setLiveSessions(prev => prev.map(session => {
+                                      const sameStudent = session.studentName.toLowerCase().trim() === s.studentName.toLowerCase().trim();
+                                      const sameClass = !s.className || (session.className || '').toLowerCase().trim() === s.className.toLowerCase().trim();
+                                      return sameStudent && session.subjectId === s.subjectId && sameClass
+                                        ? {
+                                            ...session,
+                                            violationCount: 0,
+                                            status: 'ongoing' as const,
+                                            isFocus: true,
+                                            lastHeartbeat: resetAt
+                                          }
+                                        : session;
+                                    }));
                                     setMonitoringActionToast(`Pelanggaran siswa ${s.studentName} berhasil di-reset menjadi 0 dan ujian telah dibuka kuncinya.`);
                                   }}
                                   className={`p-2 rounded-xl transition cursor-pointer flex items-center gap-1 text-xs font-bold ${
@@ -7060,6 +7086,13 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                                         if (onDeleteResult) {
                                           await onDeleteResult(s.id, s.subjectId, s.studentName, s.className);
                                         }
+                                        const cleanName = s.studentName.toLowerCase().trim();
+                                        const cleanClass = (s.className || '').toLowerCase().trim();
+                                        setLiveSessions(prev => prev.filter(session => !(
+                                          session.studentName.toLowerCase().trim() === cleanName &&
+                                          session.subjectId === s.subjectId &&
+                                          (!cleanClass || (session.className || '').toLowerCase().trim() === cleanClass)
+                                        )));
                                         setMonitoringActionToast(`Sesi ujian siswa ${s.studentName} berhasil dibersihkan.`);
                                       }
                                     });

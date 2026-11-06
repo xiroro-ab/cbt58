@@ -353,8 +353,31 @@ export function reportStudentSession(session: ExamSession, forceDbWrite = false)
 /**
  * Menghapus sesi aktif ketika siswa telah menyelesaikan ujian secara mandiri atau dipaksa selesai
  */
-export function removeStudentSession(studentName: string, subjectId?: string, className?: string) {
-  if (typeof window === 'undefined' || !studentName) return;
+function clearStudentAttemptStorage(subjectId: string, studentName: string, className?: string) {
+  if (typeof window === 'undefined') return;
+  const cleanName = studentName.toLowerCase().trim();
+  const cleanClass = (className || '').toLowerCase().trim();
+  const keys = [
+    ...(cleanClass ? [
+      `cbt_blocked_${subjectId}_${cleanClass}_${cleanName}`,
+      `cbt_exam_state_${subjectId}_${cleanClass}_${cleanName}`,
+      `cbt_exam_questions_${subjectId}_${cleanClass}_${cleanName}`,
+      `cbt_submitted_${subjectId}_${cleanClass}_${cleanName}`
+    ] : []),
+    `cbt_blocked_${subjectId}_${cleanName}`,
+    `cbt_exam_state_${subjectId}_${cleanName}`,
+    `cbt_exam_questions_${subjectId}_${cleanName}`,
+    `cbt_submitted_${subjectId}_${cleanName}`,
+    `cbt_answers_${studentName}_${subjectId}`
+  ];
+  keys.forEach(key => {
+    try { localStorage.removeItem(key); } catch {}
+  });
+}
+
+export async function removeStudentSession(studentName: string, subjectId?: string, className?: string): Promise<boolean> {
+  if (typeof window === 'undefined' || !studentName) return false;
+  let deleted = true;
   try {
     const cleanName = studentName.toLowerCase().trim();
     const cleanClass = (className || '').toLowerCase().trim();
@@ -378,9 +401,17 @@ export function removeStudentSession(studentName: string, subjectId?: string, cl
     }
 
     if (subjectId) {
-      void deleteExamSession(subjectId, studentName, className);
+      const key = `${subjectId}|${cleanClass}|${cleanName}`;
+      const pending = sessionWriteChains.get(key);
+      if (pending) await pending.catch(() => {});
+      lastDbHeartbeat.delete(key);
+      lastAnswersSent.delete(key);
+      deleted = await deleteExamSession(subjectId, studentName, className);
     }
-  } catch {}
+  } catch {
+    deleted = false;
+  }
+  return deleted;
 }
 
 /**
@@ -458,25 +489,17 @@ export async function sendProctorCommand(cmd: {
   } else if (cmd.action === 'RESET_EXAM') {
     if (typeof window !== 'undefined') {
       try {
-        if (cleanClass) localStorage.removeItem(`cbt_blocked_${cmd.subjectId}_${cleanClass}_${cleanName}`);
-        localStorage.removeItem(`cbt_blocked_${cmd.subjectId}_${cleanName}`);
-        localStorage.removeItem(`cbt_exam_state_${cmd.subjectId}_${cleanName}`);
-        localStorage.removeItem(`cbt_exam_questions_${cmd.subjectId}_${cleanName}`);
-        localStorage.removeItem(`cbt_answers_${cmd.studentName}_${cmd.subjectId}`);
-        localStorage.removeItem(`cbt_submitted_${cmd.subjectId}_${cleanName}`);
+        clearStudentAttemptStorage(cmd.subjectId, cmd.studentName, cmd.className);
       } catch {}
     }
-    removeStudentSession(cmd.studentName, cmd.subjectId, cmd.className);
+    await removeStudentSession(cmd.studentName, cmd.subjectId, cmd.className);
   } else if (cmd.action === 'FORCE_FINISH') {
     if (typeof window !== 'undefined') {
       try {
-        if (cleanClass) localStorage.removeItem(`cbt_blocked_${cmd.subjectId}_${cleanClass}_${cleanName}`);
-        localStorage.removeItem(`cbt_blocked_${cmd.subjectId}_${cleanName}`);
-        localStorage.removeItem(`cbt_exam_state_${cmd.subjectId}_${cleanName}`);
-        localStorage.removeItem(`cbt_exam_questions_${cmd.subjectId}_${cleanName}`);
+        clearStudentAttemptStorage(cmd.subjectId, cmd.studentName, cmd.className);
       } catch {}
     }
-    removeStudentSession(cmd.studentName, cmd.subjectId, cmd.className);
+    await removeStudentSession(cmd.studentName, cmd.subjectId, cmd.className);
   }
 
   // 4. Tulis perintah dan status sesi secara berurutan di server. FORCE_FINISH

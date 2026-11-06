@@ -53,6 +53,8 @@ interface ExamScreenProps {
   questions: Question[];
   studentName: string;
   studentClass?: string;
+  initialStartTime?: number;
+  initialRemainingSeconds?: number;
   onFinishExam: (resultData: any) => void;
   onExit: () => void;
 }
@@ -62,6 +64,8 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
   questions,
   studentName,
   studentClass,
+  initialStartTime,
+  initialRemainingSeconds,
   onFinishExam,
   onExit
 }) => {
@@ -131,11 +135,15 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
       if (savedLocalState.lastSavedTime && typeof savedLocalState.lastSavedTime === 'number') {
         const elapsedSinceLastSave = Math.floor((Date.now() - savedLocalState.lastSavedTime) / 1000);
         if (elapsedSinceLastSave > 0) {
-          return Math.max(0, savedLocalState.secondsRemaining - elapsedSinceLastSave);
+          const restored = Math.max(0, savedLocalState.secondsRemaining - elapsedSinceLastSave);
+          if (restored > 0) return restored;
+          if (typeof initialRemainingSeconds === 'number' && initialRemainingSeconds > 0) return initialRemainingSeconds;
+          return subject.durationMinutes * 60;
         }
       }
       return savedLocalState.secondsRemaining;
     }
+    if (typeof initialRemainingSeconds === 'number' && initialRemainingSeconds > 0) return initialRemainingSeconds;
     return subject.durationMinutes * 60;
   });
 
@@ -275,7 +283,7 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
   const [isCheckingUnlock, setIsCheckingUnlock] = useState(false);
   const [unlockCheckMessage, setUnlockCheckMessage] = useState<string | null>(null);
 
-  const startTimeRef = useRef(Date.now());
+  const startTimeRef = useRef(initialStartTime && initialStartTime > 0 ? initialStartTime : Date.now());
   const violationCountRef = useRef(violationCount);
   violationCountRef.current = violationCount;
   // Masa tenggang setelah layar ujian dimuat: mencegah refresh browser dihitung
@@ -1128,7 +1136,7 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
     setIsLocked(false);
 
     // Hapus sesi live monitoring & tandai sudah submit di storage lokal
-    removeStudentSession(studentName, subject.id, studentActualClass);
+    await removeStudentSession(studentName, subject.id, studentActualClass);
     if (typeof window !== 'undefined') {
       try {
         const cleanName = studentName.toLowerCase().trim();

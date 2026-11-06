@@ -97,6 +97,64 @@ export async function fetchActiveExamSessions(subjectId?: string): Promise<ExamS
     }));
 }
 
+export interface StudentExamSessionLookup {
+  available: boolean;
+  session: {
+    status: ExamSession['status'];
+    startTime: number;
+    lastHeartbeat: number;
+    remainingSeconds: number;
+  } | null;
+}
+
+/**
+ * Membaca sesi ujian siswa secara otoritatif sebelum memutuskan apakah
+ * state localStorage boleh dipakai untuk melanjutkan ujian.
+ * `available` membedakan "tidak ada sesi" dari "database gagal dibaca".
+ */
+export async function lookupStudentExamSession(
+  subjectId: string,
+  studentName: string,
+  className?: string
+): Promise<StudentExamSessionLookup> {
+  try {
+    let query = supabase
+      .from('exam_sessions')
+      .select('status,start_time,last_heartbeat,remaining_seconds')
+      .eq('subject_id', subjectId)
+      .ilike('student_name', studentName.trim());
+
+    if (className?.trim()) {
+      query = query.ilike('class_name', className.trim());
+    }
+
+    const { data, error } = await query
+      .order('last_heartbeat', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (error) {
+      console.warn('Gagal membaca sesi ujian siswa:', error.message);
+      return { available: false, session: null };
+    }
+
+    if (!data) return { available: true, session: null };
+
+    return {
+      available: true,
+      session: {
+        status: data.status as ExamSession['status'],
+        startTime: toEpoch(data.start_time, 0),
+        lastHeartbeat: toEpoch(data.last_heartbeat, 0),
+        remainingSeconds: Number(data.remaining_seconds) || 0
+      }
+    };
+  } catch (err) {
+    console.warn('Exception membaca sesi ujian siswa:', err);
+    return { available: false, session: null };
+  }
+}
+
 export async function fetchExamSessionAnswers(
   subjectId: string,
   studentName: string,

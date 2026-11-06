@@ -11,7 +11,7 @@ import {
   subscribeToTeacherStatus,
   TeacherStatusPayload
 } from './liveMonitoringService';
-import { LOCK_STATE_TITLE } from './examSessionService';
+import { LOCK_STATE_TITLE, deleteExamSession } from './examSessionService';
 
 export { subscribeToTeacherStatus };
 export type { TeacherStatusPayload };
@@ -746,6 +746,12 @@ export async function deleteExamResult(
 
       // Otomatis bersihkan notifikasi pelanggaran / autolock jika guru mereset hasil ujian siswa
       await clearStudentAutolockInSupabase(subjectId || '', studentName!, className || undefined);
+
+      // Hasil ujian dan sesi monitoring adalah satu percobaan ujian.
+      // Menghapus nilai tanpa menghapus sesi membuat guru tetap melihat siswa
+      // "Mengerjakan" dan heartbeat lama dapat menghidupkan baris sesi kembali.
+      const sessionDeleted = await deleteExamSession(subjectId || '', studentName!, className || undefined);
+      if (!sessionDeleted) return false;
     }
 
     notifyResultChanged({

@@ -16,6 +16,7 @@ import { HelpModal } from '@/components/modals/HelpModal';
 import { CertificateModal } from '@/components/modals/CertificateModal';
 import { Footer } from '@/components/layout/Footer';
 import { broadcastAnnouncementToStudents } from '@/lib/liveMonitoringService';
+import { lookupStudentExamSession } from '@/lib/examSessionService';
 import {
   fetchActiveSubject,
   fetchAllSubjects,
@@ -260,6 +261,10 @@ export default function Home() {
     subject: Subject;
     student: Student | null;
     questions: Question[];
+  } | null>(null);
+  const [studentResumeSession, setStudentResumeSession] = useState<{
+    startTime: number;
+    remainingSeconds: number;
   } | null>(null);
   const [agreedBriefingRules, setAgreedBriefingRules] = useState(true);
 
@@ -1118,10 +1123,11 @@ export default function Home() {
 
     try {
       // 3. Verifikasi Paralel Cepat (Cek Status Aktif Realtime di Supabase, Anti Re-Login, Anti-Cheat Lock & Muat Butir Soal serentak)
-      const [liveIsActive, submissionStatus, lockStatus, loadedQuestions] = await Promise.all([
+      const [liveIsActive, submissionStatus, lockStatus, studentSession, loadedQuestions] = await Promise.all([
         checkSubjectIsActive(matchedSub.id),
         checkStudentExamSubmission(matchedSub.id, studentName, selectedStudentClass),
         checkStudentLockStatus(matchedSub.id, studentName, matchedSub.violationLimit || 3, selectedStudentClass),
+        lookupStudentExamSession(matchedSub.id, studentName, selectedStudentClass),
         fetchQuestionsBySubject(matchedSub.id).catch(err => {
           console.warn('Gagal memuat soal ujian:', err);
           return [] as Question[];
@@ -1165,6 +1171,58 @@ export default function Home() {
             }
             localStorage.removeItem(`cbt_blocked_${matchedSub.id}_${cleanName}`);
           } catch {}
+        }
+
+        // State ujian hanya boleh dilanjutkan jika database masih memiliki
+        // sesi percobaan yang sama. Jika tidak ada sesi (mis. setelah tombol
+        // Reset Ujian/Hapus Nilai), state lama tidak boleh menghidupkan timer
+        // lama atau membuat layar langsung submit saat masuk kembali.
+        let localAttemptCanResume = false;
+        if (typeof window !== 'undefined') {
+          try {
+            const localStateKey = cleanClass
+              ? `cbt_exam_state_${matchedSub.id}_${cleanClass}_${cleanName}`
+              : `cbt_exam_state_${matchedSub.id}_${cleanName}`;
+            const rawState = localStorage.getItem(localStateKey) || localStorage.getItem(`cbt_exam_state_${matchedSub.id}_${cleanName}`);
+            if (rawState) {
+              const parsed = JSON.parse(rawState);
+              const savedSeconds = Number(parsed?.secondsRemaining);
+              const lastSavedAt = Number(parsed?.lastSavedTime);
+              const elapsed = lastSavedAt > 0 ? Math.floor((Date.now() - lastSavedAt) / 1000) : 0;
+              localAttemptCanResume = savedSeconds > elapsed && parsed?.isLocked !== true;
+            }
+          } catch {}
+        }
+        const serverSessionIsLive = Boolean(
+          studentSession.session
+          && (studentSession.session.status === 'ongoing' || studentSession.session.status === 'blocked')
+          && Date.now() - studentSession.session.lastHeartbeat < 120000
+        );
+        const hasResumableSession = serverSessionIsLive || localAttemptCanResume;
+        setStudentResumeSession(serverSessionIsLive && studentSession.session
+          ? {
+              startTime: studentSession.session.startTime,
+              remainingSeconds: studentSession.session.remainingSeconds
+            }
+          : null);
+        if (studentSession.available && !hasResumableSession && typeof window !== 'undefined') {
+          try {
+            const keys = [
+              ...(cleanClass ? [
+                `cbt_exam_state_${matchedSub.id}_${cleanClass}_${cleanName}`,
+                `cbt_exam_questions_${matchedSub.id}_${cleanClass}_${cleanName}`,
+                `cbt_blocked_${matchedSub.id}_${cleanClass}_${cleanName}`,
+                `cbt_submitted_${matchedSub.id}_${cleanClass}_${cleanName}`
+              ] : []),
+              `cbt_exam_state_${matchedSub.id}_${cleanName}`,
+              `cbt_exam_questions_${matchedSub.id}_${cleanName}`,
+              `cbt_blocked_${matchedSub.id}_${cleanName}`,
+              `cbt_submitted_${matchedSub.id}_${cleanName}`,
+              `cbt_answers_${studentName}_${matchedSub.id}`
+            ];
+            keys.forEach(key => localStorage.removeItem(key));
+          } catch {}
+          setStudentResumeSession(null);
         }
       }
 
@@ -1585,6 +1643,8 @@ export default function Home() {
           questions={questions}
           studentName={studentName}
           studentClass={resolveStudentSingleClass(studentName, selectedStudentClass || matchedStudent?.className)}
+          initialStartTime={studentResumeSession?.startTime}
+          initialRemainingSeconds={studentResumeSession?.remainingSeconds}
           onFinishExam={handleFinishExam}
           onExit={() => {
             if (currentTeacher) {

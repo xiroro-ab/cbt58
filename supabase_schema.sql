@@ -68,9 +68,13 @@ CREATE TABLE IF NOT EXISTS exam_sessions (
     start_time TIMESTAMPTZ DEFAULT NOW(),
     last_heartbeat TIMESTAMPTZ DEFAULT NOW(),
     progress_count INT DEFAULT 0,
+    total_questions INT DEFAULT 0,
+    remaining_seconds INT DEFAULT 0,
     violation_count INT DEFAULT 0,
     answers JSONB DEFAULT '[]'::jsonb,
-    status VARCHAR(20) DEFAULT 'ongoing' CHECK (status IN ('ongoing', 'completed', 'blocked'))
+    status VARCHAR(20) DEFAULT 'ongoing' CHECK (status IN ('ongoing', 'completed', 'blocked')),
+    is_focus BOOLEAN DEFAULT TRUE,
+    CONSTRAINT exam_sessions_subject_student_class_key UNIQUE (subject_id, student_name, class_name)
 );
 
 -- 6. TABEL HASIL UJIAN (Arsip Nilai Siswa)
@@ -455,6 +459,14 @@ CREATE INDEX IF NOT EXISTS idx_exam_results_submitted_at ON public.exam_results 
 -- D. Indeks Sesi Ujian Aktif & Heartbeat Monitoring
 CREATE INDEX IF NOT EXISTS idx_exam_sessions_subject_student ON public.exam_sessions (subject_id, student_name);
 CREATE INDEX IF NOT EXISTS idx_exam_sessions_heartbeat ON public.exam_sessions (last_heartbeat);
+
+-- Akses sesi live diperlukan oleh layar siswa (menulis heartbeat) dan guru
+-- (membaca sesi untuk monitoring). Monitoring menggunakan polling, bukan
+-- Supabase Realtime, agar tetap ringan untuk ratusan peserta.
+ALTER TABLE public.exam_sessions ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow public all exam sessions" ON public.exam_sessions;
+CREATE POLICY "Allow public all exam sessions" ON public.exam_sessions
+    FOR ALL TO public USING (true) WITH CHECK (true);
 
 -- E. Indeks Notifikasi & Pesan Bantuan Pengawas
 CREATE INDEX IF NOT EXISTS idx_exam_notifications_lookup ON public.exam_notifications (subject_id, student_name, is_read);

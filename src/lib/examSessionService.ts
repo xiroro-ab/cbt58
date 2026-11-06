@@ -48,7 +48,11 @@ export async function upsertExamSession(
     .upsert(payload, { onConflict: 'subject_id,student_name,class_name' });
 
   if (error) {
-    console.warn('Gagal simpan sesi ujian ke Supabase:', error.message);
+    console.error('Gagal simpan sesi ujian ke Supabase:', {
+      code: error.code,
+      message: error.message,
+      hint: 'Pastikan supabase_monitoring_migration.sql sudah dijalankan.'
+    });
     return false;
   }
   return true;

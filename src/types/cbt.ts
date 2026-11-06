@@ -65,6 +65,8 @@ export interface ExamSession {
   className: string;
   startTime: number;
   lastHeartbeat: number;
+  /** Waktu lokal pengawas saat nilai heartbeat terakhir kali berubah. */
+  lastHeartbeatObservedAt?: number;
   progressCount: number;
   violationCount: number;
   answers: StudentAnswerItem[];

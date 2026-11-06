@@ -690,6 +690,8 @@ export function subscribeToLiveSessions(
   let stopped = false;
   let remoteSessions: ExamSession[] = [];
   let hasRemoteSnapshot = false;
+  let refreshInFlight = false;
+  const observedHeartbeats = new Map<string, { lastHeartbeat: number; observedAt: number }>();
 
   const emit = () => {
     if (stopped) return;
@@ -711,11 +713,39 @@ export function subscribeToLiveSessions(
 
   // Lokal: 2 detik (tab/perangkat yang sama). Database: 5 detik (lintas perangkat).
   const refreshRemote = async () => {
-    const sessions = await fetchActiveExamSessions(subjectId);
-    if (stopped) return;
-    remoteSessions = sessions;
-    hasRemoteSnapshot = true;
-    emit();
+    if (stopped || refreshInFlight) return;
+    refreshInFlight = true;
+    try {
+      const sessions = await fetchActiveExamSessions(subjectId);
+      if (stopped) return;
+
+      const receivedAt = Date.now();
+      const observedSessions = sessions.map(session => {
+        const key = sessionKey(session);
+        const previous = observedHeartbeats.get(key);
+        const observedAt = previous && previous.lastHeartbeat === session.lastHeartbeat
+          ? previous.observedAt
+          : previous
+            ? receivedAt
+            : Math.min(session.lastHeartbeat, receivedAt);
+        observedHeartbeats.set(key, { lastHeartbeat: session.lastHeartbeat, observedAt });
+        return { ...session, lastHeartbeatObservedAt: observedAt };
+      });
+
+      // Database timestamps can come from a student's clock. Expire sessions
+      // using when the teacher last received a changed heartbeat, not that clock.
+      remoteSessions = observedSessions.filter(session =>
+        session.status === 'blocked' || receivedAt - (session.lastHeartbeatObservedAt ?? receivedAt) < 120000
+      );
+      const activeKeys = new Set(remoteSessions.map(sessionKey));
+      for (const key of observedHeartbeats.keys()) {
+        if (!activeKeys.has(key)) observedHeartbeats.delete(key);
+      }
+      hasRemoteSnapshot = true;
+      emit();
+    } finally {
+      refreshInFlight = false;
+    }
   };
 
   emit();

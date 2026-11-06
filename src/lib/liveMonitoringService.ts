@@ -275,7 +275,8 @@ export function getStoredSessions(): ExamSession[] {
   }
 }
 
-// Throttle tulis DB: heartbeat 15 detik, tetapi event penting (terkunci) langsung ditulis.
+// Throttle tulis DB: heartbeat normal tetap hemat, tetapi perubahan fokus dan
+// pelanggaran harus langsung dikirim agar status monitoring tidak tertinggal.
 const lastDbHeartbeat = new Map<string, number>();
 const lastAnswersSent = new Map<string, string>();
 
@@ -283,7 +284,7 @@ const lastAnswersSent = new Map<string, string>();
  * Siswa melaporkan progres, status fokus, dan sisa waktu secara berkala (Heartbeat).
  * Data lintas perangkat disimpan ke tabel exam_sessions (polling guru), BUKAN Realtime broadcast.
  */
-export function reportStudentSession(session: ExamSession) {
+export function reportStudentSession(session: ExamSession, forceDbWrite = false) {
   if (typeof window === 'undefined' || !session || !session.studentName) return;
 
   const key = sessionKey(session);
@@ -318,14 +319,25 @@ export function reportStudentSession(session: ExamSession) {
   // Jawaban hanya dikirim saat berubah, agar egress tetap kecil.
   const now = Date.now();
   const lastWrite = lastDbHeartbeat.get(key) || 0;
-  if (session.status !== 'blocked' && now - lastWrite < 3000) return;
+  if (!forceDbWrite && session.status !== 'blocked' && now - lastWrite < 3000) return;
 
   const answersJson = JSON.stringify(session.answers || []);
   const includeAnswers = lastAnswersSent.get(key) !== answersJson;
 
   lastDbHeartbeat.set(key, now);
   if (includeAnswers) lastAnswersSent.set(key, answersJson);
-  void upsertExamSession(session, includeAnswers);
+  void upsertExamSession(session, includeAnswers)
+    .then(ok => {
+      // Izinkan percobaan berikutnya segera jika jaringan/database gagal.
+      if (!ok) {
+        lastDbHeartbeat.delete(key);
+        if (includeAnswers) lastAnswersSent.delete(key);
+      }
+    })
+    .catch(() => {
+      lastDbHeartbeat.delete(key);
+      if (includeAnswers) lastAnswersSent.delete(key);
+    });
 }
 
 /**

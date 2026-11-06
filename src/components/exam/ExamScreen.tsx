@@ -368,7 +368,7 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
       status: isLockedRef.current ? 'blocked' : 'ongoing',
       isFocus: currentFocus,
       remainingSeconds: secondsRemainingRef.current
-    });
+    }, typeof focusState === 'boolean');
   }, [studentName, subject.id, studentActualClass, questions.length]);
 
   // 2. LIVE MONITORING HEARTBEAT (15 DETIK + JITTER - OPTIMIZED FOR 300 STUDENTS)
@@ -623,6 +623,12 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
     lastViolationTimeRef.current = now;
 
     const nextCount = violationCountRef.current + 1;
+    const shouldBlock = nextCount >= (subject.violationLimit || 3);
+    violationCountRef.current = nextCount;
+    // Kunci ref lebih awal agar event fokus lain tidak mengirim status ongoing
+    // ketika status blokir sedang menunggu penyimpanan database selesai.
+    isLockedRef.current = shouldBlock;
+    isFocusRef.current = false;
     setViolationCount(nextCount);
     setLastViolationReason(reason);
 
@@ -630,15 +636,15 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
     const actualClass = studentActualClass;
 
     // 1. Simpan status resmi (jumlah + terkunci) ke database — sumber kebenaran tunggal
-    await saveStudentLockState(subject.id, studentName, studentActualClass, nextCount, nextCount >= limit);
+    await saveStudentLockState(subject.id, studentName, studentActualClass, nextCount, shouldBlock);
 
     // 2. Catat log pelanggaran untuk guru (log ini TIDAK menentukan lock)
     try {
       await insertNotification({
         subjectId: subject.id,
         studentName,
-        type: nextCount >= limit ? 'autolock' : 'violation',
-        title: nextCount >= limit ? 'Ujian Siswa Terkunci' : 'Peringatan Anti-Cheat',
+        type: shouldBlock ? 'autolock' : 'violation',
+        title: shouldBlock ? 'Ujian Siswa Terkunci' : 'Peringatan Anti-Cheat',
         message: `Siswa ${studentName} (${actualClass}): ${reason} (Pelanggaran ke-${nextCount} dari batas ${limit}).`
       });
     } catch {}
@@ -657,10 +663,10 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
       totalQuestions: questions.length,
       violationCount: nextCount,
       answers: answersRef.current,
-      status: nextCount >= limit ? 'blocked' : 'ongoing',
+      status: shouldBlock ? 'blocked' : 'ongoing',
       isFocus: false,
       remainingSeconds: secondsRemainingRef.current
-    });
+    }, true);
 
     // Segera perbarui snapshot ujian ke localStorage secara sinkron agar tidak hilang jika siswa mematikan aplikasi/browser
     if (typeof window !== 'undefined') {
@@ -669,13 +675,13 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
           answers: answersRef.current,
           secondsRemaining: secondsRemainingRef.current,
           violationCount: nextCount,
-          isLocked: nextCount >= limit,
+          isLocked: shouldBlock,
           lastViolationReason: reason,
           startTime: startTimeRef.current,
           currentIndex: currentIndexRef.current,
           lastSavedTime: Date.now()
         }));
-        if (nextCount >= limit) {
+        if (shouldBlock) {
           localStorage.setItem(blockedKey, JSON.stringify({
             isBlocked: true,
             violationCount: nextCount,
@@ -685,7 +691,7 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
       } catch {}
     }
 
-    if (nextCount >= limit) {
+    if (shouldBlock) {
       // BEKUKAN & KUNCI UJIAN (Layar Merah Mati)
       setIsLocked(true);
       setShowWarningModal(false);

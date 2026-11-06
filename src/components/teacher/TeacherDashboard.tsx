@@ -4560,7 +4560,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                                       await onDeleteResult(r.id, r.subjectId, r.studentName, r.className);
                                     }
                                     await clearStudentAutolockInSupabase(r.subjectId, r.studentName, r.className);
-                                    sendProctorCommand({
+                                    await sendProctorCommand({
                                       action: 'RESET_EXAM',
                                       studentName: r.studentName,
                                       subjectId: r.subjectId,
@@ -6676,14 +6676,20 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                                 : session
                             )));
                             // Kirim command RESET_VIOLATION ke semua siswa terkunci
-                            filteredSessions.filter(s => s.status === 'blocked').forEach(s => {
-                              sendProctorCommand({
-                                action: 'RESET_VIOLATION',
-                                studentName: s.studentName,
-                                subjectId: s.subjectId,
-                                className: s.className
-                              });
-                            });
+                            const resetResults = await Promise.all(
+                              filteredSessions
+                                .filter(s => s.status === 'blocked')
+                                .map(s => sendProctorCommand({
+                                  action: 'RESET_VIOLATION',
+                                  studentName: s.studentName,
+                                  subjectId: s.subjectId,
+                                  className: s.className
+                                }))
+                            );
+                            if (resetResults.some(ok => !ok)) {
+                              setMonitoringActionToast('Sebagian siswa gagal di-reset di server. Silakan ulangi reset untuk siswa yang masih terkunci.');
+                              return;
+                            }
                             
                             setMonitoringActionToast(`Berhasil mereset ${result.count} notifikasi autolock. Semua siswa terkunci telah dibuka kuncinya.`);
                           } else {
@@ -6953,12 +6959,16 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                                       setMonitoringActionToast(`Reset siswa ${s.studentName} gagal disimpan ke database. Silakan coba lagi.`);
                                       return;
                                     }
-                                    sendProctorCommand({
+                                    const commandOk = await sendProctorCommand({
                                       action: 'RESET_VIOLATION',
                                       studentName: s.studentName,
                                       subjectId: s.subjectId,
                                       className: s.className
                                     });
+                                    if (!commandOk) {
+                                      setMonitoringActionToast(`Reset siswa ${s.studentName} gagal ditulis ke server. Silakan coba lagi.`);
+                                      return;
+                                    }
                                     const resetAt = Date.now();
                                     setLiveSessions(prev => prev.map(session => {
                                       const sameStudent = session.studentName.toLowerCase().trim() === s.studentName.toLowerCase().trim();
@@ -7025,12 +7035,16 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                                         ));
 
                                         // 3. Perintahkan layar siswa untuk selesai
-                                        sendProctorCommand({
+                                        const commandOk = await sendProctorCommand({
                                           action: 'FORCE_FINISH',
                                           studentName: s.studentName,
                                           subjectId: s.subjectId,
                                           className: s.className
                                         });
+                                        if (!commandOk) {
+                                          setMonitoringActionToast(`Simpan paksa siswa ${s.studentName} gagal menutup sesi di server. Nilai belum disimpan.`);
+                                          return;
+                                        }
 
                                         // 4. Nilai hanya soal mapel siswa, lalu simpan
                                         const matchedSub = (allSubjects || []).find(sub => sub.id === s.subjectId) || subject;
@@ -7076,12 +7090,16 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                                       cancelLabel: 'Batal',
                                       onConfirm: async () => {
                                         await clearStudentAutolockInSupabase(s.subjectId, s.studentName, s.className);
-                                        sendProctorCommand({
+                                        const commandOk = await sendProctorCommand({
                                           action: 'RESET_EXAM',
                                           studentName: s.studentName,
                                           subjectId: s.subjectId,
                                           className: s.className
                                         });
+                                        if (!commandOk) {
+                                          setMonitoringActionToast(`Reset sesi siswa ${s.studentName} gagal dibersihkan dari server. Silakan coba lagi.`);
+                                          return;
+                                        }
                                         removeStudentSession(s.studentName, s.subjectId, s.className);
                                         if (onDeleteResult) {
                                           await onDeleteResult(s.id, s.subjectId, s.studentName, s.className);
@@ -9772,7 +9790,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                               await onDeleteResult(selectedResult.id, selectedResult.subjectId, selectedResult.studentName, selectedResult.className);
                             }
                             await clearStudentAutolockInSupabase(selectedResult.subjectId, selectedResult.studentName, selectedResult.className);
-                            sendProctorCommand({
+                            await sendProctorCommand({
                               action: 'RESET_EXAM',
                               studentName: selectedResult.studentName,
                               subjectId: selectedResult.subjectId,

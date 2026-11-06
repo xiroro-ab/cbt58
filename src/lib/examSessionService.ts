@@ -59,12 +59,10 @@ export async function upsertExamSession(
 }
 
 export async function fetchActiveExamSessions(subjectId?: string): Promise<ExamSession[]> {
-  const since = new Date(Date.now() - ACTIVE_WINDOW_MS).toISOString();
-
   let query = supabase
     .from('exam_sessions')
     .select(SESSION_COLUMNS)
-    .or(`status.eq.blocked,last_heartbeat.gte.${since}`)
+    .in('status', ['ongoing', 'blocked'])
     .order('last_heartbeat', { ascending: false })
     .limit(500);
 
@@ -78,7 +76,10 @@ export async function fetchActiveExamSessions(subjectId?: string): Promise<ExamS
     return [];
   }
 
-  return data.map((row: any) => ({
+  const sinceEpoch = Date.now() - ACTIVE_WINDOW_MS;
+  return data
+    .filter((row: any) => row.status === 'blocked' || toEpoch(row.last_heartbeat, 0) >= sinceEpoch)
+    .map((row: any) => ({
     id: row.id,
     subjectId: row.subject_id,
     studentId: row.student_name,
@@ -93,7 +94,7 @@ export async function fetchActiveExamSessions(subjectId?: string): Promise<ExamS
     totalQuestions: Number(row.total_questions) || 0,
     remainingSeconds: Number(row.remaining_seconds) || 0,
     isFocus: row.is_focus !== false
-  }));
+    }));
 }
 
 export async function fetchExamSessionAnswers(
@@ -166,6 +167,34 @@ export async function resetExamSession(
 
   const { error } = await query;
   if (error) console.warn('Gagal reset sesi monitoring siswa:', error.message);
+  return !error;
+}
+
+/**
+ * Menutup sesi monitoring tanpa menghapusnya. Status final ini dipakai untuk
+ * aksi "Simpan Paksa" agar polling guru tidak membaca sesi lama sebagai aktif.
+ */
+export async function completeExamSession(
+  subjectId: string,
+  studentName: string,
+  className?: string
+): Promise<boolean> {
+  let query = supabase
+    .from('exam_sessions')
+    .update({
+      status: 'completed',
+      is_focus: false,
+      last_heartbeat: new Date().toISOString()
+    })
+    .eq('subject_id', subjectId)
+    .ilike('student_name', studentName.trim());
+
+  if (className?.trim()) {
+    query = query.ilike('class_name', className.trim());
+  }
+
+  const { error } = await query;
+  if (error) console.warn('Gagal menutup sesi monitoring siswa:', error.message);
   return !error;
 }
 

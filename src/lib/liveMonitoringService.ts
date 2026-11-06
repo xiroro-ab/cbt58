@@ -5,6 +5,7 @@ import {
   fetchActiveExamSessions,
   deleteExamSession,
   resetExamSession,
+  completeExamSession,
   writeProctorCommand,
   readProctorCommand,
   clearProctorCommand
@@ -377,13 +378,13 @@ export function removeStudentSession(studentName: string, subjectId?: string, cl
 /**
  * Pengawas / Guru mengirim instruksi kontrol ke siswa tertentu
  */
-export function sendProctorCommand(cmd: {
+export async function sendProctorCommand(cmd: {
   action: ProctorActionType;
   studentName: string;
   subjectId: string;
   className?: string;
-}) {
-  if (typeof window === 'undefined') return;
+}): Promise<boolean> {
+  if (typeof window === 'undefined') return false;
 
   const payload: ProctorCommand = {
     ...cmd,
@@ -403,22 +404,7 @@ export function sendProctorCommand(cmd: {
     } catch {}
   }
 
-  // 3. Perintah lintas perangkat ditulis ke database; siswa membacanya lewat polling.
-  void writeProctorCommand(
-    cmd.subjectId,
-    cmd.studentName,
-    cmd.className,
-    cmd.action,
-    payload.timestamp
-  );
-
-  // Reset juga langsung menyamakan status sesi di server. Dengan begitu guru
-  // tidak perlu menunggu heartbeat siswa berikutnya untuk melihat status baru.
-  if (cmd.action === 'RESET_VIOLATION') {
-    void resetExamSession(cmd.subjectId, cmd.studentName, cmd.className);
-  }
-
-  // 4. Update sesi lokal seketika
+  // 3. Update sesi lokal seketika
   const cleanName = cmd.studentName.toLowerCase().trim();
   const cleanClass = (cmd.className || '').toLowerCase().trim();
   const matches = (s: ExamSession) =>
@@ -484,6 +470,28 @@ export function sendProctorCommand(cmd: {
     }
     removeStudentSession(cmd.studentName, cmd.subjectId, cmd.className);
   }
+
+  // 4. Tulis perintah dan status sesi secara berurutan di server. FORCE_FINISH
+  // harus menutup sesi dengan status completed agar polling guru tidak membaca
+  // ulang baris lama sebagai "Mengerjakan".
+  const commandOk = await writeProctorCommand(
+    cmd.subjectId,
+    cmd.studentName,
+    cmd.className,
+    cmd.action,
+    payload.timestamp
+  );
+
+  let sessionOk = true;
+  if (cmd.action === 'RESET_VIOLATION') {
+    sessionOk = await resetExamSession(cmd.subjectId, cmd.studentName, cmd.className);
+  } else if (cmd.action === 'FORCE_FINISH') {
+    sessionOk = await completeExamSession(cmd.subjectId, cmd.studentName, cmd.className);
+  } else if (cmd.action === 'RESET_EXAM') {
+    sessionOk = await deleteExamSession(cmd.subjectId, cmd.studentName, cmd.className);
+  }
+
+  return commandOk && sessionOk;
 }
 
 /**

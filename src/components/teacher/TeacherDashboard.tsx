@@ -6664,7 +6664,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                           
                           if (result.success) {
                             // Kirim command RESET_VIOLATION ke semua siswa terkunci
-                            filteredSessions.filter(s => s.violationCount >= (subject?.violationLimit || 3)).forEach(s => {
+                            filteredSessions.filter(s => s.status === 'blocked').forEach(s => {
                               sendProctorCommand({
                                 action: 'RESET_VIOLATION',
                                 studentName: s.studentName,
@@ -6936,13 +6936,17 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                                 {/* TOMBOL BUKA KUNCI (RESET PELANGGARAN) */}
                                 <button
                                   onClick={async () => {
+                                    const resetOk = await clearStudentAutolockInSupabase(s.subjectId, s.studentName, s.className);
+                                    if (!resetOk) {
+                                      setMonitoringActionToast(`Reset siswa ${s.studentName} gagal disimpan ke database. Silakan coba lagi.`);
+                                      return;
+                                    }
                                     sendProctorCommand({
                                       action: 'RESET_VIOLATION',
                                       studentName: s.studentName,
                                       subjectId: s.subjectId,
                                       className: s.className
                                     });
-                                    await clearStudentAutolockInSupabase(s.subjectId, s.studentName, s.className);
                                     setMonitoringActionToast(`Pelanggaran siswa ${s.studentName} berhasil di-reset menjadi 0 dan ujian telah dibuka kuncinya.`);
                                   }}
                                   className={`p-2 rounded-xl transition cursor-pointer flex items-center gap-1 text-xs font-bold ${
@@ -7045,6 +7049,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                                       confirmLabel: 'Ya, Reset Sesi',
                                       cancelLabel: 'Batal',
                                       onConfirm: async () => {
+                                        await clearStudentAutolockInSupabase(s.subjectId, s.studentName, s.className);
                                         sendProctorCommand({
                                           action: 'RESET_EXAM',
                                           studentName: s.studentName,
@@ -7052,7 +7057,6 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                                           className: s.className
                                         });
                                         removeStudentSession(s.studentName, s.subjectId, s.className);
-                                        await clearStudentAutolockInSupabase(s.subjectId, s.studentName, s.className);
                                         if (onDeleteResult) {
                                           await onDeleteResult(s.id, s.subjectId, s.studentName, s.className);
                                         }

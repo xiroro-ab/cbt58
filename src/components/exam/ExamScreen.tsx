@@ -445,6 +445,9 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
     const unsubscribe = subscribeToStudentCommands(studentName, subject.id, (cmd) => {
       if (cmd.action === 'RESET_VIOLATION') {
         // Pengawas membuka kunci & me-reset pelanggaran
+        violationCountRef.current = 0;
+        isLockedRef.current = false;
+        isFocusRef.current = true;
         setViolationCount(0);
         setIsLocked(false);
         setShowWarningModal(false);

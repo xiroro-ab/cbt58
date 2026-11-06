@@ -4,6 +4,7 @@ import {
   upsertExamSession,
   fetchActiveExamSessions,
   deleteExamSession,
+  resetExamSession,
   writeProctorCommand,
   readProctorCommand,
   clearProctorCommand
@@ -410,6 +411,12 @@ export function sendProctorCommand(cmd: {
     cmd.action,
     payload.timestamp
   );
+
+  // Reset juga langsung menyamakan status sesi di server. Dengan begitu guru
+  // tidak perlu menunggu heartbeat siswa berikutnya untuk melihat status baru.
+  if (cmd.action === 'RESET_VIOLATION') {
+    void resetExamSession(cmd.subjectId, cmd.studentName, cmd.className);
+  }
 
   // 4. Update sesi lokal seketika
   const cleanName = cmd.studentName.toLowerCase().trim();

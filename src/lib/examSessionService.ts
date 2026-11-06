@@ -139,6 +139,36 @@ export async function deleteExamSession(
   return !error;
 }
 
+/**
+ * Mengembalikan sesi monitoring yang sedang diblokir menjadi sesi berjalan.
+ * Status ini diubah di server supaya layar guru tidak menunggu heartbeat siswa
+ * berikutnya untuk berhenti menampilkan status "DISKUALIFIKASI".
+ */
+export async function resetExamSession(
+  subjectId: string,
+  studentName: string,
+  className?: string
+): Promise<boolean> {
+  let query = supabase
+    .from('exam_sessions')
+    .update({
+      violation_count: 0,
+      status: 'ongoing',
+      is_focus: true,
+      last_heartbeat: new Date().toISOString()
+    })
+    .eq('subject_id', subjectId)
+    .ilike('student_name', studentName.trim());
+
+  if (className?.trim()) {
+    query = query.ilike('class_name', className.trim());
+  }
+
+  const { error } = await query;
+  if (error) console.warn('Gagal reset sesi monitoring siswa:', error.message);
+  return !error;
+}
+
 type CommandRow = { id: string; message: string; className: string };
 
 async function findCommandRows(
@@ -191,7 +221,13 @@ export async function writeProctorCommand(
       try {
         parsed = JSON.parse(row.message || '{}');
       } catch {}
-      const message = JSON.stringify({ ...parsed, command: action, commandAt });
+      const isReset = action === 'RESET_VIOLATION' || action === 'RESET_EXAM';
+      const message = JSON.stringify({
+        ...parsed,
+        ...(isReset ? { count: 0, locked: false } : {}),
+        command: action,
+        commandAt
+      });
       const { error } = await supabase
         .from('exam_notifications')
         .update({ message })

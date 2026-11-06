@@ -1316,7 +1316,7 @@ export async function resetStudentLockState(
       try {
         previous = JSON.parse(row.message || '{}');
       } catch {}
-      await supabase
+      const { error: updateError } = await supabase
         .from('exam_notifications')
         .update({
           message: JSON.stringify({
@@ -1328,6 +1328,7 @@ export async function resetStudentLockState(
           is_read: true
         })
         .eq('id', row.id);
+      if (updateError) throw updateError;
     }
     // Bersihkan log pelanggaran siswa (kelas ini saja jika kelas diketahui)
     let delQuery = supabase
@@ -1339,7 +1340,8 @@ export async function resetStudentLockState(
     if (className && className.trim()) {
       delQuery = delQuery.ilike('message', `%(${className.trim()})%`);
     }
-    await delQuery;
+    const { error: deleteError } = await delQuery;
+    if (deleteError) throw deleteError;
     return true;
   } catch (err) {
     console.warn('Gagal reset status anti-cheat siswa:', err);
@@ -1491,21 +1493,26 @@ export async function clearAllLockedStudents(subjectId: string): Promise<{ succe
   try {
     // 1. Reset semua baris status anti-cheat mapel ini ke 0 / tidak terkunci.
     // Update per baris agar className (isolasi rombel) dan perintah pengawas tidak hilang.
-    const { data: stateRows } = await supabase
+    const { data: stateRows, error: stateError } = await supabase
       .from('exam_notifications')
       .select('id,message')
       .eq('subject_id', subjectId)
       .eq('title', LOCK_STATE_TITLE);
+    if (stateError) throw stateError;
 
     await Promise.all((stateRows || []).map(async row => {
       let previous: Record<string, unknown> = {};
       try {
         previous = JSON.parse(row.message || '{}');
       } catch {}
-      await supabase
+      const { error } = await supabase
         .from('exam_notifications')
-        .update({ message: JSON.stringify({ ...previous, count: 0, locked: false }) })
+        .update({
+          message: JSON.stringify({ ...previous, count: 0, locked: false }),
+          is_read: true
+        })
         .eq('id', row.id);
+      if (error) throw error;
     }));
 
     // 2. Hapus log pelanggaran (bukan lagi sumber lock, hanya bersih-bersih)

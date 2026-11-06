@@ -244,16 +244,17 @@ export async function writeProctorCommand(
   try {
     const rows = await findCommandRows(subjectId, studentName);
     const row = pickCommandRow(rows, className);
+    const isReset = action === 'RESET_VIOLATION' || action === 'RESET_EXAM';
 
     if (row) {
       let parsed: Record<string, unknown> = {};
       try {
         parsed = JSON.parse(row.message || '{}');
       } catch {}
-      const isReset = action === 'RESET_VIOLATION' || action === 'RESET_EXAM';
       const message = JSON.stringify({
         ...parsed,
         ...(isReset ? { count: 0, locked: false } : {}),
+        ...(isReset ? { stateAt: commandAt } : {}),
         command: action,
         commandAt
       });
@@ -273,6 +274,7 @@ export async function writeProctorCommand(
         count: 0,
         locked: false,
         className: (className || '').trim(),
+        ...(isReset ? { stateAt: commandAt } : {}),
         command: action,
         commandAt
       }),

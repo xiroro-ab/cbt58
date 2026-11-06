@@ -1198,6 +1198,11 @@ export function subscribeToExamResults(
  * untuk guru dan TIDAK BOLEH menentukan lock (karena is_read juga dipakai UI notifikasi).
  */
 type LockStateRow = { id: string; count: number; locked: boolean; className: string; message: string };
+const lockStateWriteChains = new Map<string, Promise<boolean>>();
+
+function lockStateKey(subjectId: string, studentName: string, className?: string): string {
+  return `${subjectId}|${(className || '').toLowerCase().trim()}|${studentName.toLowerCase().trim()}`;
+}
 
 async function findLockStateRow(
   subjectId: string,
@@ -1258,12 +1263,13 @@ export async function getStudentLockState(
   return (await readLockState(subjectId, studentName, className)) || { count: 0, locked: false };
 }
 
-export async function saveStudentLockState(
+async function persistStudentLockState(
   subjectId: string,
   studentName: string,
   className: string | undefined,
   count: number,
-  locked: boolean
+  locked: boolean,
+  stateAt: number
 ): Promise<boolean> {
   try {
     const row = await findLockStateRow(subjectId, studentName, className);
@@ -1273,12 +1279,16 @@ export async function saveStudentLockState(
         previous = JSON.parse(row.message || '{}');
       } catch {}
     }
+    // Jangan biarkan request pelanggaran lama menimpa reset guru yang lebih baru.
+    const previousStateAt = Number(previous.stateAt || previous.commandAt || 0);
+    if (previousStateAt > stateAt) return true;
     // Pertahankan field lain (mis. perintah pengawas) saat counter berubah.
     const message = JSON.stringify({
       ...previous,
       count,
       locked,
-      className: (className || row?.className || '').trim()
+      className: (className || row?.className || '').trim(),
+      stateAt
     });
     if (row) {
       const { error } = await supabase
@@ -1304,6 +1314,26 @@ export async function saveStudentLockState(
   }
 }
 
+export function saveStudentLockState(
+  subjectId: string,
+  studentName: string,
+  className: string | undefined,
+  count: number,
+  locked: boolean
+): Promise<boolean> {
+  const key = lockStateKey(subjectId, studentName, className);
+  const stateAt = Date.now();
+  const previous = lockStateWriteChains.get(key) || Promise.resolve(true);
+  const next = previous
+    .catch(() => false)
+    .then(() => persistStudentLockState(subjectId, studentName, className, count, locked, stateAt));
+  lockStateWriteChains.set(key, next);
+  void next.finally(() => {
+    if (lockStateWriteChains.get(key) === next) lockStateWriteChains.delete(key);
+  });
+  return next;
+}
+
 export async function resetStudentLockState(
   subjectId: string,
   studentName: string,
@@ -1323,7 +1353,8 @@ export async function resetStudentLockState(
             ...previous,
             count: 0,
             locked: false,
-            className: (row.className || className || '').trim()
+            className: (row.className || className || '').trim(),
+            stateAt: Date.now()
           }),
           is_read: true
         })
@@ -1508,7 +1539,7 @@ export async function clearAllLockedStudents(subjectId: string): Promise<{ succe
       const { error } = await supabase
         .from('exam_notifications')
         .update({
-          message: JSON.stringify({ ...previous, count: 0, locked: false }),
+          message: JSON.stringify({ ...previous, count: 0, locked: false, stateAt: Date.now() }),
           is_read: true
         })
         .eq('id', row.id);

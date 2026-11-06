@@ -743,7 +743,6 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
       if (document.hidden) {
         isFocusRef.current = false;
         setIsFocus(false);
-        sendDirectHeartbeat(false);
         handleViolation('Berpindah tab atau menyembunyikan browser.');
       } else {
         isFocusRef.current = true;
@@ -756,7 +755,6 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
     const handleBlur = () => {
       isFocusRef.current = false;
       setIsFocus(false);
-      sendDirectHeartbeat(false);
       // Jika dokumen sudah hidden, event visibilitychange sudah mencatatnya
       if (document.hidden) return;
       if (!isCompletedRef.current && !isLockedRef.current) {
@@ -839,7 +837,6 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
       if (!isCompletedRef.current) {
         isFocusRef.current = false;
         setIsFocus(false);
-        sendDirectHeartbeat(false);
 
         handleViolation('Menekan tombol navigasi Kembali (Back) pada perangkat HP.');
 

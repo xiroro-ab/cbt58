@@ -281,6 +281,7 @@ export function getStoredSessions(): ExamSession[] {
 // pelanggaran harus langsung dikirim agar status monitoring tidak tertinggal.
 const lastDbHeartbeat = new Map<string, number>();
 const lastAnswersSent = new Map<string, string>();
+const sessionWriteChains = new Map<string, Promise<void>>();
 
 /**
  * Siswa melaporkan progres, status fokus, dan sisa waktu secara berkala (Heartbeat).
@@ -328,8 +329,11 @@ export function reportStudentSession(session: ExamSession, forceDbWrite = false)
 
   lastDbHeartbeat.set(key, now);
   if (includeAnswers) lastAnswersSent.set(key, answersJson);
-  void upsertExamSession(session, includeAnswers)
-    .then(ok => {
+  const previous = sessionWriteChains.get(key) || Promise.resolve();
+  const next = previous
+    .catch(() => {})
+    .then(async () => {
+      const ok = await upsertExamSession(session, includeAnswers);
       // Izinkan percobaan berikutnya segera jika jaringan/database gagal.
       if (!ok) {
         lastDbHeartbeat.delete(key);
@@ -340,6 +344,10 @@ export function reportStudentSession(session: ExamSession, forceDbWrite = false)
       lastDbHeartbeat.delete(key);
       if (includeAnswers) lastAnswersSent.delete(key);
     });
+  sessionWriteChains.set(key, next);
+  void next.finally(() => {
+    if (sessionWriteChains.get(key) === next) sessionWriteChains.delete(key);
+  });
 }
 
 /**

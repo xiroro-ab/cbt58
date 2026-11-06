@@ -689,11 +689,16 @@ export function subscribeToLiveSessions(
 
   let stopped = false;
   let remoteSessions: ExamSession[] = [];
+  let hasRemoteSnapshot = false;
 
   const emit = () => {
     if (stopped) return;
     const merged = new Map<string, ExamSession>();
-    for (const session of [...remoteSessions, ...getStoredSessions()]) {
+    // Sebelum query pertama selesai, localStorage membantu layar tidak kosong.
+    // Setelah itu database harus menjadi sumber tampilan utama; cache lokal
+    // yang timestamp-nya lebih baru tidak boleh menimpa status remote.
+    const sourceSessions = hasRemoteSnapshot ? remoteSessions : getStoredSessions();
+    for (const session of sourceSessions) {
       if (!session?.studentName) continue;
       const key = sessionKey(session);
       const existing = merged.get(key);
@@ -709,6 +714,7 @@ export function subscribeToLiveSessions(
     const sessions = await fetchActiveExamSessions(subjectId);
     if (stopped) return;
     remoteSessions = sessions;
+    hasRemoteSnapshot = true;
     emit();
   };
 

@@ -27,7 +27,9 @@ import {
   LogIn,
   Plus,
   Trash2,
-  Layers
+  Layers,
+  Smartphone,
+  Download
 } from 'lucide-react';
 
 interface TeacherLoginProps {
@@ -35,6 +37,7 @@ interface TeacherLoginProps {
   onLoginSuccess: (teacher: Teacher) => void;
   onRegisterTeacher: (newTeacher: Teacher) => Promise<boolean>;
   onSwitchToStudentLogin: () => void;
+  onOpenApkModal?: () => void;
 }
 
 interface AssignmentItem {
@@ -48,7 +51,8 @@ export const TeacherLogin: React.FC<TeacherLoginProps> = ({
   teachers,
   onLoginSuccess,
   onRegisterTeacher,
-  onSwitchToStudentLogin
+  onSwitchToStudentLogin,
+  onOpenApkModal
 }) => {
   const { language, toggleLanguage } = useLanguage();
   const { theme, toggleTheme } = useTheme();
@@ -361,6 +365,19 @@ export const TeacherLogin: React.FC<TeacherLoginProps> = ({
         </div>
 
         <div className="flex items-center gap-2">
+          {onOpenApkModal && (
+            <button
+              type="button"
+              onClick={onOpenApkModal}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-violet-50 dark:bg-violet-950/50 border border-violet-200 dark:border-violet-800 text-xs font-bold text-violet-700 dark:text-violet-300 hover:bg-violet-100 dark:hover:bg-violet-900/60 transition shadow-xs cursor-pointer"
+              title="Download Aplikasi CBT Android (Exambro)"
+            >
+              <Smartphone className="w-3.5 h-3.5 text-violet-600 dark:text-violet-400" />
+              <span className="hidden sm:inline">Aplikasi Android</span>
+              <span className="sm:hidden">APK</span>
+            </button>
+          )}
+
           <button
             onClick={toggleLanguage}
             className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs font-bold text-slate-700 dark:text-slate-200 hover:text-violet-600 transition shadow-xs cursor-pointer"
@@ -791,8 +808,8 @@ export const TeacherLogin: React.FC<TeacherLoginProps> = ({
         )}
 
         {/* Switch to Student Login */}
-        <div className="pt-2 border-t border-slate-100 dark:border-slate-800 text-center">
-          <p className="text-[11px] text-slate-500 dark:text-slate-400 mb-2">
+        <div className="pt-2 border-t border-slate-100 dark:border-slate-800 text-center space-y-2">
+          <p className="text-[11px] text-slate-500 dark:text-slate-400">
             {language === 'id' ? 'Apakah Anda siswa yang ingin mengikuti ujian?' : 'Are you a student taking an exam?'}
           </p>
           <button
@@ -802,6 +819,37 @@ export const TeacherLogin: React.FC<TeacherLoginProps> = ({
             <GraduationCap className="w-4 h-4 text-violet-600 dark:text-violet-400" />
             <span>{language === 'id' ? 'Masuk sebagai Siswa (Mulai Ujian)' : 'Login as Student (Start Exam)'}</span>
           </button>
+
+          {onOpenApkModal && (
+            <button
+              type="button"
+              onClick={onOpenApkModal}
+              className="w-full p-2.5 rounded-xl bg-gradient-to-r from-violet-50 via-slate-50 to-emerald-50 dark:from-violet-950/40 dark:via-slate-800/40 dark:to-emerald-950/30 border border-violet-200/70 dark:border-violet-800/60 flex items-center justify-between text-left hover:border-violet-400 dark:hover:border-violet-600 transition group cursor-pointer"
+            >
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-violet-600 text-white flex items-center justify-center flex-shrink-0 shadow-xs">
+                  <Smartphone className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                      Aplikasi Android Ujian (Exambro)
+                    </span>
+                    <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300">
+                      v3.0
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-slate-500 dark:text-slate-400">
+                    Kunci layar ujian & blokir floating window
+                  </p>
+                </div>
+              </div>
+              <span className="px-2.5 py-1 rounded-lg bg-violet-600 group-hover:bg-violet-700 text-white font-bold text-[10px] flex items-center gap-1 shadow-xs flex-shrink-0">
+                <Download className="w-3 h-3" />
+                <span>Info & Unduh</span>
+              </span>
+            </button>
+          )}
         </div>
 
         <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/60 dark:border-slate-800 flex items-center gap-3 text-[11px] text-slate-500 dark:text-slate-400">

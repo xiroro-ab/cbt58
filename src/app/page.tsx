@@ -14,6 +14,7 @@ import { TeacherLogin } from '@/components/teacher/TeacherLogin';
 import { ExamScreen } from '@/components/exam/ExamScreen';
 import { HelpModal } from '@/components/modals/HelpModal';
 import { CertificateModal } from '@/components/modals/CertificateModal';
+import { ApkDownloadModal } from '@/components/modals/ApkDownloadModal';
 import { Footer } from '@/components/layout/Footer';
 import { broadcastAnnouncementToStudents } from '@/lib/liveMonitoringService';
 import { lookupStudentExamSession, clearProctorCommand } from '@/lib/examSessionService';
@@ -94,7 +95,9 @@ import {
   ShieldAlert,
   Info,
   Loader2,
-  Ban
+  Ban,
+  Smartphone,
+  Download
 } from 'lucide-react';
 
 // Kata-kata umum mata pelajaran yang dikecualikan dari pemotongan kata kunci agar tidak terjadi kebocoran mapel lintas guru
@@ -174,6 +177,7 @@ export default function Home() {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
   const [isCertificatesModalOpen, setIsCertificatesModalOpen] = useState(false);
+  const [isApkModalOpen, setIsApkModalOpen] = useState(false);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [certificateTargetResult, setCertificateTargetResult] = useState<ExamResult | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -1668,12 +1672,19 @@ export default function Home() {
   // =========================================================================
   if (viewMode === 'teacher_login') {
     return (
-      <TeacherLogin
-        teachers={teachers}
-        onLoginSuccess={handleTeacherLoginSuccess}
-        onRegisterTeacher={handleRegisterTeacher}
-        onSwitchToStudentLogin={() => setViewMode('student_login')}
-      />
+      <>
+        <TeacherLogin
+          teachers={teachers}
+          onLoginSuccess={handleTeacherLoginSuccess}
+          onRegisterTeacher={handleRegisterTeacher}
+          onSwitchToStudentLogin={() => setViewMode('student_login')}
+          onOpenApkModal={() => setIsApkModalOpen(true)}
+        />
+        <ApkDownloadModal
+          isOpen={isApkModalOpen}
+          onClose={() => setIsApkModalOpen(false)}
+        />
+      </>
     );
   }
 
@@ -1728,6 +1739,17 @@ export default function Home() {
 
           <div className="flex items-center gap-2">
             <button
+              type="button"
+              onClick={() => setIsApkModalOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-violet-50 dark:bg-violet-950/50 border border-violet-200 dark:border-violet-800 text-xs font-bold text-violet-700 dark:text-violet-300 hover:bg-violet-100 dark:hover:bg-violet-900/60 transition shadow-xs cursor-pointer"
+              title="Download Aplikasi CBT Android (Exambro)"
+            >
+              <Smartphone className="w-3.5 h-3.5 text-violet-600 dark:text-violet-400" />
+              <span className="hidden sm:inline">Aplikasi Android</span>
+              <span className="sm:hidden">APK</span>
+            </button>
+
+            <button
               onClick={toggleLanguage}
               className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs font-bold text-slate-700 dark:text-slate-200 hover:text-violet-600 transition shadow-xs"
             >
@@ -1762,6 +1784,36 @@ export default function Home() {
               {subject.title} • {students.length} Siswa Terdaftar di Sistem
             </p>
           </div>
+
+          {/* Banner Unduh Aplikasi Android (Exambro) */}
+          <button
+            type="button"
+            onClick={() => setIsApkModalOpen(true)}
+            className="w-full p-2.5 rounded-2xl bg-gradient-to-r from-violet-50 via-slate-50 to-emerald-50 dark:from-violet-950/40 dark:via-slate-800/40 dark:to-emerald-950/30 border border-violet-200/70 dark:border-violet-800/60 flex items-center justify-between text-left hover:border-violet-400 dark:hover:border-violet-600 transition group cursor-pointer"
+          >
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-violet-600 text-white flex items-center justify-center flex-shrink-0 shadow-xs">
+                <Smartphone className="w-4 h-4" />
+              </div>
+              <div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                    Aplikasi Ujian Android (Exambro)
+                  </span>
+                  <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300">
+                    v3.0
+                  </span>
+                </div>
+                <p className="text-[10px] text-slate-500 dark:text-slate-400">
+                  Khusus HP Android (Kunci layar anti-curang)
+                </p>
+              </div>
+            </div>
+            <span className="px-2.5 py-1 rounded-lg bg-violet-600 group-hover:bg-violet-700 text-white font-bold text-[10px] flex items-center gap-1 shadow-xs flex-shrink-0">
+              <Download className="w-3 h-3" />
+              <span>Info & Unduh</span>
+            </span>
+          </button>
 
           <form onSubmit={handleStartExam} className="space-y-4 text-xs font-medium">
             {/* Pilihan Kelas (Wajib Kosong di Awal & Dibuka Terlebih Dahulu) */}
@@ -2103,6 +2155,12 @@ export default function Home() {
           </div>
         )}
 
+        {/* MODAL DOWNLOAD APK RESMI */}
+        <ApkDownloadModal
+          isOpen={isApkModalOpen}
+          onClose={() => setIsApkModalOpen(false)}
+        />
+
         {/* Global Footer Copyright */}
         <Footer className="mt-8 border-t border-slate-200/60 dark:border-slate-800/60 bg-transparent w-full" />
       </div>
@@ -2125,6 +2183,7 @@ export default function Home() {
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
         onOpenHelp={() => setIsHelpModalOpen(true)}
+        onOpenApkDownload={() => setIsApkModalOpen(true)}
         currentTeacher={currentTeacher}
         onLogout={handleTeacherLogout}
         isMobileOpen={isMobileSidebarOpen}
@@ -2250,6 +2309,12 @@ export default function Home() {
         students={students}
         schoolSettings={schoolSettings}
         currentTeacher={currentTeacher}
+      />
+
+      {/* MODAL DOWNLOAD APK RESMI */}
+      <ApkDownloadModal
+        isOpen={isApkModalOpen}
+        onClose={() => setIsApkModalOpen(false)}
       />
     </div>
   );

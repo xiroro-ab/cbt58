@@ -19,7 +19,8 @@ import {
   LogOut,
   Printer,
   Radio,
-  X
+  X,
+  Smartphone
 } from 'lucide-react';
 
 export type NavItem =
@@ -43,6 +44,7 @@ interface SidebarProps {
   searchQuery: string;
   onSearchChange: (query: string) => void;
   onOpenHelp: () => void;
+  onOpenApkDownload?: () => void;
   currentTeacher?: Teacher | null;
   onLogout?: () => void;
   isMobileOpen?: boolean;
@@ -59,6 +61,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   searchQuery,
   onSearchChange,
   onOpenHelp,
+  onOpenApkDownload,
   currentTeacher,
   onLogout,
   isMobileOpen = false,
@@ -293,13 +296,29 @@ export const Sidebar: React.FC<SidebarProps> = ({
             {/* Tombol Help Interaktif (Bukan lagi link # dummy) */}
             <button
               onClick={onOpenHelp}
-              className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-slate-100 transition"
+              className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-slate-100 transition cursor-pointer"
             >
               <div className="flex items-center gap-2.5">
                 <HelpCircle className="w-4 h-4 text-violet-600 dark:text-violet-400" />
                 <span>{t.navHelp}</span>
               </div>
             </button>
+
+            {/* Tombol Unduh APK Android */}
+            {onOpenApkDownload && (
+              <button
+                onClick={onOpenApkDownload}
+                className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-slate-100 transition cursor-pointer"
+              >
+                <div className="flex items-center gap-2.5">
+                  <Smartphone className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                  <span>Aplikasi Android</span>
+                </div>
+                <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 font-bold">
+                  APK v3.0
+                </span>
+              </button>
+            )}
           </div>
         </div>
       </div>

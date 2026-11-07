@@ -137,13 +137,22 @@ export function calculateSingleQuestionScore(
   }
 }
 
+const DEFAULT_SCORING_RULES: ScoringRules = {
+  'Pilihan Ganda': 1,
+  'Pilihan Ganda Kompleks': 2,
+  'Benar/Salah': 1,
+  'Menjodohkan': 2,
+  'Isian Singkat': 2,
+  'Esai': 5
+};
+
 /**
  * Evaluasi total nilai ujian lengkap beserta rincian per butir soal
  */
 export function evaluateFullExam(
   questions: Question[],
   studentAnswers: StudentAnswerItem[],
-  scoringRules: ScoringRules,
+  scoringRules?: ScoringRules,
   essayScores: Record<string, number> = {}
 ): {
   totalEarned: number;
@@ -151,6 +160,7 @@ export function evaluateFullExam(
   finalScore: number;
   details: QuestionScoreDetail[];
 } {
+  const rules = scoringRules && typeof scoringRules === 'object' ? scoringRules : DEFAULT_SCORING_RULES;
   const answerMap = new Map<string, QuestionAnswer>();
   studentAnswers.forEach(ans => answerMap.set(ans.questionId, ans.answer));
 
@@ -159,7 +169,7 @@ export function evaluateFullExam(
   const details: QuestionScoreDetail[] = [];
 
   questions.forEach(q => {
-    const maxPoints = scoringRules[q.type] || 1;
+    const maxPoints = rules[q.type] || 1;
     totalMax += maxPoints;
 
     let earned = 0;

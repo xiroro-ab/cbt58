@@ -467,7 +467,19 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
     if (isCompletedRef.current) {
       if (typeof serverScore === 'number') {
         setCompletedResult((prev: any) => {
-          if (!prev) return prev;
+          if (!prev) {
+            return {
+              studentName,
+              className: studentActualClass,
+              score: serverScore,
+              totalEarned: typeof serverEarned === 'number' ? serverEarned : 0,
+              totalMax: typeof serverMax === 'number' ? serverMax : (questions?.length || 0),
+              answers: answersRef.current || [],
+              submittedAt: new Date().toLocaleString('id-ID'),
+              violationCount: violationCountRef.current || 0,
+              details: []
+            };
+          }
           return {
             ...prev,
             score: serverScore,
@@ -790,7 +802,19 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
         if (isStopped) return;
         if (sub.isSubmitted && typeof sub.score === 'number') {
           setCompletedResult((prev: any) => {
-            if (!prev) return prev;
+            if (!prev) {
+              return {
+                studentName,
+                className: studentActualClass,
+                score: sub.score!,
+                totalEarned: typeof sub.totalEarned === 'number' ? sub.totalEarned : 0,
+                totalMax: typeof sub.totalMax === 'number' ? sub.totalMax : (questions?.length || 0),
+                answers: answersRef.current || [],
+                submittedAt: sub.submittedAt || new Date().toLocaleString('id-ID'),
+                violationCount: violationCountRef.current || 0,
+                details: []
+              };
+            }
             return {
               ...prev,
               score: sub.score!,

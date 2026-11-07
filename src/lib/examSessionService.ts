@@ -553,22 +553,29 @@ export async function clearProctorCommand(
 ): Promise<boolean> {
   try {
     const rows = await findCommandRows(subjectId, studentName);
-    const row = pickCommandRow(rows, className);
-    if (!row) return true;
+    const cleanClass = (className || '').toLowerCase().trim();
+    const targetRows = cleanClass
+      ? rows.filter(r => !r.className || r.className === cleanClass)
+      : rows;
 
-    let parsed: Record<string, unknown> = {};
-    try {
-      parsed = JSON.parse(row.message || '{}');
-    } catch {}
-    delete parsed.command;
-    delete parsed.commandAt;
-    delete parsed.commandId;
+    if (targetRows.length === 0) return true;
 
-    const { error } = await supabase
-      .from('exam_notifications')
-      .update({ message: JSON.stringify(parsed) })
-      .eq('id', row.id);
-    return !error;
+    await Promise.all(targetRows.map(async (row) => {
+      let parsed: Record<string, unknown> = {};
+      try {
+        parsed = JSON.parse(row.message || '{}');
+      } catch {}
+      delete parsed.command;
+      delete parsed.commandAt;
+      delete parsed.commandId;
+
+      await supabase
+        .from('exam_notifications')
+        .update({ message: JSON.stringify(parsed) })
+        .eq('id', row.id);
+    }));
+
+    return true;
   } catch {
     return false;
   }

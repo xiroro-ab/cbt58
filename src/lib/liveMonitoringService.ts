@@ -642,9 +642,12 @@ export function subscribeToStudentCommands(
   const cleanClass = (className || '').toLowerCase().trim();
   let stopped = false;
   const handledCommandIds = new Set<string>();
+  const listenerMountedAt = Date.now();
+  let isInitialPoll = true;
 
   const deliver = (cmd: ProctorCommand) => {
     if (stopped || !cmd) return;
+    if (cmd.timestamp && cmd.timestamp < listenerMountedAt - 2000) return;
     const cmdId = cmd.id || `${cmd.action}_${cmd.timestamp}`;
     if (handledCommandIds.has(cmdId)) return;
     if (cmd.studentName.toLowerCase().trim() !== cleanName) return;
@@ -664,6 +667,19 @@ export function subscribeToStudentCommands(
     if (stopped) return;
     const cmd = await readProctorCommand(subjectId, studentName, className);
     if (!cmd || stopped) return;
+
+    // Pada polling pertama kali saat listener baru aktif:
+    // Jika ada perintah lama di database (mis. RESET_EXAM dari sesi sebelumnya agar siswa bisa login):
+    // Perintah tersebut BUKAN untuk sesi yang baru dibuka ini. Tandai sudah di-handle dan bersihkan dari database.
+    if (isInitialPoll) {
+      isInitialPoll = false;
+      handledCommandIds.add(cmd.id);
+      void clearProctorCommand(subjectId, studentName, className);
+      if (cmd.commandAt < listenerMountedAt - 2000) {
+        return;
+      }
+    }
+
     if (handledCommandIds.has(cmd.id)) return;
 
     handledCommandIds.add(cmd.id);

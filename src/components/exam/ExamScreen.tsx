@@ -456,7 +456,12 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
 
   // 3. LISTEN TO PROCTOR COMMANDS (Buka Kunci, Paksa Selesai, Reset)
   useEffect(() => {
+    const sessionMountTime = Date.now();
     const unsubscribe = subscribeToStudentCommands(studentName, subject.id, (cmd) => {
+      // Abaikan perintah usang yang diterbitkan sebelum layar ujian sesi ini dibuka
+      if (cmd.timestamp && cmd.timestamp < sessionMountTime - 2000) {
+        return;
+      }
       if (cmd.action === 'RESET_VIOLATION') {
         // Pengawas membuka kunci & me-reset pelanggaran
         violationCountRef.current = 0;

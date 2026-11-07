@@ -16,7 +16,7 @@ import { HelpModal } from '@/components/modals/HelpModal';
 import { CertificateModal } from '@/components/modals/CertificateModal';
 import { Footer } from '@/components/layout/Footer';
 import { broadcastAnnouncementToStudents } from '@/lib/liveMonitoringService';
-import { lookupStudentExamSession } from '@/lib/examSessionService';
+import { lookupStudentExamSession, clearProctorCommand } from '@/lib/examSessionService';
 import {
   fetchActiveSubject,
   fetchAllSubjects,
@@ -1168,6 +1168,8 @@ export default function Home() {
         const cleanClass = selectedStudentClass ? selectedStudentClass.toLowerCase().trim() : '';
 
         // 1. Bersihkan flag blocked di localStorage karena guru sudah membuka kuncinya
+        // Serta bersihkan perintah pengawas usang di server (mis. RESET_EXAM) agar tidak menendang siswa keluar
+        clearProctorCommand(matchedSub.id, studentName, selectedStudentClass).catch(() => {});
         if (typeof window !== 'undefined') {
           try {
             if (cleanClass) {
@@ -1352,6 +1354,8 @@ export default function Home() {
           return;
         }
       } catch {}
+      // Bersihkan perintah pengawas usang di server sebelum mulai ujian
+      clearProctorCommand(briefingData.subject.id, studentName, selectedStudentClass).catch(() => {});
     }
     setShowBriefModal(false);
     setViewMode('student_exam');
@@ -1684,7 +1688,7 @@ export default function Home() {
             if (currentTeacher) {
               setViewMode('teacher');
             } else {
-              setViewMode('teacher_login');
+              setViewMode('student_login');
             }
           }}
         />

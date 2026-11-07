@@ -184,7 +184,7 @@ export const ApkDownloadModal: React.FC<ApkDownloadModalProps> = ({ isOpen, onCl
                 <div>
                   <h5 className="font-bold text-slate-800 dark:text-slate-200">Proteksi Password Guru</h5>
                   <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                    Siswa tidak bisa menutup ujian tanpa konfirmasi pengawas. Password dapat diubah langsung di HP pengawas.
+                    Siswa dilarang menutup ujian tanpa izin. Hanya Guru Pengawas yang berhak membuka kunci aplikasi.
                   </p>
                 </div>
               </div>
@@ -224,18 +224,6 @@ export const ApkDownloadModal: React.FC<ApkDownloadModalProps> = ({ isOpen, onCl
                 </span>
               </li>
             </ol>
-          </div>
-
-          {/* Catatan untuk Guru Pengawas Ruangan */}
-          <div className="p-3.5 rounded-xl bg-amber-50/80 dark:bg-amber-950/30 border border-amber-200/80 dark:border-amber-900/40 flex items-start gap-2.5 text-amber-800 dark:text-amber-300 text-[11px]">
-            <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
-            <div>
-              <p className="font-bold">Informasi untuk Guru Pengawas Ruangan:</p>
-              <p className="mt-0.5 text-amber-700 dark:text-amber-400/90 leading-relaxed">
-                Password default untuk menutup aplikasi siswa adalah <strong className="font-mono bg-amber-200/60 dark:bg-amber-900/60 px-1 py-0.5 rounded text-amber-900 dark:text-amber-200">palembang58</strong>. 
-                Guru dapat mengubah password ini kapan saja melalui ikon roda gigi <strong>⚙️ Menu Pengawas</strong> di layar awal aplikasi sebelum ujian dikunci.
-              </p>
-            </div>
           </div>
 
         </div>

@@ -890,6 +890,14 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   const [monitoringFilterSubId, setMonitoringFilterSubId] = useState<string>('ALL');
   const [monitoringFilterClass, setMonitoringFilterClass] = useState<string>('ALL');
   const [monitoringActionToast, setMonitoringActionToast] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!monitoringActionToast) return;
+    const timer = setTimeout(() => {
+      setMonitoringActionToast(null);
+    }, 4500);
+    return () => clearTimeout(timer);
+  }, [monitoringActionToast]);
   const [liveAnnouncementInput, setLiveAnnouncementInput] = useState('');
   const [showLiveAnnouncementBox, setShowLiveAnnouncementBox] = useState(false);
 
@@ -6964,37 +6972,46 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                               <div className="flex items-center justify-center gap-2">
                                 {/* TOMBOL BUKA KUNCI (RESET PELANGGARAN) */}
                                 <button
-                                  onClick={async () => {
-                                    const resetOk = await clearStudentAutolockInSupabase(s.subjectId, s.studentName, s.className);
-                                    if (!resetOk) {
-                                      setMonitoringActionToast(`Reset siswa ${s.studentName} gagal disimpan ke database. Silakan coba lagi.`);
-                                      return;
-                                    }
-                                    const commandOk = await sendProctorCommand({
-                                      action: 'RESET_VIOLATION',
-                                      studentName: s.studentName,
-                                      subjectId: s.subjectId,
-                                      className: s.className
+                                  onClick={() => {
+                                    showThemedConfirm({
+                                      title: 'Buka Kunci Ujian Siswa',
+                                      message: `Buka kunci layar ujian dan reset pelanggaran untuk siswa "${s.studentName}"${s.className ? ` (${s.className})` : ''}? Siswa dapat langsung melanjutkan ujian pada soal yang sedang dikerjakan.`,
+                                      variant: 'info',
+                                      confirmLabel: 'Ya, Buka Kunci',
+                                      cancelLabel: 'Batal',
+                                      onConfirm: async () => {
+                                        const resetOk = await clearStudentAutolockInSupabase(s.subjectId, s.studentName, s.className);
+                                        if (!resetOk) {
+                                          setMonitoringActionToast(`Reset siswa ${s.studentName} gagal disimpan ke database. Silakan coba lagi.`);
+                                          return;
+                                        }
+                                        const commandOk = await sendProctorCommand({
+                                          action: 'RESET_VIOLATION',
+                                          studentName: s.studentName,
+                                          subjectId: s.subjectId,
+                                          className: s.className
+                                        });
+                                        if (!commandOk) {
+                                          setMonitoringActionToast(`Reset siswa ${s.studentName} gagal ditulis ke server. Silakan coba lagi.`);
+                                          return;
+                                        }
+                                        const resetAt = Date.now();
+                                        setLiveSessions(prev => prev.map(session => {
+                                          const sameStudent = session.studentName.toLowerCase().trim() === s.studentName.toLowerCase().trim();
+                                          const sameClass = !s.className || (session.className || '').toLowerCase().trim() === (s.className || '').toLowerCase().trim();
+                                          return sameStudent && session.subjectId === s.subjectId && sameClass
+                                            ? {
+                                                ...session,
+                                                violationCount: 0,
+                                                status: 'ongoing' as const,
+                                                isFocus: true,
+                                                lastHeartbeat: resetAt
+                                              }
+                                            : session;
+                                        }));
+                                        setMonitoringActionToast(`Pelanggaran siswa ${s.studentName} berhasil di-reset menjadi 0 dan ujian telah dibuka kuncinya.`);
+                                      }
                                     });
-                                    if (!commandOk) {
-                                      setMonitoringActionToast(`Reset siswa ${s.studentName} gagal ditulis ke server. Silakan coba lagi.`);
-                                      return;
-                                    }
-                                    const resetAt = Date.now();
-                                    setLiveSessions(prev => prev.map(session => {
-                                      const sameStudent = session.studentName.toLowerCase().trim() === s.studentName.toLowerCase().trim();
-                                      const sameClass = !s.className || (session.className || '').toLowerCase().trim() === s.className.toLowerCase().trim();
-                                      return sameStudent && session.subjectId === s.subjectId && sameClass
-                                        ? {
-                                            ...session,
-                                            violationCount: 0,
-                                            status: 'ongoing' as const,
-                                            isFocus: true,
-                                            lastHeartbeat: resetAt
-                                          }
-                                        : session;
-                                    }));
-                                    setMonitoringActionToast(`Pelanggaran siswa ${s.studentName} berhasil di-reset menjadi 0 dan ujian telah dibuka kuncinya.`);
                                   }}
                                   className={`p-2 rounded-xl transition cursor-pointer flex items-center gap-1 text-xs font-bold ${
                                     isDisqualified || s.violationCount > 0

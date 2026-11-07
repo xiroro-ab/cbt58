@@ -659,13 +659,24 @@ export function subscribeToStudentCommands(
   const commandHandler = (cmd: ProctorCommand) => deliver(cmd);
   studentCommandListeners.add(commandHandler);
 
-  // 1. Inisialisasi saat mount: Cek apakah ada perintah lama yang tersisa dari sesi sebelum layar ini dibuka.
-  // Jika ada (mis. RESET_EXAM lama dari guru agar siswa bisa login), tandai sudah di-handle dan hapus agar tidak dieksekusi.
+  // 1. Inisialisasi saat mount: Cek apakah ada perintah di database.
+  // Jika pengawas telah memerintahkan FORCE_FINISH, eksekusi langsung!
+  // Jika perintahnya adalah RESET_EXAM usang (dari sesi sebelum siswa login), bersihkan agar tidak auto-kick.
   void readProctorCommand(subjectId, studentName, className).then(initialCmd => {
     if (stopped) return;
     if (initialCmd) {
       handledCommandIds.add(initialCmd.id);
       void clearProctorCommand(subjectId, studentName, className);
+      if (initialCmd.action === 'FORCE_FINISH') {
+        onCommand({
+          id: initialCmd.id,
+          action: 'FORCE_FINISH',
+          studentName,
+          subjectId,
+          className,
+          timestamp: initialCmd.commandAt
+        });
+      }
     }
   });
 

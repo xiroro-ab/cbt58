@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { ErrorBoundary } from '@/components/common/ErrorBoundary';
 import { initialSubject } from '@/lib/mockData';
 import { initialStudents, resolveStudentSingleClass } from '@/lib/rosterStudents';
@@ -1361,6 +1361,14 @@ export default function Home() {
     setViewMode('student_exam');
   };
 
+  const handleExamExit = useCallback(() => {
+    if (currentTeacher) {
+      setViewMode('teacher');
+    } else {
+      setViewMode('student_login');
+    }
+  }, [currentTeacher]);
+
   const handleFinishExam = async (resultData: any) => {
     const cleanName = resultData.studentName.toLowerCase().trim();
     const finalClass = resolveStudentSingleClass(resultData.studentName, resultData.className || selectedStudentClass);
@@ -1684,13 +1692,7 @@ export default function Home() {
           initialRemainingSeconds={studentResumeSession?.remainingSeconds}
           initialAnswers={studentResumeSession?.answers}
           onFinishExam={handleFinishExam}
-          onExit={() => {
-            if (currentTeacher) {
-              setViewMode('teacher');
-            } else {
-              setViewMode('student_login');
-            }
-          }}
+          onExit={handleExamExit}
         />
       </ErrorBoundary>
     );

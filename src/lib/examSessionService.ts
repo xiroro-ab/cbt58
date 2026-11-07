@@ -44,6 +44,24 @@ export async function upsertExamSession(
     payload.answers = session.answers || [];
   }
 
+  // Proteksi: Jika pengawas telah menyelesaikan ujian siswa ('completed'),
+  // jangan biarkan heartbeat siswa menimpa status completed kembali menjadi ongoing.
+  if (session.status !== 'completed') {
+    try {
+      const { data: existing } = await supabase
+        .from('exam_sessions')
+        .select('status')
+        .eq('subject_id', session.subjectId)
+        .ilike('student_name', session.studentName.trim())
+        .limit(1)
+        .maybeSingle();
+
+      if (existing && existing.status === 'completed') {
+        return true;
+      }
+    } catch {}
+  }
+
   let { error } = await supabase
     .from('exam_sessions')
     .upsert(payload, { onConflict: 'subject_id,student_name,class_name' });
@@ -455,12 +473,21 @@ async function findCommandRows(
 }
 
 function pickCommandRow(rows: CommandRow[], className?: string): CommandRow | null {
+  if (!rows || rows.length === 0) return null;
   const cleanClass = (className || '').toLowerCase().trim();
   if (cleanClass) {
     const exact = rows.find(r => r.className === cleanClass);
     if (exact) return exact;
-    if (rows.length === 1) return rows[0];
-    return null;
+    // Jika tidak ada kelas yang cocok persis, prioritaskan row yang memiliki command aktif
+    const withCommand = rows.find(r => {
+      try {
+        const p = JSON.parse(r.message || '{}');
+        return Boolean(p.command);
+      } catch {
+        return false;
+      }
+    });
+    if (withCommand) return withCommand;
   }
   return rows[0] || null;
 }

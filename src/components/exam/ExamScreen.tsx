@@ -13,8 +13,10 @@ import {
   fetchMessages,
   checkStudentLockStatus,
   getStudentLockState,
-  saveStudentLockState
+  saveStudentLockState,
+  checkStudentExamSubmission
 } from '@/lib/supabaseService';
+import { lookupStudentExamSession } from '@/lib/examSessionService';
 import {
   reportStudentSession,
   removeStudentSession,
@@ -454,6 +456,65 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
     };
   }, [subject.id, studentName, studentActualClass, blockedKey, cleanName]);
 
+  // HANDLER PENYELESAIAN PAKSA OLEH PENGAWAS
+  const triggerForceFinish = useCallback((reason: string = 'Diselesaikan Paksa oleh Pengawas') => {
+    if (isCompletedRef.current) return;
+    isCompletedRef.current = true;
+    setIsExamCompleted(true);
+    setIsLocked(false);
+    setShowWarningModal(false);
+
+    const cleanName = studentName.toLowerCase().trim();
+    const cleanClass = studentActualClass.toLowerCase().trim();
+    if (typeof window !== 'undefined') {
+      try {
+        if (cleanClass) {
+          localStorage.setItem(`cbt_submitted_${subject.id}_${cleanClass}_${cleanName}`, JSON.stringify({
+            submittedAt: new Date().toLocaleString('id-ID'),
+            reason
+          }));
+          localStorage.removeItem(`cbt_exam_questions_${subject.id}_${cleanClass}_${cleanName}`);
+          localStorage.removeItem(`cbt_blocked_${subject.id}_${cleanClass}_${cleanName}`);
+        }
+        localStorage.setItem(`cbt_submitted_${subject.id}_${cleanName}`, JSON.stringify({
+          submittedAt: new Date().toLocaleString('id-ID'),
+          reason
+        }));
+        localStorage.removeItem(stateKey);
+        localStorage.removeItem(blockedKey);
+        localStorage.removeItem(`cbt_exam_questions_${subject.id}_${cleanName}`);
+      } catch {}
+    }
+    removeStudentSession(studentName, subject.id, studentActualClass);
+
+    let evaluation: any = { finalScore: 0, totalEarned: 0, totalMax: questions?.length || 0, details: [] };
+    try {
+      if (Array.isArray(questions) && questions.length > 0) {
+        evaluation = evaluateFullExam(questions, answersRef.current || [], subject.scoringRules || {});
+      }
+    } catch (e) {
+      console.warn('Gagal evaluasi nilai saat force finish:', e);
+    }
+
+    setCompletedResult({
+      studentName,
+      className: studentActualClass,
+      score: evaluation.finalScore ?? 0,
+      totalEarned: evaluation.totalEarned ?? 0,
+      totalMax: evaluation.totalMax ?? (questions?.length || 0),
+      answers: answersRef.current || [],
+      submittedAt: new Date().toLocaleString('id-ID'),
+      violationCount: violationCountRef.current || 0,
+      details: evaluation.details || []
+    });
+
+    try {
+      if (document.fullscreenElement && document.exitFullscreen) {
+        document.exitFullscreen().catch(() => {});
+      }
+    } catch {}
+  }, [studentName, subject.id, studentActualClass, stateKey, blockedKey, questions]);
+
   // 3. LISTEN TO PROCTOR COMMANDS (Buka Kunci, Paksa Selesai, Reset)
   useEffect(() => {
     const unsubscribe = subscribeToStudentCommands(studentName, subject.id, (cmd) => {
@@ -483,60 +544,7 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
         }
         requestFullscreenMode();
       } else if (cmd.action === 'FORCE_FINISH') {
-        // Pengawas menyelesaikan ujian secara paksa
-        isCompletedRef.current = true;
-        setIsExamCompleted(true);
-        setIsLocked(false);
-        const cleanName = studentName.toLowerCase().trim();
-        const cleanClass = studentActualClass.toLowerCase().trim();
-        if (typeof window !== 'undefined') {
-          try {
-            if (cleanClass) {
-              localStorage.setItem(`cbt_submitted_${subject.id}_${cleanClass}_${cleanName}`, JSON.stringify({
-                submittedAt: new Date().toLocaleString('id-ID'),
-                reason: 'Diselesaikan Paksa oleh Pengawas'
-              }));
-              localStorage.removeItem(`cbt_exam_questions_${subject.id}_${cleanClass}_${cleanName}`);
-              localStorage.removeItem(`cbt_blocked_${subject.id}_${cleanClass}_${cleanName}`);
-            }
-            localStorage.setItem(`cbt_submitted_${subject.id}_${cleanName}`, JSON.stringify({
-              submittedAt: new Date().toLocaleString('id-ID'),
-              reason: 'Diselesaikan Paksa oleh Pengawas'
-            }));
-            localStorage.removeItem(stateKey);
-            localStorage.removeItem(blockedKey);
-            localStorage.removeItem(`cbt_exam_questions_${subject.id}_${cleanName}`);
-          } catch {}
-        }
-        removeStudentSession(studentName, subject.id, studentActualClass);
-
-        // Tampilkan tampilan selesai ujian pada layar siswa tanpa memanggil onFinishExam lagi (karena guru sudah menyimpannya ke database)
-        let evaluation: any = { finalScore: 0, totalEarned: 0, totalMax: questions?.length || 0, details: [] };
-        try {
-          if (Array.isArray(questions) && questions.length > 0) {
-            evaluation = evaluateFullExam(questions, answersRef.current || [], subject.scoringRules || {});
-          }
-        } catch (e) {
-          console.warn('Gagal evaluasi nilai saat force finish:', e);
-        }
-
-        setCompletedResult({
-          studentName,
-          className: studentActualClass,
-          score: evaluation.finalScore ?? 0,
-          totalEarned: evaluation.totalEarned ?? 0,
-          totalMax: evaluation.totalMax ?? (questions?.length || 0),
-          answers: answersRef.current || [],
-          submittedAt: new Date().toLocaleString('id-ID'),
-          violationCount: violationCountRef.current || 0,
-          details: evaluation.details || []
-        });
-
-        try {
-          if (document.fullscreenElement && document.exitFullscreen) {
-            document.exitFullscreen().catch(() => {});
-          }
-        } catch {}
+        triggerForceFinish('Diselesaikan Paksa oleh Pengawas');
       } else if (cmd.action === 'RESET_EXAM') {
         // Pengawas mereset ujian siswa (bersihkan cache dan kembali ke login)
         removeStudentSession(studentName, subject.id, studentActualClass);
@@ -602,6 +610,41 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
 
     return () => clearInterval(pollInterval);
   }, [isLocked, isExamCompleted, subject.id, studentName, subject.violationLimit, blockedKey, stateKey, sendDirectHeartbeat, requestFullscreenMode]);
+
+  // 3c. FAIL-SAFE PENGECEKAN STATUS SELESAI / SIMPAN PAKSA OLEH PENGAWAS (SETIAP 4 DETIK)
+  // Menjamin jika guru menekan "Simpan Paksa", layar siswa seketika berganti ke hasil ujian
+  // sekalipun sinyal perintah proctor sempat tertunda di jaringan seluler.
+  useEffect(() => {
+    if (isExamCompleted) return;
+
+    let stopped = false;
+    const checkProctorCompletion = async () => {
+      if (stopped || isCompletedRef.current) return;
+      try {
+        // A. Cek apakah pengawas telah menyimpan nilai siswa ke database nilai
+        const subStatus = await checkStudentExamSubmission(subject.id, studentName, studentActualClass);
+        if (stopped || isCompletedRef.current) return;
+        if (subStatus.isSubmitted) {
+          triggerForceFinish('Diselesaikan oleh Pengawas');
+          return;
+        }
+
+        // B. Cek apakah status sesi siswa di server telah diubah pengawas menjadi 'completed'
+        const sessionCheck = await lookupStudentExamSession(subject.id, studentName, studentActualClass);
+        if (stopped || isCompletedRef.current) return;
+        if (sessionCheck.session && sessionCheck.session.status === 'completed') {
+          triggerForceFinish('Diselesaikan Paksa oleh Pengawas');
+          return;
+        }
+      } catch {}
+    };
+
+    const interval = setInterval(checkProctorCompletion, 4000);
+    return () => {
+      stopped = true;
+      clearInterval(interval);
+    };
+  }, [isExamCompleted, subject.id, studentName, studentActualClass, triggerForceFinish]);
 
   // Handler Pengecekan Kunci Mandiri saat Siswa di Layar Terkunci
   const handleManualCheckUnlock = async () => {

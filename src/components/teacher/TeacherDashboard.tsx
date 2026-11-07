@@ -7021,7 +7021,10 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                                         const cleanClass = (s.className || '').toLowerCase().trim();
 
                                         // 1. Ambil jawaban terbaru siswa dari sesi database (bukan dari memori guru)
-                                        const sessionAnswers = await fetchExamSessionAnswers(s.subjectId, s.studentName, s.className);
+                                        let sessionAnswers = await fetchExamSessionAnswers(s.subjectId, s.studentName, s.className);
+                                        if ((!sessionAnswers || sessionAnswers.length === 0) && Array.isArray(s.answers) && s.answers.length > 0) {
+                                          sessionAnswers = s.answers;
+                                        }
 
                                         // 2. Simpan flag submit lokal di browser pengawas & bersihkan cache
                                         if (typeof window !== 'undefined') {
@@ -7040,7 +7043,15 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                                         }
                                         // 3. Evaluasi nilai dan simpan ke database nilai SEBAGAI PRIORITAS UTAMA
                                         const matchedSub = (allSubjects || []).find(sub => sub.id === s.subjectId) || subject;
-                                        const subjectQuestions = questions.filter(q => q.subjectId === s.subjectId);
+                                        let subjectQuestions = questions.filter(q => q.subjectId === s.subjectId);
+                                        if (subjectQuestions.length === 0) {
+                                          try {
+                                            const remoteQ = await fetchQuestionsBySubject(s.subjectId);
+                                            if (remoteQ && remoteQ.length > 0) {
+                                              subjectQuestions = remoteQ;
+                                            }
+                                          } catch {}
+                                        }
                                         const evalRes = evaluateFullExam(subjectQuestions, sessionAnswers, matchedSub.scoringRules);
                                         const forcedResult: ExamResult = {
                                           id: `res-${Date.now()}`,

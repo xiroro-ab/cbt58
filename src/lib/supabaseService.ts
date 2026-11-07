@@ -566,9 +566,24 @@ export async function checkStudentExamSubmission(
       query = query.ilike('class_name', cleanClass);
     }
 
-    const { data, error } = await query
+    let { data, error } = await query
       .order('submitted_at', { ascending: false })
       .limit(1);
+
+    if (!error && (!data || data.length === 0) && cleanClass) {
+      try {
+        const fallbackRes = await supabase
+          .from('exam_results')
+          .select('id, score, total_earned, total_max, submitted_at, student_name, class_name')
+          .eq('subject_id', subjectId)
+          .ilike('student_name', studentName.trim())
+          .order('submitted_at', { ascending: false })
+          .limit(1);
+        if (!fallbackRes.error && fallbackRes.data && fallbackRes.data.length > 0) {
+          data = fallbackRes.data;
+        }
+      } catch {}
+    }
 
     if (!error) {
       if (data && data.length > 0) {

@@ -464,7 +464,38 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
     serverEarned?: number,
     serverMax?: number
   ) => {
-    if (isCompletedRef.current) return;
+    if (isCompletedRef.current) {
+      if (typeof serverScore === 'number') {
+        setCompletedResult((prev: any) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            score: serverScore,
+            totalEarned: typeof serverEarned === 'number' ? serverEarned : prev.totalEarned,
+            totalMax: typeof serverMax === 'number' ? serverMax : prev.totalMax
+          };
+        });
+        if (typeof window !== 'undefined') {
+          try {
+            const cleanName = studentName.toLowerCase().trim();
+            const cleanClass = studentActualClass.toLowerCase().trim();
+            if (cleanClass) {
+              localStorage.setItem(`cbt_submitted_${subject.id}_${cleanClass}_${cleanName}`, JSON.stringify({
+                score: serverScore,
+                submittedAt: new Date().toLocaleString('id-ID'),
+                reason
+              }));
+            }
+            localStorage.setItem(`cbt_submitted_${subject.id}_${cleanName}`, JSON.stringify({
+              score: serverScore,
+              submittedAt: new Date().toLocaleString('id-ID'),
+              reason
+            }));
+          } catch {}
+        }
+      }
+      return;
+    }
     isCompletedRef.current = true;
     setIsExamCompleted(true);
     setIsLocked(false);
@@ -496,7 +527,34 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
       }
     }
 
-    // 2. Jika di server belum ada nilai (mis. offline), lakukan evaluasi lokal sebagai cadangan
+    // 2. Evaluasi otoritatif via Serverless API dengan kunci jawaban resmi Supabase (Server-side)
+    if (finalScore === null) {
+      try {
+        const res = await fetch('/api/exam/submit-score', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            subjectId: subject.id,
+            studentName,
+            className: studentActualClass,
+            answers: answersRef.current || [],
+            violationCount: violationCountRef.current || 0
+          })
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data?.evaluation) {
+            finalScore = data.evaluation.finalScore;
+            finalEarned = data.evaluation.totalEarned;
+            finalMax = data.evaluation.totalMax;
+          }
+        }
+      } catch (err) {
+        console.warn('Gagal evaluasi nilai via server endpoint:', err);
+      }
+    }
+
+    // 3. Cadangan terakhir jika jaringan benar-benar offline total
     if (finalScore === null) {
       let evaluation: any = { finalScore: 0, totalEarned: 0, totalMax: questions?.length || 0, details: [] };
       try {
@@ -679,7 +737,9 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
         const sessionCheck = await lookupStudentExamSession(subject.id, studentName, studentActualClass);
         if (stopped || isCompletedRef.current) return;
         if (sessionCheck.session && sessionCheck.session.status === 'completed') {
-          void triggerForceFinish('Diselesaikan Paksa oleh Pengawas', subStatus.score, subStatus.totalEarned, subStatus.totalMax);
+          let finalSub = await checkStudentExamSubmission(subject.id, studentName, studentActualClass);
+          if (!finalSub.isSubmitted) finalSub = await checkStudentExamSubmission(subject.id, studentName);
+          void triggerForceFinish('Diselesaikan Paksa oleh Pengawas', finalSub.score, finalSub.totalEarned, finalSub.totalMax);
           return;
         }
       } catch {}
@@ -719,7 +779,7 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
 
     let isStopped = false;
     let pollCount = 0;
-    const maxPolls = 15;
+    const maxPolls = 30;
 
     const syncOfficialScore = async () => {
       if (isStopped || pollCount >= maxPolls) return;
@@ -728,7 +788,7 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
         let sub = await checkStudentExamSubmission(subject.id, studentName, studentActualClass);
         if (!sub.isSubmitted) sub = await checkStudentExamSubmission(subject.id, studentName);
         if (isStopped) return;
-        if (sub.isSubmitted && typeof sub.score === 'number' && sub.score > 0) {
+        if (sub.isSubmitted && typeof sub.score === 'number') {
           setCompletedResult((prev: any) => {
             if (!prev) return prev;
             return {
@@ -756,12 +816,14 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
               }));
             } catch {}
           }
-          isStopped = true;
+          if (sub.score > 0 || (typeof sub.totalEarned === 'number' && sub.totalEarned > 0)) {
+            isStopped = true;
+          }
         }
       } catch {}
     };
 
-    const intervalId = setInterval(syncOfficialScore, 1200);
+    const intervalId = setInterval(syncOfficialScore, 1000);
     void syncOfficialScore();
 
     return () => {

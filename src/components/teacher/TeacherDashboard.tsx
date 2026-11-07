@@ -240,7 +240,8 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
       enableTTE: schoolSettings?.enableTTE !== false,
       tteType: schoolSettings?.tteType || 'qrcode',
       isolateTeacherDossier: schoolSettings?.isolateTeacherDossier !== false,
-      teacherRegistrationPasscode: schoolSettings?.teacherRegistrationPasscode || 'GURU58'
+      teacherRegistrationPasscode: schoolSettings?.teacherRegistrationPasscode || 'GURU58',
+      examExitPassword: schoolSettings?.examExitPassword || 'palembang58'
     };
   }, [schoolSettings, currentTeacher]);
 

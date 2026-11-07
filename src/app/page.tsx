@@ -210,7 +210,8 @@ export default function Home() {
             ...prev,
             ...parsed,
             logoLeft: parsed.logoLeft || defaultSchoolSettings.logoLeft,
-            logoRight: parsed.logoRight || defaultSchoolSettings.logoRight
+            logoRight: parsed.logoRight || defaultSchoolSettings.logoRight,
+            examExitPassword: parsed.examExitPassword || prev.examExitPassword || defaultSchoolSettings.examExitPassword || 'palembang58'
           }));
         }
       } catch (err) {
@@ -249,13 +250,21 @@ export default function Home() {
   }, [schoolSettings?.examExitPassword]);
 
   const handleUpdateSchoolSettings = async (newSettings: SchoolSettings) => {
+    // Pastikan examExitPassword dan teacherRegistrationPasscode selalu terjaga
+    const safeSettings: SchoolSettings = {
+      ...schoolSettings,
+      ...newSettings,
+      examExitPassword: newSettings.examExitPassword || schoolSettings.examExitPassword || 'palembang58',
+      teacherRegistrationPasscode: newSettings.teacherRegistrationPasscode || schoolSettings.teacherRegistrationPasscode || 'GURU58'
+    };
+
     // 1. Perbarui state UI seketika
-    setSchoolSettings(newSettings);
+    setSchoolSettings(safeSettings);
 
     // 2. Simpan ke localStorage lokal browser
     if (typeof window !== 'undefined') {
       try {
-        localStorage.setItem('cbt_school_settings', JSON.stringify(newSettings));
+        localStorage.setItem('cbt_school_settings', JSON.stringify(safeSettings));
       } catch (err) {
         console.warn('Peringatan kuota localStorage saat menyimpan pengaturan:', err);
       }
@@ -263,7 +272,7 @@ export default function Home() {
 
     // 3. Simpan permanen ke Database Supabase Cloud agar seluruh guru & perangkat tersinkronisasi
     try {
-      const res = await saveSchoolSettingsToSupabase(newSettings);
+      const res = await saveSchoolSettingsToSupabase(safeSettings);
       if (res.success) {
         console.log('✅ Pengaturan kop surat & sekolah tersimpan ke Supabase Database.');
       } else {

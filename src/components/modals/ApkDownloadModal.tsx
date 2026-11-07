@@ -16,7 +16,8 @@ import {
   EyeOff,
   KeyRound,
   FileDown,
-  Info
+  Info,
+  Loader2
 } from 'lucide-react';
 
 interface ApkDownloadModalProps {
@@ -33,8 +34,11 @@ export const ApkDownloadModal: React.FC<ApkDownloadModalProps> = ({
   activeExitPassword = 'palembang58'
 }) => {
   const [copied, setCopied] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
 
   if (!isOpen) return null;
+
+  const GITHUB_MIRROR_URL = 'https://raw.githubusercontent.com/xiroro-ab/cbt58/main/public/cbt-smpn58.apk';
 
   const apkDownloadUrl = typeof window !== 'undefined' 
     ? `${window.location.origin}/cbt-smpn58.apk`
@@ -44,6 +48,32 @@ export const ApkDownloadModal: React.FC<ApkDownloadModalProps> = ({
     navigator.clipboard.writeText(apkDownloadUrl);
     setCopied(true);
     setTimeout(() => setCopied(false), 2500);
+  };
+
+  const handleDirectDownload = async () => {
+    setIsDownloading(true);
+    try {
+      // 1. Coba fetch blob di dalam session browser (memotong blokir DownloadManager pada tablet/mode desktop)
+      const res = await fetch('/cbt-smpn58.apk');
+      if (!res.ok) throw new Error('Download utama gagal: ' + res.status);
+      const blob = await res.blob();
+      const blobUrl = window.URL.createObjectURL(blob);
+      const tempLink = document.createElement('a');
+      tempLink.href = blobUrl;
+      tempLink.download = 'cbt-smpn58.apk';
+      document.body.appendChild(tempLink);
+      tempLink.click();
+      setTimeout(() => {
+        document.body.removeChild(tempLink);
+        window.URL.revokeObjectURL(blobUrl);
+        setIsDownloading(false);
+      }, 1200);
+    } catch (err) {
+      console.warn('In-memory download failed, falling back to direct mirror:', err);
+      // 2. Jika fetch lokal terhalang bot protection, alihkan langsung ke CDN GitHub yang bebas blokir
+      window.location.href = GITHUB_MIRROR_URL;
+      setIsDownloading(false);
+    }
   };
 
   return (
@@ -103,20 +133,42 @@ export const ApkDownloadModal: React.FC<ApkDownloadModalProps> = ({
                   Kompatibel dengan semua HP Android (Android 7.0 s/d Android 14+). Cukup 1 klik kunci layar langsung ujian.
                 </p>
                 <div className="flex items-center justify-center sm:justify-start gap-3 pt-1 text-[11px] text-violet-200 font-mono">
-                  <span>Ukuran: ~6.3 MB</span>
+                  <span>Ukuran: ~7.3 MB</span>
                   <span>•</span>
                   <span>Update: November 2026</span>
                 </div>
               </div>
 
               <div className="flex flex-col w-full sm:w-auto gap-2 flex-shrink-0">
-                <a
-                  href="/cbt-smpn58.apk"
-                  download="cbt-smpn58-v3.apk"
-                  className="px-5 py-3 rounded-xl bg-white text-violet-700 hover:bg-violet-50 font-extrabold text-xs shadow-lg flex items-center justify-center gap-2.5 transition active:scale-[0.98] cursor-pointer"
+                {/* Tombol Unduh Utama (Blob In-Memory / Otomatis Bypass Blokir Tablet) */}
+                <button
+                  type="button"
+                  disabled={isDownloading}
+                  onClick={handleDirectDownload}
+                  className="px-5 py-3 rounded-xl bg-white text-violet-700 hover:bg-violet-50 font-extrabold text-xs shadow-lg flex items-center justify-center gap-2.5 transition active:scale-[0.98] cursor-pointer disabled:opacity-80"
                 >
-                  <Download className="w-4 h-4 stroke-[2.5]" />
-                  <span>Unduh File APK (~6.3 MB)</span>
+                  {isDownloading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin text-violet-600" />
+                      <span>Menyiapkan File APK...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Download className="w-4 h-4 stroke-[2.5]" />
+                      <span>Unduh File APK (~7.3 MB)</span>
+                    </>
+                  )}
+                </button>
+
+                {/* Server Cadangan CDN (100% Bebas Blokir Tablet / Mode Desktop) */}
+                <a
+                  href={GITHUB_MIRROR_URL}
+                  download="cbt-smpn58.apk"
+                  className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold flex items-center justify-center gap-1.5 transition cursor-pointer shadow-xs"
+                  title="Server Cadangan CDN Bebas Blokir (Solusi jika di tablet tertulis unduhan gagal)"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  <span>Server Cadangan (Khusus Tablet)</span>
                 </a>
                 
                 <button
@@ -231,6 +283,10 @@ export const ApkDownloadModal: React.FC<ApkDownloadModalProps> = ({
                 </span>
               </li>
             </ol>
+
+            <div className="p-2.5 rounded-xl bg-violet-50/80 dark:bg-violet-950/30 border border-violet-200/60 dark:border-violet-800/40 text-[10.5px] text-violet-800 dark:text-violet-300">
+              💡 <strong>Tips Khusus Tablet:</strong> Jika browser tablet Anda dalam mode <em>Situs Desktop</em> dan unduhan tertulis gagal, cukup gunakan tombol hijau <strong>"Server Cadangan (Khusus Tablet)"</strong> di atas atau hilangkan centang <em>"Situs Desktop"</em> pada menu Chrome.
+            </div>
           </div>
 
           {/* Catatan Khusus untuk Guru Pengawas Ruangan (Hanya Tampil Jika Dibuka oleh Guru yang Sudah Login) */}

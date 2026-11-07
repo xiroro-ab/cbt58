@@ -343,6 +343,14 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
   // AUTO FULLSCREEN ON START
   useEffect(() => {
     requestFullscreenMode();
+    // Sinkronisasi Password Keluar Ujian ke Android Exambro
+    try {
+      const exitPass = (window as any).__CBT_EXIT_PASSWORD__;
+      if (exitPass && (window as any).AndroidExambro?.syncExitPassword) {
+        (window as any).AndroidExambro.syncExitPassword(exitPass);
+      }
+    } catch (e) {}
+
     const timer = setTimeout(() => {
       const isFs = Boolean(document.fullscreenElement || (document as any).webkitFullscreenElement);
       if (!isFs) setShowFullscreenPrompt(true);

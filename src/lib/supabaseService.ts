@@ -2440,7 +2440,8 @@ export const defaultSchoolSettings: SchoolSettings = {
   enableTTE: true,
   tteType: 'qrcode',
   isolateTeacherDossier: true,
-  teacherRegistrationPasscode: 'GURU58'
+  teacherRegistrationPasscode: 'GURU58',
+  examExitPassword: 'palembang58'
 };
 
 /**
@@ -2482,6 +2483,13 @@ export async function fetchSchoolSettingsFromSupabase(): Promise<SchoolSettings 
       directData?.teacherRegistrationPasscode ||
       defaultSchoolSettings.teacherRegistrationPasscode;
 
+    const resolvedExitPassword =
+      teacherAssignments?.examExitPassword ||
+      directData?.exam_exit_password ||
+      directData?.examExitPassword ||
+      defaultSchoolSettings.examExitPassword ||
+      'palembang58';
+
     if (directData) {
       return {
         institution1: directData.institution1 || teacherAssignments?.institution1 || defaultSchoolSettings.institution1,
@@ -2501,7 +2509,8 @@ export async function fetchSchoolSettingsFromSupabase(): Promise<SchoolSettings 
         enableTTE: directData.enable_tte !== undefined ? directData.enable_tte !== false : (teacherAssignments?.enableTTE !== false),
         tteType: (directData.tte_type === 'barcode' || teacherAssignments?.tteType === 'barcode') ? 'barcode' : 'qrcode',
         isolateTeacherDossier: directData.isolate_teacher_dossier !== undefined ? directData.isolate_teacher_dossier !== false : (teacherAssignments?.isolateTeacherDossier !== false),
-        teacherRegistrationPasscode: resolvedPasscode
+        teacherRegistrationPasscode: resolvedPasscode,
+        examExitPassword: resolvedExitPassword
       };
     }
 
@@ -2510,6 +2519,7 @@ export async function fetchSchoolSettingsFromSupabase(): Promise<SchoolSettings 
         ...defaultSchoolSettings,
         ...teacherAssignments,
         teacherRegistrationPasscode: resolvedPasscode,
+        examExitPassword: resolvedExitPassword,
         logoLeft: teacherAssignments.logoLeft || defaultSchoolSettings.logoLeft,
         logoRight: teacherAssignments.logoRight || defaultSchoolSettings.logoRight
       };

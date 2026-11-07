@@ -233,6 +233,21 @@ export default function Home() {
     });
   }, []);
 
+  // Sinkronisasi Terpusat Password Keluar ke Android Exambro (Opsi 2)
+  useEffect(() => {
+    const exitPass = (schoolSettings?.examExitPassword || 'palembang58').trim();
+    if (typeof window !== 'undefined') {
+      (window as any).__CBT_EXIT_PASSWORD__ = exitPass;
+      try {
+        if ((window as any).AndroidExambro?.syncExitPassword) {
+          (window as any).AndroidExambro.syncExitPassword(exitPass);
+        }
+      } catch (e) {
+        console.warn('Gagal syncExitPassword ke AndroidExambro:', e);
+      }
+    }
+  }, [schoolSettings?.examExitPassword]);
+
   const handleUpdateSchoolSettings = async (newSettings: SchoolSettings) => {
     // 1. Perbarui state UI seketika
     setSchoolSettings(newSettings);

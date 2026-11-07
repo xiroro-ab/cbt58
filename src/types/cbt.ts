@@ -163,6 +163,9 @@ export interface SchoolSettings {
 
   // Keamanan Otorisasi Pendaftaran Dewan Guru (Server-Side Secret)
   teacherRegistrationPasscode?: string;
+
+  // Password Keluar Resmi Aplikasi Exambro Android (Tersinkronisasi Otomatis)
+  examExitPassword?: string;
 }
 
 export interface QuestionScoreDetail {

@@ -7944,6 +7944,55 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                   </div>
                 )}
 
+                {/* PASSWORD KELUAR UJIAN ANDROID (EXAMBRO) TERSINKRONISASI SERVER */}
+                <div className="p-4 rounded-2xl bg-gradient-to-r from-violet-50 via-slate-50 to-indigo-50 dark:from-violet-950/40 dark:via-slate-900/40 dark:to-indigo-950/30 border border-violet-200/80 dark:border-violet-800/60 space-y-3 shadow-xs">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="space-y-0.5">
+                      <span className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                        <Lock className="w-4 h-4 text-violet-600 dark:text-violet-400" />
+                        <span>Password Keluar Aplikasi Android (Exambro)</span>
+                        <span className="px-2 py-0.5 rounded-full text-[10px] bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-200 font-bold">
+                          Sinkron Otomatis (Opsi 2)
+                        </span>
+                      </span>
+                      <p className="text-[11px] text-slate-600 dark:text-slate-400 leading-relaxed">
+                        Password resmi yang digunakan Guru Pengawas untuk membuka kunci dan menutup aplikasi Android siswa setelah ujian selesai. 
+                        Cukup ubah di sini, <strong>seluruh HP siswa di ruang ujian otomatis tersinkronisasi</strong> tanpa perlu disentuh satu per satu!
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-2 w-full sm:w-auto shrink-0">
+                      <input
+                        type="text"
+                        value={localSettingsForm.examExitPassword ?? ''}
+                        onChange={e => setLocalSettingsForm(prev => ({ ...prev, examExitPassword: e.target.value }))}
+                        placeholder="Default: palembang58"
+                        className="w-full sm:w-44 px-3.5 py-2 rounded-xl bg-white dark:bg-slate-900 border border-violet-300 dark:border-violet-700 text-slate-900 dark:text-white font-mono font-bold text-xs tracking-wider focus:outline-none focus:ring-2 focus:ring-violet-500 shadow-2xs"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const passToSave = (localSettingsForm.examExitPassword || '').trim() || 'palembang58';
+                          const updated = { ...localSettingsForm, examExitPassword: passToSave };
+                          setLocalSettingsForm(updated);
+                          onUpdateSchoolSettings?.(updated);
+                          setSettingsSavedToast(true);
+                          showThemedAlert(
+                            'Password Keluar Exambro Berhasil Diperbarui',
+                            `Password keluar ujian siswa berhasil diubah menjadi "${passToSave}". Seluruh aplikasi Android siswa akan otomatis mengikuti password ini!`,
+                            'info'
+                          );
+                          setTimeout(() => setSettingsSavedToast(false), 3000);
+                        }}
+                        className="px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 active:scale-95 text-white font-bold text-xs shadow-md shadow-violet-600/20 transition cursor-pointer flex items-center gap-1.5 shrink-0"
+                      >
+                        <Save className="w-3.5 h-3.5" />
+                        <span>Simpan Password</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
                 {/* LIVE PREVIEW KOP SURAT */}
                 <div className="space-y-2 pt-2 border-t border-slate-100 dark:border-slate-800">
                   <span className="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">

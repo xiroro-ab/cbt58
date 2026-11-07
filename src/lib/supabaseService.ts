@@ -546,7 +546,7 @@ export async function checkStudentExamSubmission(
   subjectId: string,
   studentName: string,
   className?: string
-): Promise<{ isSubmitted: boolean; score?: number; submittedAt?: string }> {
+): Promise<{ isSubmitted: boolean; score?: number; totalEarned?: number; totalMax?: number; submittedAt?: string }> {
   if (!subjectId || !studentName) {
     return { isSubmitted: false };
   }
@@ -558,7 +558,7 @@ export async function checkStudentExamSubmission(
   try {
     let query = supabase
       .from('exam_results')
-      .select('id, score, submitted_at, student_name, class_name')
+      .select('id, score, total_earned, total_max, submitted_at, student_name, class_name')
       .eq('subject_id', subjectId)
       .ilike('student_name', studentName.trim());
 
@@ -597,6 +597,8 @@ export async function checkStudentExamSubmission(
         return {
           isSubmitted: true,
           score: Number(item.score),
+          totalEarned: Number(item.total_earned) || 0,
+          totalMax: Number(item.total_max) || 0,
           submittedAt: submittedAtFormatted
         };
       } else {

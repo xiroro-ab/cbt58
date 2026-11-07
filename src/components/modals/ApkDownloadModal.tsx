@@ -22,9 +22,16 @@ import {
 interface ApkDownloadModalProps {
   isOpen: boolean;
   onClose: () => void;
+  isTeacherView?: boolean;
+  activeExitPassword?: string;
 }
 
-export const ApkDownloadModal: React.FC<ApkDownloadModalProps> = ({ isOpen, onClose }) => {
+export const ApkDownloadModal: React.FC<ApkDownloadModalProps> = ({
+  isOpen,
+  onClose,
+  isTeacherView = false,
+  activeExitPassword = 'palembang58'
+}) => {
   const [copied, setCopied] = useState(false);
 
   if (!isOpen) return null;
@@ -225,6 +232,31 @@ export const ApkDownloadModal: React.FC<ApkDownloadModalProps> = ({ isOpen, onCl
               </li>
             </ol>
           </div>
+
+          {/* Catatan Khusus untuk Guru Pengawas Ruangan (Hanya Tampil Jika Dibuka oleh Guru yang Sudah Login) */}
+          {isTeacherView && (
+            <div className="p-3.5 rounded-2xl bg-amber-50/90 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800/80 flex items-start gap-2.5 text-amber-900 dark:text-amber-200 text-[11px] animate-in fade-in">
+              <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+              <div className="space-y-1">
+                <p className="font-bold flex items-center gap-1.5 text-amber-950 dark:text-amber-100">
+                  <span>Catatan Khusus Pengawas Ruangan:</span>
+                  <span className="px-1.5 py-0.2 rounded text-[9px] bg-amber-200 dark:bg-amber-800/80 text-amber-900 dark:text-amber-100 font-bold uppercase tracking-wider">
+                    Privat Dewan Guru
+                  </span>
+                </p>
+                <p className="text-amber-800 dark:text-amber-300 leading-relaxed">
+                  Password aktif untuk menutup aplikasi siswa saat ini adalah:{' '}
+                  <strong className="font-mono bg-white dark:bg-slate-900 px-2 py-0.5 rounded-lg border border-amber-300 dark:border-amber-700 text-amber-950 dark:text-amber-100 text-xs">
+                    {activeExitPassword || 'palembang58'}
+                  </strong>{' '}
+                  <span className="text-[10px] text-amber-600 dark:text-amber-400 font-semibold">(Default: palembang58)</span>
+                </p>
+                <p className="text-[10px] text-amber-700/80 dark:text-amber-400/80">
+                  *Catatan: Informasi rahasia ini hanya tampil di akun guru/pengawas dan tidak akan pernah terlihat di HP siswa.
+                </p>
+              </div>
+            </div>
+          )}
 
         </div>
 

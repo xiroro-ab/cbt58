@@ -2330,6 +2330,8 @@ export default function Home() {
       <ApkDownloadModal
         isOpen={isApkModalOpen}
         onClose={() => setIsApkModalOpen(false)}
+        isTeacherView={true}
+        activeExitPassword={schoolSettings.examExitPassword || 'palembang58'}
       />
     </div>
   );

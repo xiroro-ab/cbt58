@@ -6615,6 +6615,16 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                 <p className="text-xs text-slate-500 dark:text-slate-400 max-w-xl leading-relaxed">
                   Pantau aktivitas pengerjaan, deteksi kecurangan (berpindah tab/layar terbelah), dan kendalikan sesi siswa secara langsung dari meja pengawas.
                 </p>
+                <div className="pt-1.5 flex items-center gap-2 flex-wrap">
+                  <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-violet-50 dark:bg-violet-950/60 border border-violet-200 dark:border-violet-800 text-[11px] text-violet-800 dark:text-violet-200">
+                    <Lock className="w-3.5 h-3.5 text-violet-600 dark:text-violet-400" />
+                    <span>Password Keluar HP Siswa:</span>
+                    <strong className="font-mono font-bold text-violet-950 dark:text-white bg-white dark:bg-slate-800 px-2 py-0.5 rounded border border-violet-200 dark:border-violet-700">
+                      {effectiveSchoolSettings.examExitPassword || 'palembang58'}
+                    </strong>
+                    <span className="text-[10px] text-slate-400 dark:text-slate-500">(Default: palembang58)</span>
+                  </div>
+                </div>
               </div>
 
               {/* FILTER MAPEL & KELAS */}
@@ -7945,53 +7955,86 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                 )}
 
                 {/* PASSWORD KELUAR UJIAN ANDROID (EXAMBRO) TERSINKRONISASI SERVER */}
-                <div className="p-4 rounded-2xl bg-gradient-to-r from-violet-50 via-slate-50 to-indigo-50 dark:from-violet-950/40 dark:via-slate-900/40 dark:to-indigo-950/30 border border-violet-200/80 dark:border-violet-800/60 space-y-3 shadow-xs">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <div className="space-y-0.5">
-                      <span className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                        <Lock className="w-4 h-4 text-violet-600 dark:text-violet-400" />
-                        <span>Password Keluar Aplikasi Android (Exambro)</span>
-                        <span className="px-2 py-0.5 rounded-full text-[10px] bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-200 font-bold">
-                          Sinkron Otomatis (Opsi 2)
+                {currentTeacher?.role === 'admin' ? (
+                  // TAMPILAN ADMIN: BISA UBAH DAN SIMPAN PASSWORD KELUAR
+                  <div className="p-4 rounded-2xl bg-gradient-to-r from-violet-50 via-slate-50 to-indigo-50 dark:from-violet-950/40 dark:via-slate-900/40 dark:to-indigo-950/30 border border-violet-200/80 dark:border-violet-800/60 space-y-3 shadow-xs">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div className="space-y-0.5">
+                        <span className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                          <Lock className="w-4 h-4 text-violet-600 dark:text-violet-400" />
+                          <span>Password Keluar Aplikasi Android (Exambro)</span>
+                          <span className="px-2 py-0.5 rounded-full text-[10px] bg-amber-100 dark:bg-amber-900/60 text-amber-800 dark:text-amber-200 font-bold">
+                            Khusus Akun Admin
+                          </span>
                         </span>
-                      </span>
-                      <p className="text-[11px] text-slate-600 dark:text-slate-400 leading-relaxed">
-                        Password resmi yang digunakan Guru Pengawas untuk membuka kunci dan menutup aplikasi Android siswa setelah ujian selesai. 
-                        Cukup ubah di sini, <strong>seluruh HP siswa di ruang ujian otomatis tersinkronisasi</strong> tanpa perlu disentuh satu per satu!
-                      </p>
-                    </div>
+                        <p className="text-[11px] text-slate-600 dark:text-slate-400 leading-relaxed">
+                          Password resmi yang digunakan Guru Pengawas untuk membuka kunci dan menutup aplikasi Android siswa setelah ujian selesai. 
+                          Cukup ubah di sini, <strong>seluruh HP siswa di ruang ujian otomatis tersinkronisasi</strong> tanpa perlu disentuh satu per satu!
+                        </p>
+                      </div>
 
-                    <div className="flex items-center gap-2 w-full sm:w-auto shrink-0">
-                      <input
-                        type="text"
-                        value={localSettingsForm.examExitPassword ?? ''}
-                        onChange={e => setLocalSettingsForm(prev => ({ ...prev, examExitPassword: e.target.value }))}
-                        placeholder="Default: palembang58"
-                        className="w-full sm:w-44 px-3.5 py-2 rounded-xl bg-white dark:bg-slate-900 border border-violet-300 dark:border-violet-700 text-slate-900 dark:text-white font-mono font-bold text-xs tracking-wider focus:outline-none focus:ring-2 focus:ring-violet-500 shadow-2xs"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const passToSave = (localSettingsForm.examExitPassword || '').trim() || 'palembang58';
-                          const updated = { ...localSettingsForm, examExitPassword: passToSave };
-                          setLocalSettingsForm(updated);
-                          onUpdateSchoolSettings?.(updated);
-                          setSettingsSavedToast(true);
-                          showThemedAlert(
-                            'Password Keluar Exambro Berhasil Diperbarui',
-                            `Password keluar ujian siswa berhasil diubah menjadi "${passToSave}". Seluruh aplikasi Android siswa akan otomatis mengikuti password ini!`,
-                            'info'
-                          );
-                          setTimeout(() => setSettingsSavedToast(false), 3000);
-                        }}
-                        className="px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 active:scale-95 text-white font-bold text-xs shadow-md shadow-violet-600/20 transition cursor-pointer flex items-center gap-1.5 shrink-0"
-                      >
-                        <Save className="w-3.5 h-3.5" />
-                        <span>Simpan Password</span>
-                      </button>
+                      <div className="flex items-center gap-2 w-full sm:w-auto shrink-0">
+                        <input
+                          type="text"
+                          value={localSettingsForm.examExitPassword ?? ''}
+                          onChange={e => setLocalSettingsForm(prev => ({ ...prev, examExitPassword: e.target.value }))}
+                          placeholder="Default: palembang58"
+                          className="w-full sm:w-44 px-3.5 py-2 rounded-xl bg-white dark:bg-slate-900 border border-violet-300 dark:border-violet-700 text-slate-900 dark:text-white font-mono font-bold text-xs tracking-wider focus:outline-none focus:ring-2 focus:ring-violet-500 shadow-2xs"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const passToSave = (localSettingsForm.examExitPassword || '').trim() || 'palembang58';
+                            const updated = { ...localSettingsForm, examExitPassword: passToSave };
+                            setLocalSettingsForm(updated);
+                            onUpdateSchoolSettings?.(updated);
+                            setSettingsSavedToast(true);
+                            showThemedAlert(
+                              'Password Keluar Exambro Berhasil Diperbarui',
+                              `Password keluar ujian siswa berhasil diubah menjadi "${passToSave}". Seluruh aplikasi Android siswa akan otomatis mengikuti password ini!`,
+                              'info'
+                            );
+                            setTimeout(() => setSettingsSavedToast(false), 3000);
+                          }}
+                          className="px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 active:scale-95 text-white font-bold text-xs shadow-md shadow-violet-600/20 transition cursor-pointer flex items-center gap-1.5 shrink-0"
+                        >
+                          <Save className="w-3.5 h-3.5" />
+                          <span>Simpan Password</span>
+                        </button>
+                      </div>
                     </div>
                   </div>
-                </div>
+                ) : (
+                  // TAMPILAN GURU BIASA / PENGAWAS: HANYA LIHAT (READ-ONLY) AGAR TIDAK BENTROK DENGAN GURU LAIN
+                  <div className="p-4 rounded-2xl bg-gradient-to-r from-slate-50 via-violet-50/40 to-slate-50 dark:from-slate-900 dark:via-violet-950/20 dark:to-slate-900 border border-violet-200/60 dark:border-violet-900/40 space-y-2 shadow-xs">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div className="space-y-0.5">
+                        <span className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                          <Lock className="w-4 h-4 text-violet-600 dark:text-violet-400" />
+                          <span>Password Keluar Aplikasi Android (Exambro)</span>
+                          <span className="px-2 py-0.5 rounded-full text-[10px] bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold">
+                            Hanya Baca • Dikelola Admin
+                          </span>
+                        </span>
+                        <p className="text-[11px] text-slate-600 dark:text-slate-400 leading-relaxed">
+                          Gunakan password ini saat siswa selesai ujian untuk membuka kunci HP siswa. Pengaturan password dikunci terpusat oleh Admin Sekolah agar tidak terjadi bentrok antar jadwal mata pelajaran.
+                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        <div className="px-3.5 py-2 rounded-xl bg-white dark:bg-slate-800 border border-violet-200 dark:border-violet-700 flex items-center gap-2 shadow-xs">
+                          <span className="text-[11px] text-slate-400 font-medium">Password:</span>
+                          <span className="font-mono font-black text-sm text-violet-700 dark:text-violet-300 tracking-wider">
+                            {localSettingsForm.examExitPassword || 'palembang58'}
+                          </span>
+                        </div>
+                        <span className="text-[10px] text-slate-500 font-medium">
+                          (Default: <code className="font-mono font-bold">palembang58</code>)
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {/* LIVE PREVIEW KOP SURAT */}
                 <div className="space-y-2 pt-2 border-t border-slate-100 dark:border-slate-800">

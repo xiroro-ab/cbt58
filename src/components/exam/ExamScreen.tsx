@@ -55,6 +55,7 @@ interface ExamScreenProps {
   studentClass?: string;
   initialStartTime?: number;
   initialRemainingSeconds?: number;
+  initialAnswers?: StudentAnswerItem[];
   onFinishExam: (resultData: any) => void;
   onExit: () => void;
 }
@@ -66,6 +67,7 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
   studentClass,
   initialStartTime,
   initialRemainingSeconds,
+  initialAnswers,
   onFinishExam,
   onExit
 }) => {
@@ -121,9 +123,15 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
     return 0;
   });
   const [answers, setAnswers] = useState<StudentAnswerItem[]>(() => {
-    if (savedLocalState && Array.isArray(savedLocalState.answers) && savedLocalState.answers.length > 0) {
+    const sourceAnswers = (savedLocalState && Array.isArray(savedLocalState.answers) && savedLocalState.answers.length > 0)
+      ? savedLocalState.answers
+      : (Array.isArray(initialAnswers) && initialAnswers.length > 0)
+        ? initialAnswers
+        : null;
+
+    if (sourceAnswers) {
       const map = new Map<string, StudentAnswerItem>(
-        savedLocalState.answers.map((a: StudentAnswerItem) => [a.questionId, a])
+        sourceAnswers.map((a: StudentAnswerItem) => [a.questionId, a])
       );
       return questions.map((q): StudentAnswerItem => map.get(q.id) || { questionId: q.id, answer: null, isDoubtful: false });
     }
@@ -148,17 +156,15 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
   });
 
   const [violationCount, setViolationCount] = useState<number>(() => {
+    if (isInitiallyBlocked) return (subject.violationLimit || 3);
     if (savedLocalState && typeof savedLocalState.violationCount === 'number') {
       return savedLocalState.violationCount;
     }
-    return isInitiallyBlocked ? (subject.violationLimit || 3) : 0;
+    return 0;
   });
 
   const [isLocked, setIsLocked] = useState<boolean>(() => {
     if (isInitiallyBlocked) return true;
-    if (savedLocalState && (savedLocalState.isLocked || (savedLocalState.violationCount && savedLocalState.violationCount >= (subject.violationLimit || 3)))) {
-      return true;
-    }
     return false;
   });
 

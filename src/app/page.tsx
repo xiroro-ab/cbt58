@@ -5,7 +5,7 @@ import { ErrorBoundary } from '@/components/common/ErrorBoundary';
 import { initialSubject } from '@/lib/mockData';
 import { initialStudents, resolveStudentSingleClass } from '@/lib/rosterStudents';
 import { initialTeachers } from '@/lib/rosterTeachers';
-import { Subject, Question, ExamResult, ExamNotification, ExamMessage, Student, Teacher, SchoolSettings } from '@/types/cbt';
+import { Subject, Question, ExamResult, ExamNotification, ExamMessage, Student, Teacher, SchoolSettings, StudentAnswerItem } from '@/types/cbt';
 import { shuffleQuestionsGroupedByType } from '@/lib/questionRandomizer';
 import { Sidebar, NavItem } from '@/components/layout/Sidebar';
 import { Navbar } from '@/components/layout/Navbar';
@@ -265,6 +265,7 @@ export default function Home() {
   const [studentResumeSession, setStudentResumeSession] = useState<{
     startTime: number;
     remainingSeconds: number;
+    answers?: StudentAnswerItem[];
   } | null>(null);
   const [agreedBriefingRules, setAgreedBriefingRules] = useState(true);
 
@@ -1161,9 +1162,12 @@ export default function Home() {
         );
         return;
       } else {
-        // Jika database sudah tidak terkunci tapi localStorage masih ada flag blocked, bersihkan
+        // Siswa TIDAK terkunci di database (!lockStatus.isBlocked).
+        // Guru telah membuka kunci akun siswa ini atau siswa belum pernah terkunci.
         const cleanName = studentName.toLowerCase().trim();
         const cleanClass = selectedStudentClass ? selectedStudentClass.toLowerCase().trim() : '';
+
+        // 1. Bersihkan flag blocked di localStorage karena guru sudah membuka kuncinya
         if (typeof window !== 'undefined') {
           try {
             if (cleanClass) {
@@ -1173,55 +1177,84 @@ export default function Home() {
           } catch {}
         }
 
-        // State ujian hanya boleh dilanjutkan jika database masih memiliki
-        // sesi percobaan yang sama. Jika tidak ada sesi (mis. setelah tombol
-        // Reset Ujian/Hapus Nilai), state lama tidak boleh menghidupkan timer
-        // lama atau membuat layar langsung submit saat masuk kembali.
-        let localAttemptCanResume = false;
+        // 2. Baca state lokal yang tersimpan
+        const localStateKey = cleanClass
+          ? `cbt_exam_state_${matchedSub.id}_${cleanClass}_${cleanName}`
+          : `cbt_exam_state_${matchedSub.id}_${cleanName}`;
+
+        let parsedLocalState: any = null;
         if (typeof window !== 'undefined') {
           try {
-            const localStateKey = cleanClass
-              ? `cbt_exam_state_${matchedSub.id}_${cleanClass}_${cleanName}`
-              : `cbt_exam_state_${matchedSub.id}_${cleanName}`;
             const rawState = localStorage.getItem(localStateKey) || localStorage.getItem(`cbt_exam_state_${matchedSub.id}_${cleanName}`);
             if (rawState) {
-              const parsed = JSON.parse(rawState);
-              const savedSeconds = Number(parsed?.secondsRemaining);
-              const lastSavedAt = Number(parsed?.lastSavedTime);
-              const elapsed = lastSavedAt > 0 ? Math.floor((Date.now() - lastSavedAt) / 1000) : 0;
-              localAttemptCanResume = savedSeconds > elapsed && parsed?.isLocked !== true;
+              parsedLocalState = JSON.parse(rawState);
+              // Buka flag isLocked di localStorage lokal agar ujian siswa dapat dilanjutkan seketika
+              parsedLocalState.isLocked = false;
+              parsedLocalState.violationCount = lockStatus.violationCount || 0;
+              localStorage.setItem(localStateKey, JSON.stringify(parsedLocalState));
             }
           } catch {}
         }
-        const serverSessionIsLive = Boolean(
-          studentSession.session
-          && (studentSession.session.status === 'ongoing' || studentSession.session.status === 'blocked')
-          && Date.now() - studentSession.session.lastHeartbeat < 120000
+
+        // 3. Cek apakah ada sesi aktif di server Supabase (ongoing atau blocked)
+        const serverHasSession = Boolean(
+          studentSession.session &&
+          (studentSession.session.status === 'ongoing' || studentSession.session.status === 'blocked')
         );
-        const hasResumableSession = serverSessionIsLive || localAttemptCanResume;
-        setStudentResumeSession(serverSessionIsLive && studentSession.session
-          ? {
-              startTime: studentSession.session.startTime,
-              remainingSeconds: studentSession.session.remainingSeconds
-            }
-          : null);
-        if (studentSession.available && !hasResumableSession && typeof window !== 'undefined') {
-          try {
-            const keys = [
-              ...(cleanClass ? [
-                `cbt_exam_state_${matchedSub.id}_${cleanClass}_${cleanName}`,
-                `cbt_exam_questions_${matchedSub.id}_${cleanClass}_${cleanName}`,
-                `cbt_blocked_${matchedSub.id}_${cleanClass}_${cleanName}`,
-                `cbt_submitted_${matchedSub.id}_${cleanClass}_${cleanName}`
-              ] : []),
-              `cbt_exam_state_${matchedSub.id}_${cleanName}`,
-              `cbt_exam_questions_${matchedSub.id}_${cleanName}`,
-              `cbt_blocked_${matchedSub.id}_${cleanName}`,
-              `cbt_submitted_${matchedSub.id}_${cleanName}`,
-              `cbt_answers_${studentName}_${matchedSub.id}`
-            ];
-            keys.forEach(key => localStorage.removeItem(key));
-          } catch {}
+
+        // Jika localStorage lokal tidak memiliki jawaban tetapi server Supabase memiliki jawaban siswa:
+        // Pulihkan jawaban dari server database ke localStorage (mis. jika siswa berganti HP atau cache terhapus)
+        if (
+          (!parsedLocalState || !Array.isArray(parsedLocalState.answers) || parsedLocalState.answers.length === 0) &&
+          studentSession.session &&
+          Array.isArray(studentSession.session.answers) &&
+          studentSession.session.answers.length > 0
+        ) {
+          parsedLocalState = {
+            answers: studentSession.session.answers,
+            secondsRemaining: studentSession.session.remainingSeconds || (matchedSub.durationMinutes * 60),
+            violationCount: lockStatus.violationCount || 0,
+            isLocked: false,
+            startTime: studentSession.session.startTime || Date.now(),
+            currentIndex: 0,
+            lastSavedTime: Date.now()
+          };
+          if (typeof window !== 'undefined') {
+            try {
+              localStorage.setItem(localStateKey, JSON.stringify(parsedLocalState));
+            } catch {}
+          }
+        }
+
+        // 4. Deteksi apakah sesi ini dapat dilanjutkan (Resume)
+        const hasAnswers = Boolean(
+          (parsedLocalState && Array.isArray(parsedLocalState.answers) && parsedLocalState.answers.length > 0) ||
+          (studentSession.session && Array.isArray(studentSession.session.answers) && studentSession.session.answers.length > 0)
+        );
+
+        const hasResumableSession = serverHasSession || hasAnswers;
+
+        if (hasResumableSession) {
+          const savedSeconds = Number(
+            parsedLocalState?.secondsRemaining ||
+            studentSession.session?.remainingSeconds ||
+            (matchedSub.durationMinutes * 60)
+          );
+          const lastSavedAt = Number(parsedLocalState?.lastSavedTime || 0);
+          const elapsed = lastSavedAt > 0 ? Math.floor((Date.now() - lastSavedAt) / 1000) : 0;
+          // Jangan biarkan sisa waktu menjadi 0 jika siswa lama menunggu guru membuka kuncinya.
+          // Berikan minimal 120 detik (2 menit) agar siswa sempat menyelesaikan sisa soal.
+          const effectiveRemaining = Math.max(120, savedSeconds - elapsed);
+          const restoredAnswers = (parsedLocalState?.answers && parsedLocalState.answers.length > 0)
+            ? parsedLocalState.answers
+            : (studentSession.session?.answers || []);
+
+          setStudentResumeSession({
+            startTime: Number(parsedLocalState?.startTime || studentSession.session?.startTime || Date.now()),
+            remainingSeconds: effectiveRemaining,
+            answers: restoredAnswers
+          });
+        } else {
           setStudentResumeSession(null);
         }
       }
@@ -1645,6 +1678,7 @@ export default function Home() {
           studentClass={resolveStudentSingleClass(studentName, selectedStudentClass || matchedStudent?.className)}
           initialStartTime={studentResumeSession?.startTime}
           initialRemainingSeconds={studentResumeSession?.remainingSeconds}
+          initialAnswers={studentResumeSession?.answers}
           onFinishExam={handleFinishExam}
           onExit={() => {
             if (currentTeacher) {

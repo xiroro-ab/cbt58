@@ -175,6 +175,7 @@ export interface StudentExamSessionLookup {
     startTime: number;
     lastHeartbeat: number;
     remainingSeconds: number;
+    answers?: ExamSession['answers'];
   } | null;
 }
 
@@ -191,7 +192,7 @@ export async function lookupStudentExamSession(
   try {
     let query = supabase
       .from('exam_sessions')
-      .select('status,start_time,last_heartbeat,remaining_seconds')
+      .select('status,start_time,last_heartbeat,remaining_seconds,answers')
       .eq('subject_id', subjectId)
       .ilike('student_name', studentName.trim());
 
@@ -217,7 +218,8 @@ export async function lookupStudentExamSession(
         status: data.status as ExamSession['status'],
         startTime: toEpoch(data.start_time, 0),
         lastHeartbeat: toEpoch(data.last_heartbeat, 0),
-        remainingSeconds: Number(data.remaining_seconds) || 0
+        remainingSeconds: Number(data.remaining_seconds) || 0,
+        answers: Array.isArray(data.answers) ? data.answers : []
       }
     };
   } catch (err) {

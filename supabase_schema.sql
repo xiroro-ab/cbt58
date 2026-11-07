@@ -74,6 +74,7 @@ CREATE TABLE IF NOT EXISTS exam_sessions (
     answers JSONB DEFAULT '[]'::jsonb,
     status VARCHAR(20) DEFAULT 'ongoing' CHECK (status IN ('ongoing', 'completed', 'blocked')),
     is_focus BOOLEAN DEFAULT TRUE,
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
     CONSTRAINT exam_sessions_subject_student_class_key UNIQUE (subject_id, student_name, class_name)
 );
 

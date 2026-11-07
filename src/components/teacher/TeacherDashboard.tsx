@@ -11,7 +11,7 @@ import { extractSubjectAndGrade } from '@/lib/aiQuestionGenerator';
 import { evaluateFullExam, calculateSingleQuestionScore } from '@/lib/scoringEngine';
 import { sendProctorCommand, subscribeToLiveSessions, removeStudentSession, broadcastAnnouncementToStudents } from '@/lib/liveMonitoringService';
 import { clearStudentAutolockInSupabase, clearAllLockedStudents, insertMessage, fetchQuestionsBySubject, updateTeacherPhotoInSupabase, fetchExamResultAnswers } from '@/lib/supabaseService';
-import { fetchExamSessionAnswers } from '@/lib/examSessionService';
+import { fetchExamSessionAnswers, resetAllExamSessions } from '@/lib/examSessionService';
 import { resolveStudentSingleClass, isClassInGrade } from '@/lib/rosterStudents';
 import { initialTeachers } from '@/lib/rosterTeachers';
 import { TTESignatureSeal } from '@/components/common/TTESignatureSeal';
@@ -6574,8 +6574,8 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
 
         const now = Date.now();
         const activeCount = filteredSessions.length;
-        const focusCount = filteredSessions.filter(s => s.status === 'ongoing' && s.isFocus && (now - (s.lastHeartbeatObservedAt ?? s.lastHeartbeat)) <= 25000).length;
-        const blurCount = filteredSessions.filter(s => s.status === 'ongoing' && (!s.isFocus || (now - (s.lastHeartbeatObservedAt ?? s.lastHeartbeat)) > 25000)).length;
+        const focusCount = filteredSessions.filter(s => s.status === 'ongoing' && s.isFocus && (now - (s.lastHeartbeatObservedAt ?? s.lastHeartbeat)) <= 60000).length;
+        const blurCount = filteredSessions.filter(s => s.status === 'ongoing' && (!s.isFocus || (now - (s.lastHeartbeatObservedAt ?? s.lastHeartbeat)) > 60000)).length;
         const blockedCount = filteredSessions.filter(s => s.status === 'blocked').length;
 
         return (
@@ -6660,7 +6660,10 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                             return;
                           }
                           
-                          const result = await clearAllLockedStudents(targetSubId);
+                          const [result] = await Promise.all([
+                            clearAllLockedStudents(targetSubId),
+                            resetAllExamSessions(targetSubId)
+                          ]);
                           
                           if (result.success) {
                             const resetAt = Date.now();
@@ -6830,7 +6833,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                     ) : (
                       filteredSessions.map((s) => {
                         const isDisqualified = s.status === 'blocked';
-                        const isStale = (Date.now() - (s.lastHeartbeatObservedAt ?? s.lastHeartbeat)) > 25000;
+                        const isStale = (Date.now() - (s.lastHeartbeatObservedAt ?? s.lastHeartbeat)) > 60000;
                         const isOut = !s.isFocus || isStale;
 
                         const sSec = s.remainingSeconds || 0;
@@ -6891,7 +6894,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                               ) : isOut ? (
                                 <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-400 text-slate-950 font-black text-[10px] animate-pulse shadow-sm">
                                   <AlertTriangle className="w-3.5 h-3.5" />
-                                  <span>{isStale ? 'DI LUAR FOKUS (BACKGROUND)' : 'DI LUAR FOKUS'}</span>
+                                  <span>{!s.isFocus ? 'DI LUAR FOKUS' : 'SINYAL TERPUTUS'}</span>
                                 </span>
                               ) : (
                                 <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 font-bold text-[10px]">

@@ -18,6 +18,7 @@ const CHANNEL_NAME = 'cbt_live_monitoring_channel';
 export type ProctorActionType = 'FORCE_FINISH' | 'RESET_VIOLATION' | 'RESET_EXAM';
 
 export interface ProctorCommand {
+  id?: string;
   action: ProctorActionType;
   studentName: string;
   subjectId: string;
@@ -258,16 +259,8 @@ export function getStoredSessions(): ExamSession[] {
     }
     const dedupedList = Array.from(dedupedMap.values());
 
-    // Heartbeat siswa kini 15 detik (bukan 5 detik). Ambang 25 detik mencegah status "keluar fokus" palsu.
-    const marked = dedupedList.map(s => {
-      if (s.status === 'ongoing' && (now - s.lastHeartbeat) > 25000 && s.isFocus) {
-        return { ...s, isFocus: false };
-      }
-      return s;
-    });
-
     // Bersihkan sesi usang (tidak ada heartbeat > 120 detik, KECUALI yang statusnya blocked/terkunci)
-    const active = marked.filter(s => s.status === 'blocked' || (now - s.lastHeartbeat) < 120000);
+    const active = dedupedList.filter(s => s.status === 'blocked' || (now - s.lastHeartbeat) < 120000);
     if (active.length !== list.length) {
       localStorage.setItem(SESSIONS_STORAGE_KEY, JSON.stringify(active));
     }
@@ -425,8 +418,10 @@ export async function sendProctorCommand(cmd: {
 }): Promise<boolean> {
   if (typeof window === 'undefined') return false;
 
+  const cmdId = `cmd_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
   const payload: ProctorCommand = {
     ...cmd,
+    id: cmdId,
     timestamp: Date.now()
   };
 
@@ -440,6 +435,18 @@ export async function sendProctorCommand(cmd: {
   if (bc) {
     try {
       bc.postMessage({ type: 'PROCTOR_COMMAND', command: payload });
+    } catch {}
+  }
+
+  // 2b. Supabase Realtime Broadcast (sub-detik lintas perangkat jika channel aktif)
+  const supa = initSupabaseChannel();
+  if (supa) {
+    try {
+      supa.send({
+        type: 'broadcast',
+        event: 'proctor_command',
+        payload
+      });
     } catch {}
   }
 
@@ -510,7 +517,8 @@ export async function sendProctorCommand(cmd: {
     cmd.studentName,
     cmd.className,
     cmd.action,
-    payload.timestamp
+    payload.timestamp,
+    cmdId
   );
 
   let sessionOk = true;
@@ -632,34 +640,36 @@ export function subscribeToStudentCommands(
 
   const cleanName = studentName.toLowerCase().trim();
   const cleanClass = (className || '').toLowerCase().trim();
-  // Abaikan perintah lama sebelum layar ujian ini dibuka.
-  let lastCommandAt = Date.now();
   let stopped = false;
+  const handledCommandIds = new Set<string>();
 
   const deliver = (cmd: ProctorCommand) => {
     if (stopped || !cmd) return;
-    if (cmd.timestamp <= lastCommandAt) return;
+    const cmdId = cmd.id || `${cmd.action}_${cmd.timestamp}`;
+    if (handledCommandIds.has(cmdId)) return;
     if (cmd.studentName.toLowerCase().trim() !== cleanName) return;
     if (cmd.subjectId !== subjectId) return;
     if (cleanClass && (cmd.className || '').toLowerCase().trim() && (cmd.className || '').toLowerCase().trim() !== cleanClass) return;
-    lastCommandAt = cmd.timestamp;
+
+    handledCommandIds.add(cmdId);
     onCommand(cmd);
   };
 
-  // Jalur lokal (tab yang sama / perangkat yang sama)
+  // Jalur lokal (tab yang sama / BroadcastChannel / Realtime broadcast)
   const commandHandler = (cmd: ProctorCommand) => deliver(cmd);
   studentCommandListeners.add(commandHandler);
 
-  // Jalur lintas perangkat: polling database tiap 5 detik.
+  // Jalur lintas perangkat: polling database tiap 3 detik.
   const poll = async () => {
     if (stopped) return;
     const cmd = await readProctorCommand(subjectId, studentName, className);
     if (!cmd || stopped) return;
-    if (cmd.commandAt <= lastCommandAt) return;
+    if (handledCommandIds.has(cmd.id)) return;
 
-    lastCommandAt = cmd.commandAt;
+    handledCommandIds.add(cmd.id);
     void clearProctorCommand(subjectId, studentName, className);
     onCommand({
+      id: cmd.id,
       action: cmd.action,
       studentName,
       subjectId,
@@ -669,7 +679,7 @@ export function subscribeToStudentCommands(
   };
 
   void poll();
-  const intervalId = setInterval(poll, 5000);
+  const intervalId = setInterval(poll, 3000);
 
   return () => {
     stopped = true;
@@ -711,7 +721,7 @@ export function subscribeToLiveSessions(
     onUpdate(Array.from(merged.values()));
   };
 
-  // Lokal: 2 detik (tab/perangkat yang sama). Database: 5 detik (lintas perangkat).
+  // Lokal: 2 detik (tab/perangkat yang sama). Database: 4 detik (lintas perangkat).
   const refreshRemote = async () => {
     if (stopped || refreshInFlight) return;
     refreshInFlight = true;
@@ -723,19 +733,22 @@ export function subscribeToLiveSessions(
       const observedSessions = sessions.map(session => {
         const key = sessionKey(session);
         const previous = observedHeartbeats.get(key);
-        const observedAt = previous && previous.lastHeartbeat === session.lastHeartbeat
-          ? previous.observedAt
-          : previous
+        // Catat timestamp observasi di laptop pengawas:
+        // Jika sesi baru atau timestamp detak jantung siswa bertambah/berubah,
+        // tandai bahwa sesi aktif teramati pada receivedAt (waktu laptop guru).
+        const observedAt = !previous
+          ? receivedAt
+          : previous.lastHeartbeat !== session.lastHeartbeat
             ? receivedAt
-            : Math.min(session.lastHeartbeat, receivedAt);
+            : previous.observedAt;
+
         observedHeartbeats.set(key, { lastHeartbeat: session.lastHeartbeat, observedAt });
         return { ...session, lastHeartbeatObservedAt: observedAt };
       });
 
-      // Database timestamps can come from a student's clock. Expire sessions
-      // using when the teacher last received a changed heartbeat, not that clock.
+      // Hilangkan sesi dari daftar hanya jika tidak ada detak jantung baru selama > 120 detik di sisi guru
       remoteSessions = observedSessions.filter(session =>
-        session.status === 'blocked' || receivedAt - (session.lastHeartbeatObservedAt ?? receivedAt) < 120000
+        session.status === 'blocked' || (receivedAt - (session.lastHeartbeatObservedAt ?? receivedAt)) < 120000
       );
       const activeKeys = new Set(remoteSessions.map(sessionKey));
       for (const key of observedHeartbeats.keys()) {
@@ -752,7 +765,7 @@ export function subscribeToLiveSessions(
   void refreshRemote();
 
   const localInterval = setInterval(emit, 2000);
-  const remoteInterval = setInterval(refreshRemote, 5000);
+  const remoteInterval = setInterval(refreshRemote, 4000);
 
   return () => {
     stopped = true;

@@ -5,7 +5,8 @@ export const LOCK_STATE_TITLE = '__CBT_LOCK_STATE__';
 
 export type ProctorCommandAction = 'FORCE_FINISH' | 'RESET_VIOLATION' | 'RESET_EXAM';
 
-const ACTIVE_WINDOW_MS = 120000;
+// Jendela waktu aktif 30 menit mencegah sesi siswa gugur hanya karena selisih jam perangkat (clock skew)
+const ACTIVE_WINDOW_MS = 1800000;
 
 const SESSION_COLUMNS =
   'id,subject_id,student_name,class_name,start_time,last_heartbeat,progress_count,total_questions,remaining_seconds,violation_count,status,is_focus';
@@ -43,15 +44,29 @@ export async function upsertExamSession(
     payload.answers = session.answers || [];
   }
 
-  const { error } = await supabase
+  let { error } = await supabase
     .from('exam_sessions')
     .upsert(payload, { onConflict: 'subject_id,student_name,class_name' });
+
+  // Resilient Fallback: Jika Postgres trigger mencari kolom updated_at pada operasi update
+  if (error && error.message && error.message.includes('updated_at')) {
+    try {
+      await supabase
+        .from('exam_sessions')
+        .delete()
+        .eq('subject_id', session.subjectId)
+        .eq('student_name', session.studentName.trim())
+        .eq('class_name', session.className.trim());
+      const insertRes = await supabase.from('exam_sessions').insert(payload);
+      error = insertRes.error;
+    } catch {}
+  }
 
   if (error) {
     console.error('Gagal simpan sesi ujian ke Supabase:', {
       code: error.code,
       message: error.message,
-      hint: 'Pastikan supabase_monitoring_migration.sql sudah dijalankan.'
+      hint: 'Pastikan supabase_fix_exam_sessions.sql sudah dijalankan di Supabase SQL Editor.'
     });
     return false;
   }
@@ -80,20 +95,20 @@ export async function fetchActiveExamSessions(subjectId?: string): Promise<ExamS
   return data
     .filter((row: any) => row.status === 'blocked' || toEpoch(row.last_heartbeat, 0) >= sinceEpoch)
     .map((row: any) => ({
-    id: row.id,
-    subjectId: row.subject_id,
-    studentId: row.student_name,
-    studentName: row.student_name,
-    className: row.class_name,
-    startTime: toEpoch(row.start_time),
-    lastHeartbeat: toEpoch(row.last_heartbeat),
-    progressCount: Number(row.progress_count) || 0,
-    violationCount: Number(row.violation_count) || 0,
-    answers: [],
-    status: row.status === 'blocked' ? 'blocked' : row.status === 'completed' ? 'completed' : 'ongoing',
-    totalQuestions: Number(row.total_questions) || 0,
-    remainingSeconds: Number(row.remaining_seconds) || 0,
-    isFocus: row.is_focus !== false
+      id: row.id,
+      subjectId: row.subject_id,
+      studentId: row.student_name,
+      studentName: row.student_name,
+      className: row.class_name,
+      startTime: toEpoch(row.start_time),
+      lastHeartbeat: toEpoch(row.last_heartbeat),
+      progressCount: Number(row.progress_count) || 0,
+      violationCount: Number(row.violation_count) || 0,
+      answers: [],
+      status: row.status === 'blocked' ? 'blocked' : row.status === 'completed' ? 'completed' : 'ongoing',
+      totalQuestions: Number(row.total_questions) || 0,
+      remainingSeconds: Number(row.remaining_seconds) || 0,
+      isFocus: row.is_focus !== false
     }));
 }
 
@@ -208,6 +223,9 @@ export async function resetExamSession(
   studentName: string,
   className?: string
 ): Promise<boolean> {
+  const cleanName = studentName.trim();
+  const cleanClass = className?.trim();
+
   let query = supabase
     .from('exam_sessions')
     .update({
@@ -217,14 +235,85 @@ export async function resetExamSession(
       last_heartbeat: new Date().toISOString()
     })
     .eq('subject_id', subjectId)
-    .ilike('student_name', studentName.trim());
+    .ilike('student_name', cleanName);
 
-  if (className?.trim()) {
-    query = query.ilike('class_name', className.trim());
+  if (cleanClass) {
+    query = query.ilike('class_name', cleanClass);
   }
 
-  const { error } = await query;
+  let { error } = await query;
+
+  // Resilient Fallback: jika trigger updated_at error, baca row lalu delete & insert ulang
+  if (error && error.message && error.message.includes('updated_at')) {
+    try {
+      let getQuery = supabase
+        .from('exam_sessions')
+        .select('*')
+        .eq('subject_id', subjectId)
+        .ilike('student_name', cleanName);
+      if (cleanClass) getQuery = getQuery.ilike('class_name', cleanClass);
+      const { data: existing } = await getQuery.maybeSingle();
+
+      if (existing) {
+        await supabase.from('exam_sessions').delete().eq('id', existing.id);
+        const { id, ...toInsert } = existing;
+        toInsert.violation_count = 0;
+        toInsert.status = 'ongoing';
+        toInsert.is_focus = true;
+        toInsert.last_heartbeat = new Date().toISOString();
+        const insertRes = await supabase.from('exam_sessions').insert(toInsert);
+        error = insertRes.error;
+      }
+    } catch {}
+  }
+
   if (error) console.warn('Gagal reset sesi monitoring siswa:', error.message);
+  return !error;
+}
+
+/**
+ * Membuka kunci seluruh sesi monitoring yang diblokir untuk suatu mata pelajaran (mass reset).
+ */
+export async function resetAllExamSessions(subjectId: string): Promise<boolean> {
+  let { error } = await supabase
+    .from('exam_sessions')
+    .update({
+      violation_count: 0,
+      status: 'ongoing',
+      is_focus: true,
+      last_heartbeat: new Date().toISOString()
+    })
+    .eq('subject_id', subjectId)
+    .eq('status', 'blocked');
+
+  if (error && error.message && error.message.includes('updated_at')) {
+    try {
+      const { data: blockedList } = await supabase
+        .from('exam_sessions')
+        .select('*')
+        .eq('subject_id', subjectId)
+        .eq('status', 'blocked');
+
+      if (blockedList && blockedList.length > 0) {
+        const ids = blockedList.map(r => r.id);
+        await supabase.from('exam_sessions').delete().in('id', ids);
+        const toInsert = blockedList.map(r => {
+          const { id, ...rest } = r;
+          return {
+            ...rest,
+            violation_count: 0,
+            status: 'ongoing' as const,
+            is_focus: true,
+            last_heartbeat: new Date().toISOString()
+          };
+        });
+        const insertRes = await supabase.from('exam_sessions').insert(toInsert);
+        error = insertRes.error;
+      }
+    } catch {}
+  }
+
+  if (error) console.warn('Gagal reset semua sesi monitoring terkunci:', error.message);
   return !error;
 }
 
@@ -237,6 +326,9 @@ export async function completeExamSession(
   studentName: string,
   className?: string
 ): Promise<boolean> {
+  const cleanName = studentName.trim();
+  const cleanClass = className?.trim();
+
   let query = supabase
     .from('exam_sessions')
     .update({
@@ -245,13 +337,36 @@ export async function completeExamSession(
       last_heartbeat: new Date().toISOString()
     })
     .eq('subject_id', subjectId)
-    .ilike('student_name', studentName.trim());
+    .ilike('student_name', cleanName);
 
-  if (className?.trim()) {
-    query = query.ilike('class_name', className.trim());
+  if (cleanClass) {
+    query = query.ilike('class_name', cleanClass);
   }
 
-  const { error } = await query;
+  let { error } = await query;
+
+  if (error && error.message && error.message.includes('updated_at')) {
+    try {
+      let getQuery = supabase
+        .from('exam_sessions')
+        .select('*')
+        .eq('subject_id', subjectId)
+        .ilike('student_name', cleanName);
+      if (cleanClass) getQuery = getQuery.ilike('class_name', cleanClass);
+      const { data: existing } = await getQuery.maybeSingle();
+
+      if (existing) {
+        await supabase.from('exam_sessions').delete().eq('id', existing.id);
+        const { id, ...toInsert } = existing;
+        toInsert.status = 'completed';
+        toInsert.is_focus = false;
+        toInsert.last_heartbeat = new Date().toISOString();
+        const insertRes = await supabase.from('exam_sessions').insert(toInsert);
+        error = insertRes.error;
+      }
+    } catch {}
+  }
+
   if (error) console.warn('Gagal menutup sesi monitoring siswa:', error.message);
   return !error;
 }
@@ -297,9 +412,11 @@ export async function writeProctorCommand(
   studentName: string,
   className: string | undefined,
   action: ProctorCommandAction,
-  commandAt: number
+  commandAt: number,
+  commandId?: string
 ): Promise<boolean> {
   try {
+    const cmdId = commandId || `cmd_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
     const rows = await findCommandRows(subjectId, studentName);
     const row = pickCommandRow(rows, className);
     const isReset = action === 'RESET_VIOLATION' || action === 'RESET_EXAM';
@@ -314,7 +431,8 @@ export async function writeProctorCommand(
         ...(isReset ? { count: 0, locked: false } : {}),
         ...(isReset ? { stateAt: commandAt } : {}),
         command: action,
-        commandAt
+        commandAt,
+        commandId: cmdId
       });
       const { error } = await supabase
         .from('exam_notifications')
@@ -334,7 +452,8 @@ export async function writeProctorCommand(
         className: (className || '').trim(),
         ...(isReset ? { stateAt: commandAt } : {}),
         command: action,
-        commandAt
+        commandAt,
+        commandId: cmdId
       }),
       is_read: false
     });
@@ -349,19 +468,20 @@ export async function readProctorCommand(
   subjectId: string,
   studentName: string,
   className?: string
-): Promise<{ action: ProctorCommandAction; commandAt: number } | null> {
+): Promise<{ id: string; action: ProctorCommandAction; commandAt: number } | null> {
   try {
     const rows = await findCommandRows(subjectId, studentName);
     const row = pickCommandRow(rows, className);
     if (!row) return null;
 
     const parsed = JSON.parse(row.message || '{}');
-    if (!parsed.command || !parsed.commandAt) return null;
+    if (!parsed.command) return null;
     if (!['FORCE_FINISH', 'RESET_VIOLATION', 'RESET_EXAM'].includes(parsed.command)) return null;
 
     return {
+      id: String(parsed.commandId || `cmd_${parsed.commandAt || Date.now()}`),
       action: parsed.command as ProctorCommandAction,
-      commandAt: Number(parsed.commandAt) || 0
+      commandAt: Number(parsed.commandAt) || Date.now()
     };
   } catch {
     return null;
@@ -384,6 +504,7 @@ export async function clearProctorCommand(
     } catch {}
     delete parsed.command;
     delete parsed.commandAt;
+    delete parsed.commandId;
 
     const { error } = await supabase
       .from('exam_notifications')

@@ -312,13 +312,13 @@ export function reportStudentSession(session: ExamSession, forceDbWrite = false)
   }
 
   // 3. Tulis ke database untuk guru di perangkat lain.
-  // Jawaban hanya dikirim saat berubah, agar egress tetap kecil.
   const now = Date.now();
   const lastWrite = lastDbHeartbeat.get(key) || 0;
-  if (!forceDbWrite && session.status !== 'blocked' && now - lastWrite < 3000) return;
-
   const answersJson = JSON.stringify(session.answers || []);
   const includeAnswers = lastAnswersSent.get(key) !== answersJson;
+
+  // Jika jawaban berubah atau force write, jangan throttle; jika hanya heartbeat waktu, throttle tiap 3 detik
+  if (!forceDbWrite && !includeAnswers && session.status !== 'blocked' && now - lastWrite < 3000) return;
 
   lastDbHeartbeat.set(key, now);
   if (includeAnswers) lastAnswersSent.set(key, answersJson);

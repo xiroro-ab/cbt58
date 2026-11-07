@@ -14,7 +14,8 @@ import {
   checkStudentLockStatus,
   getStudentLockState,
   saveStudentLockState,
-  checkStudentExamSubmission
+  checkStudentExamSubmission,
+  saveOrUpdateExamResult
 } from '@/lib/supabaseService';
 import { lookupStudentExamSession } from '@/lib/examSessionService';
 import {
@@ -508,12 +509,33 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
       details: evaluation.details || []
     });
 
+    // Sinkronisasi nilai riil siswa ke database hasil ujian (exam_results).
+    // Menjamin jika guru simpan paksa saat data server masih tertinggal, jawaban riil siswa
+    // yang ada di HP tetap terekam dan nilainya diperbarui dengan skor yang benar (bukan 0).
+    if (answersRef.current && answersRef.current.some(a => a.answer !== null && a.answer !== '')) {
+      void saveOrUpdateExamResult({
+        id: `res-${Date.now()}`,
+        subjectId: subject.id,
+        subjectTitle: subject.title,
+        studentId: studentName,
+        studentName,
+        className: studentActualClass,
+        score: evaluation.finalScore ?? 0,
+        totalEarned: evaluation.totalEarned ?? 0,
+        totalMax: evaluation.totalMax ?? (questions?.length || 0),
+        answers: answersRef.current,
+        submittedAt: new Date().toLocaleString('id-ID'),
+        violationCount: violationCountRef.current || 0,
+        details: evaluation.details || []
+      });
+    }
+
     try {
       if (document.fullscreenElement && document.exitFullscreen) {
         document.exitFullscreen().catch(() => {});
       }
     } catch {}
-  }, [studentName, subject.id, studentActualClass, stateKey, blockedKey, questions]);
+  }, [studentName, subject.id, subject.title, studentActualClass, stateKey, blockedKey, questions]);
 
   // 3. LISTEN TO PROCTOR COMMANDS (Buka Kunci, Paksa Selesai, Reset)
   useEffect(() => {
@@ -1090,6 +1112,7 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
         ...updated[currentIndex],
         answer: newAnswer
       };
+      answersRef.current = updated;
       if (typeof window !== 'undefined') {
         try {
           localStorage.setItem(stateKey, JSON.stringify({
@@ -1106,6 +1129,9 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
       }
       return updated;
     });
+
+    // Segera laporkan jawaban terbaru siswa ke server agar pengawas selalu memiliki jawaban terkini
+    sendDirectHeartbeat();
   };
 
   const handleToggleDoubt = () => {

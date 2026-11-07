@@ -43,9 +43,8 @@ export async function upsertExamSession(
     is_focus: session.isFocus !== false
   };
 
-  if (includeAnswers) {
-    payload.answers = session.answers || [];
-  }
+  // Selalu sertakan jawaban siswa dalam payload agar tidak pernah ter-reset menjadi kosong []
+  payload.answers = Array.isArray(session.answers) ? session.answers : [];
 
   // Proteksi 1: Jika siswa sudah memiliki nilai akhir di exam_results (diselesaikan paksa oleh guru atau submit mandiri),
   // TOLAK KERAS semua heartbeat baru agar sesi ujian tidak pernah hidup kembali!

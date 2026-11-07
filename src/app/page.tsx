@@ -197,6 +197,7 @@ export default function Home() {
 
   // State Pengaturan Satuan Pendidikan, Pejabat & TTE Barcode (Terhubung ke Supabase Cloud & Local Storage)
   const [schoolSettings, setSchoolSettings] = useState<SchoolSettings>(defaultSchoolSettings);
+  const [isSettingsLoadedFromSupabase, setIsSettingsLoadedFromSupabase] = useState(false);
 
   useEffect(() => {
     // 1. Muat dari localStorage seketika agar tidak terjadi kedip/blank
@@ -213,6 +214,9 @@ export default function Home() {
             logoRight: parsed.logoRight || defaultSchoolSettings.logoRight,
             examExitPassword: parsed.examExitPassword || prev.examExitPassword || defaultSchoolSettings.examExitPassword || 'palembang58'
           }));
+          if (parsed.examExitPassword) {
+            setIsSettingsLoadedFromSupabase(true);
+          }
         }
       } catch (err) {
         console.warn('Gagal membaca cbt_school_settings dari localStorage:', err);
@@ -223,6 +227,7 @@ export default function Home() {
     fetchSchoolSettingsFromSupabase().then(dbSettings => {
       if (dbSettings) {
         setSchoolSettings(dbSettings);
+        setIsSettingsLoadedFromSupabase(true);
         if (typeof window !== 'undefined') {
           try {
             localStorage.setItem('cbt_school_settings', JSON.stringify(dbSettings));
@@ -236,8 +241,11 @@ export default function Home() {
 
   // Sinkronisasi Terpusat Password Keluar ke Android Exambro (Opsi 2)
   useEffect(() => {
-    const exitPass = (schoolSettings?.examExitPassword || 'palembang58').trim();
-    if (typeof window !== 'undefined') {
+    // Hanya kirim jika sudah dimuat dari data nyata (local cache/cloud), hindari menimpa dengan default palembang58
+    if (!isSettingsLoadedFromSupabase && !schoolSettings?.examExitPassword) return;
+
+    const exitPass = (schoolSettings?.examExitPassword || '').trim();
+    if (exitPass && typeof window !== 'undefined') {
       (window as any).__CBT_EXIT_PASSWORD__ = exitPass;
       try {
         if ((window as any).AndroidExambro?.syncExitPassword) {
@@ -247,7 +255,7 @@ export default function Home() {
         console.warn('Gagal syncExitPassword ke AndroidExambro:', e);
       }
     }
-  }, [schoolSettings?.examExitPassword]);
+  }, [schoolSettings?.examExitPassword, isSettingsLoadedFromSupabase]);
 
   const handleUpdateSchoolSettings = async (newSettings: SchoolSettings) => {
     // Pastikan examExitPassword dan teacherRegistrationPasscode selalu terjaga

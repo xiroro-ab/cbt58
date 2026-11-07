@@ -53,8 +53,14 @@ export const ApkDownloadModal: React.FC<ApkDownloadModalProps> = ({
   const handleDirectDownload = async () => {
     setIsDownloading(true);
     try {
-      // 1. Coba fetch blob di dalam session browser (memotong blokir DownloadManager pada tablet/mode desktop)
-      const res = await fetch('/cbt-smpn58.apk');
+      // 1. Coba fetch blob di dalam session browser (bypass cache browser dan blokir mode desktop)
+      const res = await fetch(`/cbt-smpn58.apk?t=${Date.now()}`, {
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache'
+        }
+      });
       if (!res.ok) throw new Error('Download utama gagal: ' + res.status);
       const blob = await res.blob();
       const blobUrl = window.URL.createObjectURL(blob);
@@ -71,7 +77,7 @@ export const ApkDownloadModal: React.FC<ApkDownloadModalProps> = ({
     } catch (err) {
       console.warn('In-memory download failed, falling back to direct mirror:', err);
       // 2. Jika fetch lokal terhalang bot protection, alihkan langsung ke CDN GitHub yang bebas blokir
-      window.location.href = GITHUB_MIRROR_URL;
+      window.location.href = `${GITHUB_MIRROR_URL}?t=${Date.now()}`;
       setIsDownloading(false);
     }
   };

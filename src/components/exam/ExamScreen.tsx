@@ -456,12 +456,7 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
 
   // 3. LISTEN TO PROCTOR COMMANDS (Buka Kunci, Paksa Selesai, Reset)
   useEffect(() => {
-    const sessionMountTime = Date.now();
     const unsubscribe = subscribeToStudentCommands(studentName, subject.id, (cmd) => {
-      // Abaikan perintah usang yang diterbitkan sebelum layar ujian sesi ini dibuka
-      if (cmd.timestamp && cmd.timestamp < sessionMountTime - 2000) {
-        return;
-      }
       if (cmd.action === 'RESET_VIOLATION') {
         // Pengawas membuka kunci & me-reset pelanggaran
         violationCountRef.current = 0;
@@ -493,8 +488,17 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
         setIsExamCompleted(true);
         setIsLocked(false);
         const cleanName = studentName.toLowerCase().trim();
+        const cleanClass = studentActualClass.toLowerCase().trim();
         if (typeof window !== 'undefined') {
           try {
+            if (cleanClass) {
+              localStorage.setItem(`cbt_submitted_${subject.id}_${cleanClass}_${cleanName}`, JSON.stringify({
+                submittedAt: new Date().toLocaleString('id-ID'),
+                reason: 'Diselesaikan Paksa oleh Pengawas'
+              }));
+              localStorage.removeItem(`cbt_exam_questions_${subject.id}_${cleanClass}_${cleanName}`);
+              localStorage.removeItem(`cbt_blocked_${subject.id}_${cleanClass}_${cleanName}`);
+            }
             localStorage.setItem(`cbt_submitted_${subject.id}_${cleanName}`, JSON.stringify({
               submittedAt: new Date().toLocaleString('id-ID'),
               reason: 'Diselesaikan Paksa oleh Pengawas'
@@ -507,17 +511,25 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
         removeStudentSession(studentName, subject.id, studentActualClass);
 
         // Tampilkan tampilan selesai ujian pada layar siswa tanpa memanggil onFinishExam lagi (karena guru sudah menyimpannya ke database)
-        const evaluation = evaluateFullExam(questions, answersRef.current, subject.scoringRules);
+        let evaluation: any = { finalScore: 0, totalEarned: 0, totalMax: questions?.length || 0, details: [] };
+        try {
+          if (Array.isArray(questions) && questions.length > 0) {
+            evaluation = evaluateFullExam(questions, answersRef.current || [], subject.scoringRules || {});
+          }
+        } catch (e) {
+          console.warn('Gagal evaluasi nilai saat force finish:', e);
+        }
+
         setCompletedResult({
           studentName,
           className: studentActualClass,
-          score: evaluation.finalScore,
-          totalEarned: evaluation.totalEarned,
-          totalMax: evaluation.totalMax,
-          answers: answersRef.current,
+          score: evaluation.finalScore ?? 0,
+          totalEarned: evaluation.totalEarned ?? 0,
+          totalMax: evaluation.totalMax ?? (questions?.length || 0),
+          answers: answersRef.current || [],
           submittedAt: new Date().toLocaleString('id-ID'),
-          violationCount: violationCountRef.current,
-          details: evaluation.details
+          violationCount: violationCountRef.current || 0,
+          details: evaluation.details || []
         });
 
         try {

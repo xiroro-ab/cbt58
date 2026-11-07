@@ -642,12 +642,9 @@ export function subscribeToStudentCommands(
   const cleanClass = (className || '').toLowerCase().trim();
   let stopped = false;
   const handledCommandIds = new Set<string>();
-  const listenerMountedAt = Date.now();
-  let isInitialPoll = true;
 
   const deliver = (cmd: ProctorCommand) => {
     if (stopped || !cmd) return;
-    if (cmd.timestamp && cmd.timestamp < listenerMountedAt - 2000) return;
     const cmdId = cmd.id || `${cmd.action}_${cmd.timestamp}`;
     if (handledCommandIds.has(cmdId)) return;
     if (cmd.studentName.toLowerCase().trim() !== cleanName) return;
@@ -662,24 +659,21 @@ export function subscribeToStudentCommands(
   const commandHandler = (cmd: ProctorCommand) => deliver(cmd);
   studentCommandListeners.add(commandHandler);
 
-  // Jalur lintas perangkat: polling database tiap 3 detik.
+  // 1. Inisialisasi saat mount: Cek apakah ada perintah lama yang tersisa dari sesi sebelum layar ini dibuka.
+  // Jika ada (mis. RESET_EXAM lama dari guru agar siswa bisa login), tandai sudah di-handle dan hapus agar tidak dieksekusi.
+  void readProctorCommand(subjectId, studentName, className).then(initialCmd => {
+    if (stopped) return;
+    if (initialCmd) {
+      handledCommandIds.add(initialCmd.id);
+      void clearProctorCommand(subjectId, studentName, className);
+    }
+  });
+
+  // 2. Jalur lintas perangkat: polling database tiap 3 detik untuk menerima perintah baru (FORCE_FINISH, RESET_VIOLATION, RESET_EXAM).
   const poll = async () => {
     if (stopped) return;
     const cmd = await readProctorCommand(subjectId, studentName, className);
     if (!cmd || stopped) return;
-
-    // Pada polling pertama kali saat listener baru aktif:
-    // Jika ada perintah lama di database (mis. RESET_EXAM dari sesi sebelumnya agar siswa bisa login):
-    // Perintah tersebut BUKAN untuk sesi yang baru dibuka ini. Tandai sudah di-handle dan bersihkan dari database.
-    if (isInitialPoll) {
-      isInitialPoll = false;
-      handledCommandIds.add(cmd.id);
-      void clearProctorCommand(subjectId, studentName, className);
-      if (cmd.commandAt < listenerMountedAt - 2000) {
-        return;
-      }
-    }
-
     if (handledCommandIds.has(cmd.id)) return;
 
     handledCommandIds.add(cmd.id);
@@ -694,7 +688,6 @@ export function subscribeToStudentCommands(
     });
   };
 
-  void poll();
   const intervalId = setInterval(poll, 3000);
 
   return () => {

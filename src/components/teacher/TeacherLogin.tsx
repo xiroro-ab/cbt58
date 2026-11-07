@@ -836,7 +836,7 @@ export const TeacherLogin: React.FC<TeacherLoginProps> = ({
                       Aplikasi Android Ujian (Exambro)
                     </span>
                     <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300">
-                      v3.0
+                      v3.1
                     </span>
                   </div>
                   <p className="text-[10px] text-slate-500 dark:text-slate-400">

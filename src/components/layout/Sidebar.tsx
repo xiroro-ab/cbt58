@@ -315,7 +315,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   <span>Aplikasi Android</span>
                 </div>
                 <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 font-bold">
-                  APK v3.0
+                  APK v3.1
                 </span>
               </button>
             )}

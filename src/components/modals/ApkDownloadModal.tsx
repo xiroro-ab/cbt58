@@ -95,7 +95,7 @@ export const ApkDownloadModal: React.FC<ApkDownloadModalProps> = ({
                   Aplikasi CBT SMPN 58 Android
                 </h3>
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-violet-100 dark:bg-violet-900/60 text-violet-700 dark:text-violet-300 border border-violet-200 dark:border-violet-700">
-                  v3.0 Resmi
+                  v3.1 Resmi
                 </span>
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-700">
                   Anti-Curang OS-Level
@@ -127,13 +127,13 @@ export const ApkDownloadModal: React.FC<ApkDownloadModalProps> = ({
                   Paket Pemasangan Resmi (APK)
                 </p>
                 <h4 className="text-lg font-extrabold tracking-tight">
-                  ExamBrowser SMPN 58 (v3.0)
+                  ExamBrowser SMPN 58 (v3.1)
                 </h4>
                 <p className="text-xs text-violet-100/90 max-w-sm">
                   Kompatibel dengan semua HP Android (Android 7.0 s/d Android 14+). Cukup 1 klik kunci layar langsung ujian.
                 </p>
                 <div className="flex items-center justify-center sm:justify-start gap-3 pt-1 text-[11px] text-violet-200 font-mono">
-                  <span>Ukuran: ~7.3 MB</span>
+                  <span>Ukuran: ~6.3 MB</span>
                   <span>•</span>
                   <span>Update: November 2026</span>
                 </div>

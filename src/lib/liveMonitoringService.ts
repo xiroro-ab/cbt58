@@ -24,6 +24,9 @@ export interface ProctorCommand {
   subjectId: string;
   className?: string;
   timestamp: number;
+  score?: number;
+  totalEarned?: number;
+  totalMax?: number;
 }
 
 export type ResultChangeAction = 'INSERT' | 'UPDATE' | 'DELETE';
@@ -415,6 +418,9 @@ export async function sendProctorCommand(cmd: {
   studentName: string;
   subjectId: string;
   className?: string;
+  score?: number;
+  totalEarned?: number;
+  totalMax?: number;
 }): Promise<boolean> {
   if (typeof window === 'undefined') return false;
 
@@ -518,7 +524,10 @@ export async function sendProctorCommand(cmd: {
     cmd.className,
     cmd.action,
     payload.timestamp,
-    cmdId
+    cmdId,
+    cmd.score,
+    cmd.totalEarned,
+    cmd.totalMax
   );
 
   let sessionOk = true;
@@ -674,7 +683,10 @@ export function subscribeToStudentCommands(
           studentName,
           subjectId,
           className,
-          timestamp: initialCmd.commandAt
+          timestamp: initialCmd.commandAt,
+          score: initialCmd.score,
+          totalEarned: initialCmd.totalEarned,
+          totalMax: initialCmd.totalMax
         });
       }
     }
@@ -695,7 +707,10 @@ export function subscribeToStudentCommands(
       studentName,
       subjectId,
       className,
-      timestamp: cmd.commandAt
+      timestamp: cmd.commandAt,
+      score: cmd.score,
+      totalEarned: cmd.totalEarned,
+      totalMax: cmd.totalMax
     });
   };
 

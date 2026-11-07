@@ -7066,7 +7066,10 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                                           action: 'FORCE_FINISH',
                                           studentName: s.studentName,
                                           subjectId: s.subjectId,
-                                          className: s.className
+                                          className: s.className,
+                                          score: evalRes.finalScore,
+                                          totalEarned: evalRes.totalEarned,
+                                          totalMax: evalRes.totalMax
                                         });
 
                                         // 5. Bersihkan sesi dari database dan memori guru

@@ -534,7 +534,10 @@ export async function writeProctorCommand(
   className: string | undefined,
   action: ProctorCommandAction,
   commandAt: number,
-  commandId?: string
+  commandId?: string,
+  score?: number,
+  totalEarned?: number,
+  totalMax?: number
 ): Promise<boolean> {
   try {
     const cmdId = commandId || `cmd_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
@@ -553,7 +556,8 @@ export async function writeProctorCommand(
         ...(isReset ? { stateAt: commandAt } : {}),
         command: action,
         commandAt,
-        commandId: cmdId
+        commandId: cmdId,
+        ...(typeof score === 'number' ? { score, totalEarned: totalEarned ?? 0, totalMax: totalMax ?? 0 } : {})
       });
       const { error } = await supabase
         .from('exam_notifications')
@@ -574,7 +578,8 @@ export async function writeProctorCommand(
         ...(isReset ? { stateAt: commandAt } : {}),
         command: action,
         commandAt,
-        commandId: cmdId
+        commandId: cmdId,
+        ...(typeof score === 'number' ? { score, totalEarned: totalEarned ?? 0, totalMax: totalMax ?? 0 } : {})
       }),
       is_read: false
     });
@@ -589,7 +594,14 @@ export async function readProctorCommand(
   subjectId: string,
   studentName: string,
   className?: string
-): Promise<{ id: string; action: ProctorCommandAction; commandAt: number } | null> {
+): Promise<{
+  id: string;
+  action: ProctorCommandAction;
+  commandAt: number;
+  score?: number;
+  totalEarned?: number;
+  totalMax?: number;
+} | null> {
   try {
     const rows = await findCommandRows(subjectId, studentName);
     const row = pickCommandRow(rows, className);
@@ -602,7 +614,10 @@ export async function readProctorCommand(
     return {
       id: String(parsed.commandId || `cmd_${parsed.commandAt || Date.now()}`),
       action: parsed.command as ProctorCommandAction,
-      commandAt: Number(parsed.commandAt) || Date.now()
+      commandAt: Number(parsed.commandAt) || Date.now(),
+      score: typeof parsed.score === 'number' ? parsed.score : undefined,
+      totalEarned: typeof parsed.totalEarned === 'number' ? parsed.totalEarned : undefined,
+      totalMax: typeof parsed.totalMax === 'number' ? parsed.totalMax : undefined
     };
   } catch {
     return null;

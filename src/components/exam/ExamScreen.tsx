@@ -479,15 +479,21 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
     let finalMax = typeof serverMax === 'number' ? serverMax : (questions?.length || 0);
 
     if (finalScore === null) {
-      try {
-        let sub = await checkStudentExamSubmission(subject.id, studentName, studentActualClass);
-        if (!sub.isSubmitted) sub = await checkStudentExamSubmission(subject.id, studentName);
-        if (sub.isSubmitted && typeof sub.score === 'number') {
-          finalScore = sub.score;
-          finalEarned = typeof sub.totalEarned === 'number' ? sub.totalEarned : finalEarned;
-          finalMax = typeof sub.totalMax === 'number' ? sub.totalMax : finalMax;
+      for (let attempt = 0; attempt < 5; attempt++) {
+        try {
+          let sub = await checkStudentExamSubmission(subject.id, studentName, studentActualClass);
+          if (!sub.isSubmitted) sub = await checkStudentExamSubmission(subject.id, studentName);
+          if (sub.isSubmitted && typeof sub.score === 'number') {
+            finalScore = sub.score;
+            finalEarned = typeof sub.totalEarned === 'number' ? sub.totalEarned : finalEarned;
+            finalMax = typeof sub.totalMax === 'number' ? sub.totalMax : finalMax;
+            break;
+          }
+        } catch {}
+        if (attempt < 4) {
+          await new Promise(r => setTimeout(r, 400));
         }
-      } catch {}
+      }
     }
 
     // 2. Jika di server belum ada nilai (mis. offline), lakukan evaluasi lokal sebagai cadangan
@@ -576,7 +582,12 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
         }
         requestFullscreenMode();
       } else if (cmd.action === 'FORCE_FINISH') {
-        void triggerForceFinish('Diselesaikan Paksa oleh Pengawas');
+        void triggerForceFinish(
+          'Diselesaikan Paksa oleh Pengawas',
+          cmd.score,
+          cmd.totalEarned,
+          cmd.totalMax
+        );
       } else if (cmd.action === 'RESET_EXAM') {
         // Pengawas mereset ujian siswa (bersihkan cache dan kembali ke login)
         removeStudentSession(studentName, subject.id, studentActualClass);
@@ -668,7 +679,7 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
         const sessionCheck = await lookupStudentExamSession(subject.id, studentName, studentActualClass);
         if (stopped || isCompletedRef.current) return;
         if (sessionCheck.session && sessionCheck.session.status === 'completed') {
-          void triggerForceFinish('Diselesaikan Paksa oleh Pengawas');
+          void triggerForceFinish('Diselesaikan Paksa oleh Pengawas', subStatus.score, subStatus.totalEarned, subStatus.totalMax);
           return;
         }
       } catch {}
@@ -700,6 +711,64 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
       window.removeEventListener('focus', handleFocus);
     };
   }, [isExamCompleted, subject.id, studentName, studentActualClass, triggerForceFinish]);
+
+  // Sinkronisasi otomatis nilai resmi jika kartu selesai sempat bernilai 0%
+  useEffect(() => {
+    if (!isExamCompleted) return;
+    if (completedResult && completedResult.score > 0) return;
+
+    let isStopped = false;
+    let pollCount = 0;
+    const maxPolls = 15;
+
+    const syncOfficialScore = async () => {
+      if (isStopped || pollCount >= maxPolls) return;
+      pollCount++;
+      try {
+        let sub = await checkStudentExamSubmission(subject.id, studentName, studentActualClass);
+        if (!sub.isSubmitted) sub = await checkStudentExamSubmission(subject.id, studentName);
+        if (isStopped) return;
+        if (sub.isSubmitted && typeof sub.score === 'number' && sub.score > 0) {
+          setCompletedResult((prev: any) => {
+            if (!prev) return prev;
+            return {
+              ...prev,
+              score: sub.score!,
+              totalEarned: typeof sub.totalEarned === 'number' ? sub.totalEarned : prev.totalEarned,
+              totalMax: typeof sub.totalMax === 'number' ? sub.totalMax : prev.totalMax
+            };
+          });
+          if (typeof window !== 'undefined') {
+            try {
+              const cleanName = studentName.toLowerCase().trim();
+              const cleanClass = studentActualClass.toLowerCase().trim();
+              if (cleanClass) {
+                localStorage.setItem(`cbt_submitted_${subject.id}_${cleanClass}_${cleanName}`, JSON.stringify({
+                  score: sub.score,
+                  submittedAt: sub.submittedAt || new Date().toLocaleString('id-ID'),
+                  reason: 'Diselesaikan Paksa oleh Pengawas'
+                }));
+              }
+              localStorage.setItem(`cbt_submitted_${subject.id}_${cleanName}`, JSON.stringify({
+                score: sub.score,
+                submittedAt: sub.submittedAt || new Date().toLocaleString('id-ID'),
+                reason: 'Diselesaikan Paksa oleh Pengawas'
+              }));
+            } catch {}
+          }
+          isStopped = true;
+        }
+      } catch {}
+    };
+
+    const intervalId = setInterval(syncOfficialScore, 1200);
+    void syncOfficialScore();
+
+    return () => {
+      isStopped = true;
+      clearInterval(intervalId);
+    };
+  }, [isExamCompleted, completedResult?.score, subject.id, studentName, studentActualClass]);
 
   // Handler Pengecekan Kunci Mandiri saat Siswa di Layar Terkunci
   const handleManualCheckUnlock = async () => {

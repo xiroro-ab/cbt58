@@ -7038,26 +7038,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                                             localStorage.removeItem(`cbt_exam_state_${s.subjectId}_${cleanName}`);
                                           } catch {}
                                         }
-                                        removeStudentSession(s.studentName, s.subjectId, s.className);
-                                        setLiveSessions(prev => prev.filter(sess =>
-                                          !(sess.studentName.toLowerCase().trim() === cleanName &&
-                                            sess.subjectId === s.subjectId &&
-                                            (!cleanClass || (sess.className || '').toLowerCase().trim() === cleanClass))
-                                        ));
-
-                                        // 3. Perintahkan layar siswa untuk selesai
-                                        const commandOk = await sendProctorCommand({
-                                          action: 'FORCE_FINISH',
-                                          studentName: s.studentName,
-                                          subjectId: s.subjectId,
-                                          className: s.className
-                                        });
-                                        if (!commandOk) {
-                                          setMonitoringActionToast(`Simpan paksa siswa ${s.studentName} gagal menutup sesi di server. Nilai belum disimpan.`);
-                                          return;
-                                        }
-
-                                        // 4. Nilai hanya soal mapel siswa, lalu simpan
+                                        // 3. Evaluasi nilai dan simpan ke database nilai SEBAGAI PRIORITAS UTAMA
                                         const matchedSub = (allSubjects || []).find(sub => sub.id === s.subjectId) || subject;
                                         const subjectQuestions = questions.filter(q => q.subjectId === s.subjectId);
                                         const evalRes = evaluateFullExam(subjectQuestions, sessionAnswers, matchedSub.scoringRules);
@@ -7079,6 +7060,23 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                                         if (onUpdateResult) {
                                           await onUpdateResult(forcedResult);
                                         }
+
+                                        // 4. Perintahkan layar siswa untuk selesai
+                                        await sendProctorCommand({
+                                          action: 'FORCE_FINISH',
+                                          studentName: s.studentName,
+                                          subjectId: s.subjectId,
+                                          className: s.className
+                                        });
+
+                                        // 5. Bersihkan sesi dari database dan memori guru
+                                        await removeStudentSession(s.studentName, s.subjectId, s.className);
+                                        setLiveSessions(prev => prev.filter(sess =>
+                                          !(sess.studentName.toLowerCase().trim() === cleanName &&
+                                            sess.subjectId === s.subjectId &&
+                                            (!cleanClass || (sess.className || '').toLowerCase().trim() === cleanClass))
+                                        ));
+
                                         setMonitoringActionToast(`Ujian siswa ${s.studentName} telah diselesaikan paksa dan nilainya tersimpan.`);
                                       }
                                     });

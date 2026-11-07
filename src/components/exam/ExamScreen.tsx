@@ -611,9 +611,9 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
     return () => clearInterval(pollInterval);
   }, [isLocked, isExamCompleted, subject.id, studentName, subject.violationLimit, blockedKey, stateKey, sendDirectHeartbeat, requestFullscreenMode]);
 
-  // 3c. FAIL-SAFE PENGECEKAN STATUS SELESAI / SIMPAN PAKSA OLEH PENGAWAS (SETIAP 4 DETIK)
+  // 3c. FAIL-SAFE PENGECEKAN STATUS SELESAI / SIMPAN PAKSA OLEH PENGAWAS (SETIAP 3 DETIK + ON WAKEUP)
   // Menjamin jika guru menekan "Simpan Paksa", layar siswa seketika berganti ke hasil ujian
-  // sekalipun sinyal perintah proctor sempat tertunda di jaringan seluler.
+  // sekalipun HP siswa baru dibuka dari kondisi layar mati / lockscreen.
   useEffect(() => {
     if (isExamCompleted) return;
 
@@ -622,7 +622,10 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
       if (stopped || isCompletedRef.current) return;
       try {
         // A. Cek apakah pengawas telah menyimpan nilai siswa ke database nilai
-        const subStatus = await checkStudentExamSubmission(subject.id, studentName, studentActualClass);
+        let subStatus = await checkStudentExamSubmission(subject.id, studentName, studentActualClass);
+        if (!subStatus.isSubmitted) {
+          subStatus = await checkStudentExamSubmission(subject.id, studentName);
+        }
         if (stopped || isCompletedRef.current) return;
         if (subStatus.isSubmitted) {
           triggerForceFinish('Diselesaikan oleh Pengawas');
@@ -639,10 +642,30 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
       } catch {}
     };
 
-    const interval = setInterval(checkProctorCompletion, 4000);
+    // Jalankan segera saat mount
+    void checkProctorCompletion();
+
+    // Polling setiap 3 detik
+    const interval = setInterval(checkProctorCompletion, 3000);
+
+    // Deteksi saat HP siswa di-unlock atau tab kembali aktif
+    const handleWakeup = () => {
+      if (document.visibilityState === 'visible') {
+        void checkProctorCompletion();
+      }
+    };
+    const handleFocus = () => {
+      void checkProctorCompletion();
+    };
+
+    document.addEventListener('visibilitychange', handleWakeup);
+    window.addEventListener('focus', handleFocus);
+
     return () => {
       stopped = true;
       clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleWakeup);
+      window.removeEventListener('focus', handleFocus);
     };
   }, [isExamCompleted, subject.id, studentName, studentActualClass, triggerForceFinish]);
 

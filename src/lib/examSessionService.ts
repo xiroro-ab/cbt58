@@ -26,10 +26,13 @@ export async function upsertExamSession(
 ): Promise<boolean> {
   if (!session?.studentName || !session.subjectId || !session.className) return false;
 
+  const cleanName = session.studentName.trim();
+  const cleanClass = session.className.trim();
+
   const payload: Record<string, unknown> = {
     subject_id: session.subjectId,
-    student_name: session.studentName.trim(),
-    class_name: session.className.trim(),
+    student_name: cleanName,
+    class_name: cleanClass,
     start_time: new Date(session.startTime).toISOString(),
     last_heartbeat: new Date(session.lastHeartbeat).toISOString(),
     progress_count: session.progressCount || 0,
@@ -44,7 +47,29 @@ export async function upsertExamSession(
     payload.answers = session.answers || [];
   }
 
-  // Proteksi: Jika pengawas telah menyelesaikan ujian siswa ('completed'),
+  // Proteksi 1: Jika siswa sudah memiliki nilai akhir di exam_results (diselesaikan paksa oleh guru atau submit mandiri),
+  // TOLAK KERAS semua heartbeat baru agar sesi ujian tidak pernah hidup kembali!
+  try {
+    const { data: alreadySubmitted } = await supabase
+      .from('exam_results')
+      .select('id')
+      .eq('subject_id', session.subjectId)
+      .ilike('student_name', cleanName)
+      .limit(1)
+      .maybeSingle();
+
+    if (alreadySubmitted) {
+      // Bersihkan sesi aktif siswa yang sudah selesai agar database tetap bersih
+      await supabase
+        .from('exam_sessions')
+        .delete()
+        .eq('subject_id', session.subjectId)
+        .ilike('student_name', cleanName);
+      return true;
+    }
+  } catch {}
+
+  // Proteksi 2: Jika pengawas telah menyelesaikan ujian siswa ('completed'),
   // jangan biarkan heartbeat siswa menimpa status completed kembali menjadi ongoing.
   if (session.status !== 'completed') {
     try {
@@ -52,7 +77,7 @@ export async function upsertExamSession(
         .from('exam_sessions')
         .select('status')
         .eq('subject_id', session.subjectId)
-        .ilike('student_name', session.studentName.trim())
+        .ilike('student_name', cleanName)
         .limit(1)
         .maybeSingle();
 
@@ -109,9 +134,42 @@ export async function fetchActiveExamSessions(subjectId?: string): Promise<ExamS
     return [];
   }
 
+  // FILTER OTORITATIF HASIL UJIAN (EXAM_RESULTS):
+  // Siswa yang nilainya sudah tersimpan (baik submit mandiri maupun simpan paksa oleh guru)
+  // TIDAK BOLEH PERNAH muncul lagi di Live Monitoring!
+  const submittedSet = new Set<string>();
+  try {
+    let resQuery = supabase
+      .from('exam_results')
+      .select('student_name, class_name');
+    if (subjectId) {
+      resQuery = resQuery.eq('subject_id', subjectId);
+    }
+    const { data: resData } = await resQuery;
+    if (resData) {
+      resData.forEach((r: any) => {
+        const name = (r.student_name || '').toLowerCase().trim();
+        const cls = (r.class_name || '').toLowerCase().trim();
+        if (name) {
+          submittedSet.add(name);
+          if (cls) submittedSet.add(`${name}|${cls}`);
+        }
+      });
+    }
+  } catch {}
+
   const sinceEpoch = Date.now() - ACTIVE_WINDOW_MS;
   const activeSessions: ExamSession[] = data
-    .filter((row: any) => row.status === 'blocked' || toEpoch(row.last_heartbeat, 0) >= sinceEpoch)
+    .filter((row: any) => {
+      const name = (row.student_name || '').toLowerCase().trim();
+      const cls = (row.class_name || '').toLowerCase().trim();
+      if (submittedSet.has(name) || (cls && submittedSet.has(`${name}|${cls}`))) {
+        // Hapus sesi basi ini dari exam_sessions agar database tetap bersih
+        void supabase.from('exam_sessions').delete().eq('id', row.id);
+        return false;
+      }
+      return row.status === 'blocked' || toEpoch(row.last_heartbeat, 0) >= sinceEpoch;
+    })
     .map((row: any) => ({
       id: row.id,
       subjectId: row.subject_id,
@@ -148,6 +206,10 @@ export async function fetchActiveExamSessions(subjectId?: string): Promise<ExamS
           const parsed = JSON.parse(row.message || '{}');
           if (parsed.locked) {
             const cleanName = (row.student_name || '').toLowerCase().trim();
+            const cleanClass = (parsed.className || '').toLowerCase().trim();
+            if (submittedSet.has(cleanName) || (cleanClass && submittedSet.has(`${cleanName}|${cleanClass}`))) {
+              continue;
+            }
             const existingIdx = activeSessions.findIndex(
               s => s.subjectId === row.subject_id && s.studentName.toLowerCase().trim() === cleanName
             );
@@ -405,13 +467,11 @@ export async function completeExamSession(
   const cleanName = studentName.trim();
   const cleanClass = className?.trim();
 
+  // Selesaikan sesi aktif dengan menghapusnya dari exam_sessions.
+  // Keberadaan nilai di exam_results menjadi bukti otoritatif tunggal bahwa ujian siswa sudah selesai.
   let query = supabase
     .from('exam_sessions')
-    .update({
-      status: 'completed',
-      is_focus: false,
-      last_heartbeat: new Date().toISOString()
-    })
+    .delete()
     .eq('subject_id', subjectId)
     .ilike('student_name', cleanName);
 
@@ -419,31 +479,8 @@ export async function completeExamSession(
     query = query.ilike('class_name', cleanClass);
   }
 
-  let { error } = await query;
-
-  if (error && error.message && error.message.includes('updated_at')) {
-    try {
-      let getQuery = supabase
-        .from('exam_sessions')
-        .select('*')
-        .eq('subject_id', subjectId)
-        .ilike('student_name', cleanName);
-      if (cleanClass) getQuery = getQuery.ilike('class_name', cleanClass);
-      const { data: existing } = await getQuery.maybeSingle();
-
-      if (existing) {
-        await supabase.from('exam_sessions').delete().eq('id', existing.id);
-        const { id, ...toInsert } = existing;
-        toInsert.status = 'completed';
-        toInsert.is_focus = false;
-        toInsert.last_heartbeat = new Date().toISOString();
-        const insertRes = await supabase.from('exam_sessions').insert(toInsert);
-        error = insertRes.error;
-      }
-    } catch {}
-  }
-
-  if (error) console.warn('Gagal menutup sesi monitoring siswa:', error.message);
+  const { error } = await query;
+  if (error) console.warn('Gagal menghapus sesi aktif ujian siswa:', error.message);
   return !error;
 }
 
@@ -478,17 +515,17 @@ function pickCommandRow(rows: CommandRow[], className?: string): CommandRow | nu
   if (cleanClass) {
     const exact = rows.find(r => r.className === cleanClass);
     if (exact) return exact;
-    // Jika tidak ada kelas yang cocok persis, prioritaskan row yang memiliki command aktif
-    const withCommand = rows.find(r => {
-      try {
-        const p = JSON.parse(r.message || '{}');
-        return Boolean(p.command);
-      } catch {
-        return false;
-      }
-    });
-    if (withCommand) return withCommand;
   }
+  // Prioritaskan row yang memiliki command aktif
+  const withCommand = rows.find(r => {
+    try {
+      const p = JSON.parse(r.message || '{}');
+      return Boolean(p.command);
+    } catch {
+      return false;
+    }
+  });
+  if (withCommand) return withCommand;
   return rows[0] || null;
 }
 

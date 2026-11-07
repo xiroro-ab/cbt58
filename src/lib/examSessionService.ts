@@ -92,7 +92,7 @@ export async function fetchActiveExamSessions(subjectId?: string): Promise<ExamS
   }
 
   const sinceEpoch = Date.now() - ACTIVE_WINDOW_MS;
-  return data
+  const activeSessions: ExamSession[] = data
     .filter((row: any) => row.status === 'blocked' || toEpoch(row.last_heartbeat, 0) >= sinceEpoch)
     .map((row: any) => ({
       id: row.id,
@@ -110,6 +110,62 @@ export async function fetchActiveExamSessions(subjectId?: string): Promise<ExamS
       remainingSeconds: Number(row.remaining_seconds) || 0,
       isFocus: row.is_focus !== false
     }));
+
+  // SINKRONISASI OTORITATIF STATUS TERKUNCI (ANTI-CHEAT):
+  // Baca juga status autolock dari exam_notifications. Jika ada siswa yang terkunci (locked: true)
+  // namun sesi di exam_sessions terputus/kedaluwarsa karena HP siswa tertutup, pastikan siswa
+  // TERSEBUT TETAP MUNCUL di daftar monitoring pengawas dengan status 'blocked' dan tombol 'Buka Kunci'.
+  try {
+    let lockQuery = supabase
+      .from('exam_notifications')
+      .select('id,subject_id,student_name,message,created_at')
+      .eq('title', LOCK_STATE_TITLE);
+    if (subjectId) {
+      lockQuery = lockQuery.eq('subject_id', subjectId);
+    }
+    const { data: lockRows } = await lockQuery;
+    if (lockRows && lockRows.length > 0) {
+      for (const row of lockRows) {
+        try {
+          const parsed = JSON.parse(row.message || '{}');
+          if (parsed.locked) {
+            const cleanName = (row.student_name || '').toLowerCase().trim();
+            const existingIdx = activeSessions.findIndex(
+              s => s.subjectId === row.subject_id && s.studentName.toLowerCase().trim() === cleanName
+            );
+            if (existingIdx >= 0) {
+              activeSessions[existingIdx].status = 'blocked';
+              activeSessions[existingIdx].violationCount = Math.max(
+                activeSessions[existingIdx].violationCount,
+                Number(parsed.count) || 3
+              );
+            } else {
+              activeSessions.push({
+                id: row.id,
+                subjectId: row.subject_id,
+                studentId: row.student_name,
+                studentName: row.student_name,
+                className: parsed.className || '',
+                startTime: toEpoch(row.created_at),
+                lastHeartbeat: toEpoch(row.created_at),
+                progressCount: 0,
+                violationCount: Number(parsed.count) || 3,
+                answers: [],
+                status: 'blocked',
+                totalQuestions: 0,
+                remainingSeconds: 0,
+                isFocus: false
+              });
+            }
+          }
+        } catch {}
+      }
+    }
+  } catch (err) {
+    console.warn('Gagal membaca sinkronisasi notifikasi kunci:', err);
+  }
+
+  return activeSessions;
 }
 
 export interface StudentExamSessionLookup {

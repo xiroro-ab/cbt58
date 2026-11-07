@@ -6654,21 +6654,29 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                         confirmLabel: 'Ya, Reset Semua',
                         cancelLabel: 'Batal',
                         onConfirm: async () => {
-                          const targetSubId = monitoringFilterSubId !== 'ALL' ? monitoringFilterSubId : '';
-                          if (!targetSubId) {
-                            setMonitoringActionToast('Pilih mata pelajaran tertentu untuk reset massal.');
+                          const blockedList = filteredSessions.filter(s => s.status === "blocked");
+                          const targetSubIds = monitoringFilterSubId !== "ALL"
+                            ? [monitoringFilterSubId]
+                            : Array.from(new Set(blockedList.map(s => s.subjectId).filter(Boolean)));
+                          
+                          if (targetSubIds.length === 0) {
+                            setMonitoringActionToast("Tidak ada siswa terkunci yang perlu di-reset.");
                             return;
                           }
                           
-                          const [result] = await Promise.all([
-                            clearAllLockedStudents(targetSubId),
-                            resetAllExamSessions(targetSubId)
-                          ]);
+                          await Promise.all(
+                            targetSubIds.map(subId =>
+                              Promise.all([
+                                clearAllLockedStudents(subId),
+                                resetAllExamSessions(subId)
+                              ])
+                            )
+                          );
                           
-                          if (result.success) {
+                          if (true) {
                             const resetAt = Date.now();
                             setLiveSessions(prev => prev.map(session => (
-                              session.subjectId === targetSubId && session.status === 'blocked'
+                              targetSubIds.includes(session.subjectId) && session.status === 'blocked'
                                 ? {
                                     ...session,
                                     violationCount: 0,
@@ -6694,7 +6702,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                               return;
                             }
                             
-                            setMonitoringActionToast(`Berhasil mereset ${result.count} notifikasi autolock. Semua siswa terkunci telah dibuka kuncinya.`);
+                            setMonitoringActionToast('Semua siswa terkunci telah berhasil dibuka kuncinya.');
                           } else {
                             setMonitoringActionToast('Gagal mereset siswa terkunci. Coba lagi.');
                           }

@@ -50,6 +50,7 @@ import {
   KeyRound,
   ShieldCheck,
   Eye,
+  EyeOff,
   Database,
   Sliders,
   Play,
@@ -258,6 +259,8 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   const [settingsSavedToast, setSettingsSavedToast] = useState(false);
   const [isKopSettingsOpen, setIsKopSettingsOpen] = useState(true);
   const [isTeacherManagementModalOpen, setIsTeacherManagementModalOpen] = useState(false);
+  const [teacherEditPin, setTeacherEditPin] = useState<string>(currentTeacher?.pin || '');
+  const [showTeacherPin, setShowTeacherPin] = useState(false);
 
   // Penugasan Mengajar (Mapel & Rombel Kelas)
   const [selectedAssignmentTeacherId, setSelectedAssignmentTeacherId] = useState<string>(currentTeacher?.id || '');
@@ -452,7 +455,8 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
       const updatedTeacherObj: Teacher = {
         ...currentTeacher,
         name: newName || currentTeacher.name,
-        nip: newNip || currentTeacher.nip
+        nip: newNip || currentTeacher.nip,
+        ...(teacherEditPin?.trim() ? { pin: teacherEditPin.trim() } : {})
       };
       onUpdateTeacher?.(updatedTeacherObj);
     }
@@ -644,6 +648,12 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   useEffect(() => {
     setLocalSettingsForm(effectiveSchoolSettings);
   }, [effectiveSchoolSettings]);
+
+  useEffect(() => {
+    if (currentTeacher?.pin) {
+      setTeacherEditPin(currentTeacher.pin);
+    }
+  }, [currentTeacher?.pin]);
 
   // Handler saat akun guru diperbarui dari Modal Kelola Akun Guru
   const handleTeacherUpdatedFromModal = (updatedT: Teacher) => {
@@ -6571,31 +6581,36 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                   </div>
 
                   {/* Row 2: 3 Fitur Kontrol (Token, Durasi & Toleransi, Bobot Soal) */}
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3.5 text-xs">
                     {/* Kotak Token */}
-                    <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 space-y-2">
-                      <div className="flex items-center justify-between text-slate-500 dark:text-slate-400">
-                        <span className="font-semibold flex items-center gap-1.5">
-                          <KeyRound className="w-3.5 h-3.5 text-violet-600" />
-                          <span>Token Rilis Siswa</span>
+                    <div className="p-3.5 sm:p-4 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 space-y-2 overflow-hidden flex flex-col justify-between">
+                      <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 gap-2">
+                        <span className="font-semibold flex items-center gap-1.5 min-w-0">
+                          <KeyRound className="w-3.5 h-3.5 text-violet-600 shrink-0" />
+                          <span className="truncate">Token Rilis Siswa</span>
                         </span>
-                        <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold">Auto-Deteksi</span>
+                        <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold shrink-0">Auto-Deteksi</span>
                       </div>
-                      <div className="flex items-center justify-between gap-2 pt-1">
-                        <span className="text-lg font-mono font-black tracking-widest text-violet-600 dark:text-violet-400 uppercase bg-white dark:bg-slate-900 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700">
-                          {subItem.token}
-                        </span>
-                        <div className="flex items-center gap-1">
+                      <div className="flex items-center gap-1.5 pt-1 min-w-0">
+                        <div className="flex-1 min-w-0 bg-white dark:bg-slate-900 px-2 sm:px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 flex items-center justify-center overflow-hidden">
+                          <span
+                            className="font-mono font-black text-xs sm:text-sm md:text-base tracking-wider text-violet-600 dark:text-violet-400 uppercase truncate select-all block text-center"
+                            title={subItem.token}
+                          >
+                            {subItem.token}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1 shrink-0">
                           <button
                             onClick={() => handleRandomizeToken(subItem)}
-                            className="p-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 hover:bg-violet-50 dark:hover:bg-violet-950 text-slate-600 dark:text-slate-300 hover:text-violet-600 transition cursor-pointer"
+                            className="p-1.5 sm:p-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 hover:bg-violet-50 dark:hover:bg-violet-950 text-slate-600 dark:text-slate-300 hover:text-violet-600 transition cursor-pointer shrink-0"
                             title="Acak Token Baru (🎲)"
                           >
                             <Shuffle className="w-3.5 h-3.5" />
                           </button>
                           <button
                             onClick={() => handleCopyToken(subItem.token, subItem.id)}
-                            className="p-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 hover:bg-violet-50 dark:hover:bg-violet-950 text-slate-600 dark:text-slate-300 hover:text-violet-600 transition cursor-pointer"
+                            className="p-1.5 sm:p-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 hover:bg-violet-50 dark:hover:bg-violet-950 text-slate-600 dark:text-slate-300 hover:text-violet-600 transition cursor-pointer shrink-0"
                             title="Salin Token"
                           >
                             {isCopied ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
@@ -6605,9 +6620,9 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                     </div>
 
                     {/* Kotak Durasi & Anti-Cheat */}
-                    <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 space-y-2">
+                    <div className="p-3.5 sm:p-4 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 space-y-2 flex flex-col justify-between">
                       <span className="font-semibold text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
-                        <Clock className="w-3.5 h-3.5 text-violet-600" />
+                        <Clock className="w-3.5 h-3.5 text-violet-600 shrink-0" />
                         <span>Durasi & Toleransi</span>
                       </span>
                       <div className="grid grid-cols-2 gap-2 pt-1 text-slate-800 dark:text-slate-200">
@@ -6623,13 +6638,13 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                     </div>
 
                     {/* Kotak Bank Soal & Bobot Nilai */}
-                    <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 space-y-2">
-                      <div className="flex items-center justify-between text-slate-500 dark:text-slate-400">
-                        <span className="font-semibold flex items-center gap-1.5">
-                          <BookOpen className="w-3.5 h-3.5 text-violet-600" />
-                          <span>Bank Soal Terkoneksi</span>
+                    <div className="p-3.5 sm:p-4 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 space-y-2 md:col-span-2 xl:col-span-1 flex flex-col justify-between">
+                      <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 gap-2">
+                        <span className="font-semibold flex items-center gap-1.5 min-w-0">
+                          <BookOpen className="w-3.5 h-3.5 text-violet-600 shrink-0" />
+                          <span className="truncate">Bank Soal Terkoneksi</span>
                         </span>
-                        <strong className="text-violet-600 dark:text-violet-400 font-bold">{qCount} Butir Soal</strong>
+                        <strong className="text-violet-600 dark:text-violet-400 font-bold shrink-0">{qCount} Butir Soal</strong>
                       </div>
                       <div className="flex flex-wrap gap-1 pt-1 text-[10px]">
                         <span className="px-1.5 py-0.5 rounded bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700">PG: {subItem.scoringRules?.['Pilihan Ganda'] || 1}pt</span>
@@ -7328,11 +7343,22 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
               <h3 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                <Sliders className="w-5 h-5 text-violet-600" />
-                <span>{t.navSettings} & Konfigurasi Dokumen</span>
+                {currentTeacher?.role === 'admin' ? (
+                  <>
+                    <Sliders className="w-5 h-5 text-violet-600" />
+                    <span>{t.navSettings} & Konfigurasi Dokumen Sekolah</span>
+                  </>
+                ) : (
+                  <>
+                    <UserCheck className="w-5 h-5 text-emerald-600" />
+                    <span>Pengaturan Profil & Akun Guru</span>
+                  </>
+                )}
               </h3>
               <p className="text-xs text-slate-400 dark:text-slate-500">
-                Atur penugasan mengajar dewan guru, identitas pejabat penandatangan, tanda tangan elektronik (TTE barcode/QR), serta status server cloud.
+                {currentTeacher?.role === 'admin'
+                  ? 'Atur kop surat dinas, konfigurasi tanda tangan dokumen resmi, penugasan mengajar, dan akun dewan guru.'
+                  : 'Kelola identitas diri (Nama Lengkap, NIP), foto profil, dan penugasan mata pelajaran serta rombel kelas Anda.'}
               </p>
             </div>
 
@@ -7673,9 +7699,10 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
           </div>
 
           {/* ============================================================== */}
-          {/* SECTION 0: IDENTITAS KOP SURAT RESMI SEKOLAH (SESUAI GAMBAR)    */}
+          {/* SECTION 0: IDENTITAS KOP SURAT RESMI SEKOLAH (ADMIN ONLY)       */}
           {/* ============================================================== */}
-          <div className="p-5 sm:p-7 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-6">
+          {currentTeacher?.role === 'admin' && (
+            <div className="p-5 sm:p-7 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-6">
             {/* Header Card */}
             <div className="flex flex-col xl:flex-row xl:items-start justify-between gap-4 pb-4 border-b border-slate-100 dark:border-slate-800">
               <div className="flex items-start gap-3 flex-1 min-w-0">
@@ -8245,28 +8272,37 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
               </div>
             )}
           </div>
+          )}
 
-          {/* SECTION 1: PENGATURAN PEJABAT & TANDA TANGAN ELEKTRONIK (TTE) */}
-          <div className="p-5 sm:p-7 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-6">
-            <div className="border-b border-slate-100 dark:border-slate-800 pb-4 flex flex-col xl:flex-row xl:items-start justify-between gap-4">
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 flex-wrap mb-1">
-                  <h4 className="font-bold text-slate-900 dark:text-white text-sm sm:text-base flex items-center gap-2">
-                    <ShieldCheck className="w-5 h-5 text-violet-600" />
-                    <span>Identitas Pejabat Satuan Pendidikan & TTE Barcode/QR</span>
-                  </h4>
-                  <span className="px-2.5 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 text-[10px] font-bold border border-emerald-200/60 dark:border-emerald-800/60 flex items-center gap-1">
-                    <span>☁️</span>
-                    <span>Database Cloud Supabase</span>
-                  </span>
+          {/* ============================================================== */}
+          {/* SECTION 1: PENGATURAN PEJABAT / PROFIL GURU & TTE              */}
+          {/* ============================================================== */}
+          {currentTeacher?.role === 'admin' ? (
+            /* ============================================================ */
+            /* CARD PENGATURAN ADMINISTRATOR: DOKUMEN, KEPSEK & DEWAN GURU  */
+            /* ============================================================ */
+            <div className="p-5 sm:p-7 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-6">
+              <div className="border-b border-slate-100 dark:border-slate-800 pb-4 flex flex-col xl:flex-row xl:items-start justify-between gap-4">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap mb-1">
+                    <h4 className="font-bold text-slate-900 dark:text-white text-sm sm:text-base flex items-center gap-2">
+                      <ShieldCheck className="w-5 h-5 text-violet-600" />
+                      <span>Identitas Pejabat Dokumen Sekolah & TTE Barcode/QR</span>
+                    </h4>
+                    <span className="px-2.5 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 text-[10px] font-bold border border-emerald-200/60 dark:border-emerald-800/60 flex items-center gap-1">
+                      <span>☁️</span>
+                      <span>Database Cloud Supabase</span>
+                    </span>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+                      ⚙️ Mode Administrator
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 leading-relaxed">
+                    Pengaturan dokumen resmi sekolah, pejabat penandatangan ijazah/sertifikat, dan penandatangan default Dossier Ujian tersimpan di Cloud Supabase untuk seluruh akun.
+                  </p>
                 </div>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 leading-relaxed">
-                  Data ini tersimpan di Supabase Cloud dan otomatis dicetak pada Sertifikat Kelulusan, Dossier Lembar Jawaban Siswa, Berita Acara Ujian (BAP), dan Leger Nilai.
-                </p>
-              </div>
 
-              <div className="flex items-center gap-2 flex-wrap shrink-0">
-                {currentTeacher?.role === 'admin' && (
+                <div className="flex items-center gap-2 flex-wrap shrink-0">
                   <button
                     type="button"
                     onClick={() => setIsTeacherManagementModalOpen(true)}
@@ -8276,163 +8312,151 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                     <Users className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
                     <span>Kelola Akun Guru ({teachers.length})</span>
                   </button>
-                )}
 
-                <button
-                  type="button"
-                  onClick={handleSavePejabatSettings}
-                  className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 font-semibold text-xs transition cursor-pointer shrink-0"
-                >
-                  <Save className="w-4 h-4 text-violet-600 dark:text-violet-400" />
-                  <span>Simpan Pengaturan Pejabat & TTE</span>
-                </button>
+                  <button
+                    type="button"
+                    onClick={handleSavePejabatSettings}
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 font-semibold text-xs transition cursor-pointer shrink-0"
+                  >
+                    <Save className="w-4 h-4 text-violet-600 dark:text-violet-400" />
+                    <span>Simpan Pengaturan Pejabat & TTE</span>
+                  </button>
+                </div>
               </div>
-            </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              {/* Form Input Pejabat */}
-              <div className="lg:col-span-2 space-y-4">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {/* Nama Satuan Pendidikan */}
-                  <div>
-                    <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">
-                      Nama Satuan Pendidikan:
-                    </label>
-                    <input
-                      type="text"
-                      value={localSettingsForm.schoolName}
-                      onChange={e => setLocalSettingsForm(prev => ({ ...prev, schoolName: e.target.value }))}
-                      placeholder="SMP NEGERI 58 PALEMBANG"
-                      className="w-full p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500"
-                    />
-                  </div>
-
-                  {/* Kota */}
-                  <div>
-                    <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">
-                      Kota Penerbitan Dokumen:
-                    </label>
-                    <input
-                      type="text"
-                      value={localSettingsForm.city}
-                      onChange={e => setLocalSettingsForm(prev => ({ ...prev, city: e.target.value }))}
-                      placeholder="Palembang"
-                      className="w-full p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500"
-                    />
-                  </div>
-                </div>
-
-                {/* Bagian A: Kepala Sekolah (Untuk Sertifikat Siswa) */}
-                <div className="pt-2 border-t border-slate-100 dark:border-slate-800 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="w-2 h-2 rounded-full bg-violet-600 inline-block"></span>
-                      <h5 className="font-bold text-xs text-slate-800 dark:text-slate-200">
-                        1. Data Kepala Sekolah
-                      </h5>
-                    </div>
-                    <span className="text-[10px] font-semibold text-violet-600 dark:text-violet-400 bg-violet-50 dark:bg-violet-950/60 px-2 py-0.5 rounded-full border border-violet-200 dark:border-violet-800">
-                      🏛️ Digunakan pada Cetak Sertifikat Siswa
-                    </span>
-                  </div>
-
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {/* Form Input Pejabat */}
+                <div className="lg:col-span-2 space-y-5">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    {/* Nama Kepala Sekolah */}
+                    {/* Nama Satuan Pendidikan */}
                     <div>
                       <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">
-                        Nama Lengkap Kepala Sekolah & Gelar:
+                        Nama Satuan Pendidikan:
                       </label>
                       <input
                         type="text"
-                        value={localSettingsForm.principalName}
-                        onChange={e => setLocalSettingsForm(prev => ({ ...prev, principalName: e.target.value }))}
-                        placeholder="Hj. Rohana, S.Pd., M.Si."
+                        value={localSettingsForm.schoolName}
+                        onChange={e => setLocalSettingsForm(prev => ({ ...prev, schoolName: e.target.value }))}
+                        placeholder="SMP NEGERI 58 PALEMBANG"
                         className="w-full p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500"
                       />
                     </div>
 
-                    {/* NIP Kepala Sekolah */}
+                    {/* Kota */}
                     <div>
                       <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">
-                        NIP Kepala Sekolah:
+                        Kota Penerbitan Dokumen:
                       </label>
                       <input
                         type="text"
-                        value={localSettingsForm.principalNip}
-                        onChange={e => setLocalSettingsForm(prev => ({ ...prev, principalNip: e.target.value }))}
-                        placeholder="19680512 199412 2 001"
-                        className="w-full p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-mono font-semibold text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500"
-                      />
-                    </div>
-
-                    {/* Jabatan Penandatangan Utama (Kop / Leger) */}
-                    <div className="sm:col-span-2">
-                      <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">
-                        Jabatan Penandatangan Utama (Leger Rekap Nilai):
-                      </label>
-                      <input
-                        type="text"
-                        value={localSettingsForm.principalTitle || ''}
-                        onChange={e => setLocalSettingsForm(prev => ({ ...prev, principalTitle: e.target.value }))}
-                        placeholder="Kepala SMPN 58 Palembang"
+                        value={localSettingsForm.city}
+                        onChange={e => setLocalSettingsForm(prev => ({ ...prev, city: e.target.value }))}
+                        placeholder="Palembang"
                         className="w-full p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500"
                       />
-                      <p className="text-[10px] text-slate-400 mt-0.5">
-                        Teks jabatan resmi di atas tanda tangan Kepala Sekolah pada lembar rekapan nilai (Default: Kepala SMPN 58 Palembang).
-                      </p>
                     </div>
                   </div>
-                </div>
 
-                {/* Bagian B: Guru Pengampu / Proktor (Untuk Dossier Rekap Nilai Siswa) */}
-                <div className="pt-3 border-t border-slate-100 dark:border-slate-800 space-y-3">
-                  <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
-                    <div className="flex items-center gap-2 flex-wrap flex-1 min-w-0">
-                      <span className="w-2 h-2 rounded-full bg-emerald-600 inline-block shrink-0"></span>
-                      <h5 className="font-bold text-xs sm:text-sm text-slate-800 dark:text-slate-200">
-                        {currentTeacher?.role === 'admin'
-                          ? '2. Guru Pengampu / Proktor Default (Cetak Dossier Ujian Siswa)'
-                          : '2. Profil Guru Pengampu / Proktor Saya'}
-                      </h5>
-                      {currentTeacher?.role === 'admin' ? (
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800 shrink-0">
-                          ⚙️ Mode Admin
-                        </span>
-                      ) : (
-                        <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800 shrink-0">
-                          👨‍🏫 Profil Akun Anda
-                        </span>
-                      )}
-                    </div>
-
-                    <div className="flex items-center gap-2 flex-wrap sm:shrink-0">
-                      {currentTeacher?.role === 'admin' && (
-                        <button
-                          type="button"
-                          onClick={() => setIsTeacherManagementModalOpen(true)}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 font-bold text-xs transition cursor-pointer"
-                          title="Kelola semua akun guru (Edit, Tambah, Reset PIN, Hapus)"
-                        >
-                          <Users className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
-                          <span>Kelola Akun Guru ({teachers.length})</span>
-                        </button>
-                      )}
-                      <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800">
-                        👨‍🏫 Digunakan pada Cetak Dossier Siswa
+                  {/* Data Kepala Sekolah */}
+                  <div className="pt-3 border-t border-slate-100 dark:border-slate-800 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="w-2 h-2 rounded-full bg-violet-600 inline-block"></span>
+                        <h5 className="font-bold text-xs sm:text-sm text-slate-800 dark:text-slate-200">
+                          Data Kepala Sekolah (Penandatangan Ijazah & Sertifikat Resmi)
+                        </h5>
+                      </div>
+                      <span className="text-[10px] font-semibold text-violet-600 dark:text-violet-400 bg-violet-50 dark:bg-violet-950/60 px-2 py-0.5 rounded-full border border-violet-200 dark:border-violet-800">
+                        🏛️ Dicetak pada Sertifikat & Leger
                       </span>
                     </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                          Nama Lengkap Kepala Sekolah & Gelar:
+                        </label>
+                        <input
+                          type="text"
+                          value={localSettingsForm.principalName}
+                          onChange={e => setLocalSettingsForm(prev => ({ ...prev, principalName: e.target.value }))}
+                          placeholder="Hj. Rohana, S.Pd., M.Si."
+                          className="w-full p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                          NIP Kepala Sekolah:
+                        </label>
+                        <input
+                          type="text"
+                          value={localSettingsForm.principalNip}
+                          onChange={e => setLocalSettingsForm(prev => ({ ...prev, principalNip: e.target.value }))}
+                          placeholder="19680512 199412 2 001"
+                          className="w-full p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-mono font-semibold text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500"
+                        />
+                      </div>
+
+                      <div className="sm:col-span-2">
+                        <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                          Jabatan Penandatangan Utama (Leger Rekap Nilai):
+                        </label>
+                        <input
+                          type="text"
+                          value={localSettingsForm.principalTitle || ''}
+                          onChange={e => setLocalSettingsForm(prev => ({ ...prev, principalTitle: e.target.value }))}
+                          placeholder="Kepala SMPN 58 Palembang"
+                          className="w-full p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500"
+                        />
+                        <p className="text-[10px] text-slate-400 mt-0.5">
+                          Teks jabatan resmi di atas tanda tangan Kepala Sekolah pada lembar rekapan nilai (Default: Kepala SMPN 58 Palembang).
+                        </p>
+                      </div>
+                    </div>
                   </div>
 
-                  {/* Panel Pilihan Khusus Admin: Pilih Guru Pengampu Default untuk Dossier */}
-                  {currentTeacher?.role === 'admin' && (
-                    <div className="p-4 rounded-2xl bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200/80 dark:border-amber-800/60 space-y-3">
+                  {/* Manajemen Dewan Guru & Penandatangan Dossier Default */}
+                  <div className="pt-3 border-t border-slate-100 dark:border-slate-800 space-y-4">
+                    {/* Banner / Card Kelola Dewan Guru */}
+                    <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-slate-50 to-violet-50/40 dark:from-slate-800/60 dark:to-violet-950/30 border border-slate-200 dark:border-slate-700/80 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                      <div className="flex items-start gap-3 min-w-0">
+                        <div className="w-10 h-10 rounded-xl bg-violet-100 dark:bg-violet-900/50 text-violet-600 dark:text-violet-400 flex items-center justify-center shrink-0">
+                          <Users className="w-5 h-5" />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <h5 className="font-bold text-xs sm:text-sm text-slate-900 dark:text-white">
+                              Manajemen Akun Dewan Guru & Pengawas
+                            </h5>
+                            <span className="px-2 py-0.5 rounded-full bg-violet-100 dark:bg-violet-950/80 text-violet-700 dark:text-violet-300 text-[10px] font-bold border border-violet-200 dark:border-violet-800">
+                              {teachers.filter(t => !t.id?.startsWith('__cbt_')).length} Guru Terdaftar
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 leading-relaxed">
+                            Kelola data NIP, hak akses login, reset PIN, penugasan mata pelajaran, serta tambah & edit akun dewan guru.
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setIsTeacherManagementModalOpen(true)}
+                        className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-700 text-white font-bold text-xs transition cursor-pointer shadow-xs shrink-0 self-start sm:self-auto"
+                      >
+                        <Users className="w-4 h-4" />
+                        <span>Buka Kelola Akun Guru</span>
+                      </button>
+                    </div>
+
+                    {/* Penandatangan Default Dossier Siswa */}
+                    <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/70 space-y-3">
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                         <div>
-                          <span className="text-xs font-bold text-amber-900 dark:text-amber-200 block">
-                            Pilih Guru Pengampu Default dari Daftar Dewan Guru:
-                          </span>
-                          <p className="text-[11px] text-amber-700/80 dark:text-amber-400 mt-0.5 leading-relaxed">
-                            Pilih nama guru dari daftar untuk mengisi otomatis Nama &amp; NIP penandatangan lembar Dossier di bawah ini.
+                          <label className="text-xs font-bold text-slate-800 dark:text-slate-200 block">
+                            Guru Pengampu / Proktor Default (Penandatangan Dossier Siswa):
+                          </label>
+                          <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 leading-relaxed">
+                            Pilih guru dari daftar yang akan dicetak sebagai penandatangan default pada lembar Dossier Ujian jika dicetak oleh administrator.
                           </p>
                         </div>
                         <button
@@ -8440,112 +8464,67 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                           onClick={() => {
                             setLocalSettingsForm(prev => ({
                               ...prev,
-                              teacherName: currentTeacher.name,
-                              teacherNip: currentTeacher.nip || prev.teacherNip
+                              teacherName: currentTeacher?.name || 'Administrator CBT',
+                              teacherNip: currentTeacher?.nip || 'admin'
                             }));
                           }}
                           className="inline-flex items-center gap-1.5 text-[11px] font-bold text-violet-700 dark:text-violet-300 bg-white dark:bg-slate-900 hover:bg-violet-50 dark:hover:bg-violet-950/60 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 transition cursor-pointer shadow-xs shrink-0 self-start sm:self-auto"
-                          title="Gunakan nama akun Admin yang sedang login"
+                          title="Gunakan akun Admin sebagai penandatangan default"
                         >
                           <span>👤 Gunakan Akun Admin</span>
                         </button>
                       </div>
 
-                      <div className="w-full">
-                        <select
-                          value={(() => {
-                            const found = teachers.find(
-                              t => t.name.trim().toLowerCase() === (localSettingsForm.teacherName || '').trim().toLowerCase()
-                            );
-                            return found?.id || '';
-                          })()}
-                          onChange={e => {
-                            const selectedTeacher = teachers.find(t => t.id === e.target.value);
-                            if (selectedTeacher) {
-                              setLocalSettingsForm(prev => ({
-                                ...prev,
-                                teacherName: selectedTeacher.name,
-                                teacherNip: selectedTeacher.nip || '-'
-                              }));
-                            }
-                          }}
-                          className="w-full p-2.5 rounded-xl border border-amber-300 dark:border-amber-700 bg-white dark:bg-slate-900 text-xs font-bold text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-amber-500 cursor-pointer shadow-xs"
-                        >
-                          <option value="" disabled>-- Pilih Guru Pengampu / Proktor dari Daftar --</option>
-                          {teachers
-                            .filter(t => !t.id?.startsWith('__cbt_'))
-                            .map(t => (
-                              <option key={t.id} value={t.id}>
-                                {t.name} (NIP: {t.nip}) — {t.subject || t.role}
-                              </option>
-                            ))}
-                        </select>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-center">
+                        <div className="sm:col-span-2">
+                          <select
+                            value={(() => {
+                              const found = teachers.find(
+                                t => t.name.trim().toLowerCase() === (localSettingsForm.teacherName || '').trim().toLowerCase()
+                              );
+                              return found?.id || '';
+                            })()}
+                            onChange={e => {
+                              const selectedTeacher = teachers.find(t => t.id === e.target.value);
+                              if (selectedTeacher) {
+                                setLocalSettingsForm(prev => ({
+                                  ...prev,
+                                  teacherName: selectedTeacher.name,
+                                  teacherNip: selectedTeacher.nip || '-'
+                                }));
+                              }
+                            }}
+                            className="w-full p-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-semibold text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500 cursor-pointer shadow-xs"
+                          >
+                            <option value="" disabled>-- Pilih Guru Pengampu / Proktor dari Daftar --</option>
+                            {teachers
+                              .filter(t => !t.id?.startsWith('__cbt_'))
+                              .map(t => (
+                                <option key={t.id} value={t.id}>
+                                  {t.name} (NIP: {t.nip}) — {t.subject || t.role}
+                                </option>
+                              ))}
+                          </select>
+                        </div>
+
+                        <div className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs">
+                          <span className="text-[10px] text-slate-400 block font-medium">Penandatangan Terpilih:</span>
+                          <strong className="text-violet-600 dark:text-violet-400 block truncate" title={localSettingsForm.teacherName}>
+                            {localSettingsForm.teacherName || '-'}
+                          </strong>
+                          <span className="text-[10px] text-slate-500 font-mono block">
+                            NIP: {localSettingsForm.teacherNip || '-'}
+                          </span>
+                        </div>
                       </div>
-                    </div>
-                  )}
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    {/* Nama Guru Pengampu */}
-                    <div>
-                      <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">
-                        {currentTeacher?.role === 'admin'
-                          ? 'Nama Guru Pengampu / Proktor Default:'
-                          : 'Nama Guru Pengampu / Proktor:'}
-                      </label>
-                      <input
-                        type="text"
-                        value={localSettingsForm.teacherName}
-                        onChange={e => setLocalSettingsForm(prev => ({ ...prev, teacherName: e.target.value }))}
-                        placeholder="Aris Bermansyah, S.Kom"
-                        className="w-full p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500"
-                      />
-                    </div>
-
-                    {/* NIP Guru */}
-                    <div>
-                      <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">
-                        {currentTeacher?.role === 'admin'
-                          ? 'NIP Guru Pengampu / Proktor Default:'
-                          : 'NIP Guru Pengampu / Proktor:'}
-                      </label>
-                      <input
-                        type="text"
-                        value={localSettingsForm.teacherNip}
-                        onChange={e => setLocalSettingsForm(prev => ({ ...prev, teacherNip: e.target.value }))}
-                        placeholder="199611142024211010"
-                        className="w-full p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-mono font-semibold text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500"
-                      />
-                    </div>
-
-                    {/* Quick Save Bar */}
-                    <div className="sm:col-span-2 flex items-center justify-between flex-wrap gap-2 pt-1">
-                      <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                        {currentTeacher?.role === 'admin'
-                          ? '💡 Nama & NIP di atas tersimpan permanen di Cloud Supabase sebagai penandatangan resmi default pada Dossier Siswa.'
-                          : '💡 Perubahan nama & NIP akan langsung memperbarui profil akun guru Anda dan tersimpan permanen di Supabase Cloud.'}
-                      </p>
-                      <button
-                        type="button"
-                        onClick={handleSavePejabatSettings}
-                        className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 font-bold text-xs transition cursor-pointer shadow-xs"
-                      >
-                        <Save className="w-3.5 h-3.5 text-violet-600 dark:text-violet-400" />
-                        <span>
-                          {currentTeacher?.role === 'admin'
-                            ? 'Simpan Penandatangan Dossier'
-                            : 'Simpan Profil Saya'}
-                        </span>
-                      </button>
                     </div>
                   </div>
 
-                  {/* Foto Profil (Khusus Akun Login Ini) */}
+                  {/* Foto Profil Akun Administrator */}
                   {currentTeacher && (
                     <div className="pt-3 border-t border-slate-100 dark:border-slate-800">
                       <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1.5">
-                        {currentTeacher.role === 'admin'
-                          ? `Foto Profil Akun Administrator (${currentTeacher.name}):`
-                          : `Foto Profil Guru Pengampu (Akun: ${currentTeacher.name}):`}
+                        Foto Profil Akun Administrator ({currentTeacher.name}):
                       </label>
                       <div className="flex items-center gap-4">
                         <div className="w-16 h-20 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center shrink-0 shadow-xs overflow-hidden">
@@ -8574,7 +8553,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                               className="px-3.5 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-violet-500 text-slate-800 dark:text-slate-200 font-semibold text-xs flex items-center justify-center gap-1.5 transition cursor-pointer shadow-xs"
                             >
                               <Upload className="w-3.5 h-3.5 text-violet-600" />
-                              <span>Upload Foto Profil Saya</span>
+                              <span>Upload Foto Profil Admin</span>
                             </button>
                             {currentTeacherPhoto && (
                               <button
@@ -8588,134 +8567,331 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                             )}
                           </div>
                           <p className="text-[10px] text-slate-400 leading-snug">
-                            {currentTeacher.role === 'admin'
-                              ? `Foto ini terikat khusus untuk akun Admin Anda (${currentTeacher.name}) dan otomatis muncul di pojok kanan atas Navbar.`
-                              : `Foto ini terisolasi khusus untuk akun Anda (${currentTeacher.name}) dan otomatis muncul di pojok kanan atas Navbar serta halaman verifikasi barcode.`}
+                            Foto ini terikat khusus untuk akun Admin Anda ({currentTeacher.name}) dan otomatis muncul di pojok kanan atas Navbar.
                           </p>
                         </div>
                       </div>
                     </div>
                   )}
-                </div>
 
-                {/* Switch TTE Barcode & Format */}
-                <div className="pt-3 border-t border-slate-100 dark:border-slate-800 space-y-3">
-                  <div className="flex items-center justify-between p-3.5 rounded-2xl bg-violet-50/60 dark:bg-violet-950/30 border border-violet-200/80 dark:border-violet-800/60">
-                    <div>
-                      <span className="font-bold text-xs text-slate-900 dark:text-white block">
-                        Tanda Tangan Elektronik (TTE) Digital
-                      </span>
-                      <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                        Sematkan stempel QR Code / Barcode pengesahan resmi digital pada dokumen cetak
-                      </p>
-                    </div>
+                  {/* Switch TTE Barcode & Format */}
+                  <div className="pt-3 border-t border-slate-100 dark:border-slate-800 space-y-3">
+                    <div className="flex items-center justify-between p-3.5 rounded-2xl bg-violet-50/60 dark:bg-violet-950/30 border border-violet-200/80 dark:border-violet-800/60">
+                      <div>
+                        <span className="font-bold text-xs text-slate-900 dark:text-white block">
+                          Tanda Tangan Elektronik (TTE) Digital
+                        </span>
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                          Sematkan stempel QR Code / Barcode pengesahan resmi digital pada dokumen cetak
+                        </p>
+                      </div>
 
-                    <label className="relative inline-flex items-center cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={localSettingsForm.enableTTE}
-                        onChange={e => setLocalSettingsForm(prev => ({ ...prev, enableTTE: e.target.checked }))}
-                        className="sr-only peer"
-                      />
-                      <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-violet-600"></div>
-                    </label>
-                  </div>
-
-                  {localSettingsForm.enableTTE && (
-                    <div className="flex items-center gap-4 text-xs font-semibold text-slate-700 dark:text-slate-300 p-2">
-                      <span className="text-xs text-slate-500">Pilih Model TTE:</span>
-                      <label className="inline-flex items-center gap-2 cursor-pointer">
+                      <label className="relative inline-flex items-center cursor-pointer">
                         <input
-                          type="radio"
-                          name="tteType"
-                          value="qrcode"
-                          checked={localSettingsForm.tteType === 'qrcode'}
-                          onChange={() => setLocalSettingsForm(prev => ({ ...prev, tteType: 'qrcode' }))}
-                          className="text-violet-600 focus:ring-violet-500"
+                          type="checkbox"
+                          checked={localSettingsForm.enableTTE}
+                          onChange={e => setLocalSettingsForm(prev => ({ ...prev, enableTTE: e.target.checked }))}
+                          className="sr-only peer"
                         />
-                        <span>QR Code Terverifikasi (BSrE Style)</span>
-                      </label>
-                      <label className="inline-flex items-center gap-2 cursor-pointer">
-                        <input
-                          type="radio"
-                          name="tteType"
-                          value="barcode"
-                          checked={localSettingsForm.tteType === 'barcode'}
-                          onChange={() => setLocalSettingsForm(prev => ({ ...prev, tteType: 'barcode' }))}
-                          className="text-violet-600 focus:ring-violet-500"
-                        />
-                        <span>Barcode Garis Dokumen (Code 128)</span>
+                        <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-violet-600"></div>
                       </label>
                     </div>
-                  )}
-                </div>
-              </div>
 
-              {/* Live Preview TTE Digital Seal */}
-              <div className="p-5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800 space-y-3 flex flex-col justify-between">
-                <div>
-                  <div className="flex flex-col gap-1.5 mb-2.5">
-                    <span className="text-[11px] font-bold uppercase text-slate-400 block tracking-wider">
-                      Pratinjau Tampilan TTE Cetak:
-                    </span>
-                    <div className="flex items-center p-0.5 rounded-xl bg-slate-200/80 dark:bg-slate-700/80 text-[10px] font-bold gap-1">
-                      <button
-                        type="button"
-                        onClick={() => setPreviewSignerTab('principal')}
-                        className={`flex-1 py-1 px-2 rounded-lg transition cursor-pointer text-center ${
-                          previewSignerTab === 'principal'
-                            ? 'bg-white dark:bg-slate-900 text-violet-700 dark:text-violet-300 shadow-xs'
-                            : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
-                        }`}
-                      >
-                        🏛️ Kepsek (Sertifikat)
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setPreviewSignerTab('teacher')}
-                        className={`flex-1 py-1 px-2 rounded-lg transition cursor-pointer text-center ${
-                          previewSignerTab === 'teacher'
-                            ? 'bg-white dark:bg-slate-900 text-emerald-700 dark:text-emerald-300 shadow-xs'
-                            : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
-                        }`}
-                      >
-                        👨‍🏫 Guru (Dossier)
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xs">
-                    {previewSignerTab === 'principal' ? (
-                      <TTESignatureSeal
-                        settings={localSettingsForm}
-                        documentId="PREVIEW-KEPSEK"
-                        signerName={localSettingsForm.principalName || 'Nama Kepala Sekolah'}
-                        signerTitle={localSettingsForm.principalTitle || 'Kepala Sekolah SMPN 58'}
-                        signerNip={localSettingsForm.principalNip}
-                      />
-                    ) : (
-                      <TTESignatureSeal
-                        settings={localSettingsForm}
-                        documentId="PREVIEW-GURU"
-                        signerName={currentTeacher?.name || localSettingsForm.teacherName || 'Nama Guru Pengampu'}
-                        signerTitle="Guru Pengampu / Proktor"
-                        signerNip={currentTeacher?.nip || localSettingsForm.teacherNip}
-                      />
+                    {localSettingsForm.enableTTE && (
+                      <div className="flex items-center gap-4 text-xs font-semibold text-slate-700 dark:text-slate-300 p-2 flex-wrap">
+                        <span className="text-xs text-slate-500">Pilih Model TTE:</span>
+                        <label className="inline-flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="radio"
+                            name="tteType"
+                            value="qrcode"
+                            checked={localSettingsForm.tteType === 'qrcode'}
+                            onChange={() => setLocalSettingsForm(prev => ({ ...prev, tteType: 'qrcode' }))}
+                            className="text-violet-600 focus:ring-violet-500"
+                          />
+                          <span>QR Code Terverifikasi (BSrE Style)</span>
+                        </label>
+                        <label className="inline-flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="radio"
+                            name="tteType"
+                            value="barcode"
+                            checked={localSettingsForm.tteType === 'barcode'}
+                            onChange={() => setLocalSettingsForm(prev => ({ ...prev, tteType: 'barcode' }))}
+                            className="text-violet-600 focus:ring-violet-500"
+                          />
+                          <span>Barcode Garis Dokumen (Code 128)</span>
+                        </label>
+                      </div>
                     )}
                   </div>
                 </div>
 
-                <div className="text-[10px] text-slate-500 dark:text-slate-400 leading-relaxed bg-white/60 dark:bg-slate-900/60 p-2.5 rounded-xl border border-slate-200/60 dark:border-slate-800/60 space-y-1">
-                  <p>
-                    📌 <strong>TTE Kepala Sekolah:</strong> Dicantumkan pada Sertifikat Kelulusan & Nilai Resmi Siswa.
-                  </p>
-                  <p>
-                    📌 <strong>TTE Guru/Proktor:</strong> Dicantumkan pada Dossier Lembar Hasil Ujian per butir soal siswa.
-                  </p>
+                {/* Live Preview TTE Digital Seal */}
+                <div className="p-5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800 space-y-3 flex flex-col justify-between">
+                  <div>
+                    <div className="flex flex-col gap-1.5 mb-2.5">
+                      <span className="text-[11px] font-bold uppercase text-slate-400 block tracking-wider">
+                        Pratinjau Tampilan TTE Cetak:
+                      </span>
+                      <div className="flex items-center p-0.5 rounded-xl bg-slate-200/80 dark:bg-slate-700/80 text-[10px] font-bold gap-1">
+                        <button
+                          type="button"
+                          onClick={() => setPreviewSignerTab('principal')}
+                          className={`flex-1 py-1 px-2 rounded-lg transition cursor-pointer text-center ${
+                            previewSignerTab === 'principal'
+                              ? 'bg-white dark:bg-slate-900 text-violet-700 dark:text-violet-300 shadow-xs'
+                              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                          }`}
+                        >
+                          🏛️ Kepsek (Sertifikat)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setPreviewSignerTab('teacher')}
+                          className={`flex-1 py-1 px-2 rounded-lg transition cursor-pointer text-center ${
+                            previewSignerTab === 'teacher'
+                              ? 'bg-white dark:bg-slate-900 text-emerald-700 dark:text-emerald-300 shadow-xs'
+                              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                          }`}
+                        >
+                          👨‍🏫 Guru (Dossier)
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xs">
+                      {previewSignerTab === 'principal' ? (
+                        <TTESignatureSeal
+                          settings={localSettingsForm}
+                          documentId="PREVIEW-KEPSEK"
+                          signerName={localSettingsForm.principalName || 'Nama Kepala Sekolah'}
+                          signerTitle={localSettingsForm.principalTitle || 'Kepala Sekolah SMPN 58'}
+                          signerNip={localSettingsForm.principalNip}
+                        />
+                      ) : (
+                        <TTESignatureSeal
+                          settings={localSettingsForm}
+                          documentId="PREVIEW-GURU"
+                          signerName={localSettingsForm.teacherName || 'Nama Guru Pengampu'}
+                          signerTitle="Guru Pengampu / Proktor"
+                          signerNip={localSettingsForm.teacherNip}
+                        />
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="text-[10px] text-slate-500 dark:text-slate-400 leading-relaxed bg-white/60 dark:bg-slate-900/60 p-2.5 rounded-xl border border-slate-200/60 dark:border-slate-800/60 space-y-1">
+                    <p>
+                      📌 <strong>TTE Kepala Sekolah:</strong> Dicantumkan pada Sertifikat Kelulusan & Nilai Resmi Siswa.
+                    </p>
+                    <p>
+                      📌 <strong>TTE Guru/Proktor:</strong> Dicantumkan pada Dossier Lembar Hasil Ujian per butir soal siswa.
+                    </p>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
+          ) : (
+            /* ============================================================ */
+            /* CARD KHUSUS GURU MAPEL: PROFIL DIRI, NIP, PIN & TTE DOSSIER  */
+            /* ============================================================ */
+            <div className="p-5 sm:p-7 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-6">
+              <div className="border-b border-slate-100 dark:border-slate-800 pb-4 flex flex-col xl:flex-row xl:items-start justify-between gap-4">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap mb-1">
+                    <h4 className="font-bold text-slate-900 dark:text-white text-sm sm:text-base flex items-center gap-2">
+                      <UserCheck className="w-5 h-5 text-emerald-600" />
+                      <span>Identitas Profil & Tanda Tangan Guru Saya</span>
+                    </h4>
+                    <span className="px-2.5 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 text-[10px] font-bold border border-emerald-200/60 dark:border-emerald-800/60 flex items-center gap-1">
+                      <span>👨‍🏫</span>
+                      <span>Akun: {currentTeacher?.name}</span>
+                    </span>
+                    <span className="px-2.5 py-0.5 rounded-full bg-violet-50 dark:bg-violet-950/60 text-violet-700 dark:text-violet-300 text-[10px] font-bold border border-violet-200/60 dark:border-violet-800/60">
+                      {currentTeacher?.subject || 'Multi-Mapel'}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 leading-relaxed">
+                    Identitas Nama Lengkap, NIP, dan foto profil Anda tersimpan di Cloud Supabase dan otomatis tercetak pada lembar Dossier Hasil Ujian siswa serta verifikasi TTE resmi.
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={handleSavePejabatSettings}
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition cursor-pointer shadow-xs"
+                  >
+                    <Save className="w-4 h-4" />
+                    <span>Simpan Profil Saya</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Note Pengaturan Terpusat */}
+              <div className="p-4 rounded-2xl bg-blue-50/70 dark:bg-blue-950/30 border border-blue-200/80 dark:border-blue-800/60 text-xs text-blue-900 dark:text-blue-200 flex items-start gap-3">
+                <div className="w-7 h-7 rounded-lg bg-blue-100 dark:bg-blue-900/60 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0 mt-0.5">
+                  <Building2 className="w-4 h-4" />
+                </div>
+                <div className="min-w-0 flex-1 leading-relaxed text-[11px] sm:text-xs">
+                  <strong>Pengaturan Dokumen Terpusat oleh Admin:</strong> Format resmi Kop Surat, logo instansi, nama sekolah (<strong>{schoolSettings?.schoolName || 'SMPN 58 Palembang'}</strong>), dan data Kepala Sekolah dikelola terpusat oleh Administrator. Saat Anda mencetak dokumen atau Dossier Hasil Ujian siswa, sistem otomatis memadukan kop resmi sekolah dengan identitas profil Anda di bawah ini.
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {/* Form Input Profil Guru */}
+                <div className="lg:col-span-2 space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                        Nama Lengkap & Gelar Guru:
+                      </label>
+                      <input
+                        type="text"
+                        value={localSettingsForm.teacherName}
+                        onChange={e => setLocalSettingsForm(prev => ({ ...prev, teacherName: e.target.value }))}
+                        placeholder="Nama Lengkap Guru"
+                        className="w-full p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                        NIP Guru Pengampu / Proktor:
+                      </label>
+                      <input
+                        type="text"
+                        value={localSettingsForm.teacherNip}
+                        onChange={e => setLocalSettingsForm(prev => ({ ...prev, teacherNip: e.target.value }))}
+                        placeholder="NIP Guru"
+                        className="w-full p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-mono font-semibold text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                        Email Akun / Login:
+                      </label>
+                      <div className="w-full p-2.5 rounded-xl bg-slate-100 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-xs font-mono text-slate-600 dark:text-slate-400">
+                        {currentTeacher?.email || '-'}
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                        PIN Login Akun:
+                      </label>
+                      <div className="relative">
+                        <input
+                          type={showTeacherPin ? 'text' : 'password'}
+                          value={teacherEditPin}
+                          onChange={e => setTeacherEditPin(e.target.value)}
+                          placeholder="PIN 6 digit"
+                          maxLength={10}
+                          className="w-full p-2.5 pr-10 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-mono font-semibold text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowTeacherPin(prev => !prev)}
+                          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 cursor-pointer"
+                        >
+                          {showTeacherPin ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
+                      </div>
+                      <p className="text-[10px] text-slate-400 mt-0.5">Ubah jika ingin mengganti PIN login akun Anda.</p>
+                    </div>
+                  </div>
+
+                  {/* Foto Profil Guru */}
+                  <div className="pt-3 border-t border-slate-100 dark:border-slate-800">
+                    <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1.5">
+                      Foto Profil Saya ({currentTeacher?.name}):
+                    </label>
+                    <div className="flex items-center gap-4">
+                      <div className="w-16 h-20 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center shrink-0 shadow-xs overflow-hidden">
+                        {currentTeacherPhoto ? (
+                          <img
+                            src={currentTeacherPhoto}
+                            alt={`Foto ${currentTeacher?.name}`}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <UserCheck className="w-8 h-8 text-slate-300" />
+                        )}
+                      </div>
+                      <div className="space-y-1.5 flex-1">
+                        <input
+                          type="file"
+                          ref={fileInputTeacherPhotoRef}
+                          onChange={handleTeacherPhotoUpload}
+                          accept="image/*"
+                          className="hidden"
+                        />
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <button
+                            type="button"
+                            onClick={() => fileInputTeacherPhotoRef.current?.click()}
+                            className="px-3.5 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-emerald-500 text-slate-800 dark:text-slate-200 font-semibold text-xs flex items-center justify-center gap-1.5 transition cursor-pointer shadow-xs"
+                          >
+                            <Upload className="w-3.5 h-3.5 text-emerald-600" />
+                            <span>Upload Foto Profil Saya</span>
+                          </button>
+                          {currentTeacherPhoto && (
+                            <button
+                              type="button"
+                              onClick={handleDeleteTeacherPhoto}
+                              className="px-3 py-1.5 text-rose-500 hover:text-rose-700 text-[11px] font-semibold flex items-center justify-center gap-1 transition cursor-pointer"
+                            >
+                              <RotateCcw className="w-3 h-3" />
+                              <span>Hapus Foto</span>
+                            </button>
+                          )}
+                        </div>
+                        <p className="text-[10px] text-slate-400 leading-snug">
+                          Foto ini otomatis muncul pada Navbar akun Anda serta pada halaman verifikasi barcode cetak lembar ujian.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Tombol Simpan di Bawah */}
+                  <div className="pt-2 flex justify-end">
+                    <button
+                      type="button"
+                      onClick={handleSavePejabatSettings}
+                      className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition cursor-pointer shadow-xs"
+                    >
+                      <Save className="w-3.5 h-3.5" />
+                      <span>Simpan Profil Saya</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Live TTE Preview Khusus Guru */}
+                <div className="p-5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800 space-y-3 flex flex-col justify-between">
+                  <div>
+                    <span className="text-[11px] font-bold uppercase text-slate-400 block tracking-wider mb-2">
+                      Pratinjau TTE Dossier Siswa:
+                    </span>
+                    <div className="p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xs">
+                      <TTESignatureSeal
+                        settings={effectiveSchoolSettings}
+                        documentId="PREVIEW-GURU-SAYA"
+                        signerName={localSettingsForm.teacherName || currentTeacher?.name || 'Nama Guru'}
+                        signerTitle="Guru Pengampu / Proktor"
+                        signerNip={localSettingsForm.teacherNip || currentTeacher?.nip || '-'}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="text-[10px] text-slate-500 dark:text-slate-400 leading-relaxed bg-white/60 dark:bg-slate-900/60 p-2.5 rounded-xl border border-slate-200/60 dark:border-slate-800/60">
+                    📌 <strong>Stempel TTE Guru:</strong> Dicantumkan di sisi kanan tanda tangan lembar cetak Dossier Siswa untuk mata pelajaran yang Anda ampu.
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* SECTION 2: STATUS KONEKSI & ANTI-CHEAT */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-xs">

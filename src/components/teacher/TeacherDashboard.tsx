@@ -4862,12 +4862,12 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                 <div className="flex items-start sm:items-center justify-between gap-2.5 min-w-0">
                   <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1">
                     <button
+                      type="button"
                       onClick={() => setBankView('catalog')}
-                      className="p-2 sm:px-3 sm:py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-violet-600 hover:text-white text-slate-700 dark:text-slate-300 transition cursor-pointer flex items-center gap-1.5 text-xs font-bold shrink-0"
+                      className="p-2 sm:p-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-violet-600 hover:text-white text-slate-700 dark:text-slate-300 transition cursor-pointer flex items-center justify-center shrink-0 border border-slate-200/80 dark:border-slate-700/80 shadow-xs"
+                      title="Kembali ke Katalog Mapel"
                     >
                       <ArrowLeft className="w-4 h-4 shrink-0" />
-                      <span className="hidden sm:inline">Kembali ke Katalog Mapel</span>
-                      <span className="sm:hidden">Kembali</span>
                     </button>
 
                     <div className="h-5 w-[1px] bg-slate-200 dark:bg-slate-700 hidden sm:block shrink-0"></div>
@@ -4896,46 +4896,47 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                 </div>
 
                 {/* Grup Tombol Aksi */}
-                <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-2.5 w-full xl:w-auto">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-2.5 w-full xl:w-auto flex-wrap justify-end">
                   {/* Tombol Hapus untuk Layar SM ke Atas (Tablet / Desktop) */}
                   <button
+                    type="button"
                     onClick={() => setSubjectToDelete(currentBankSubject)}
-                    className="hidden sm:flex items-center gap-1.5 px-3 py-2 rounded-xl text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 border border-rose-200 dark:border-rose-900/40 text-xs font-semibold transition cursor-pointer shrink-0"
+                    className="hidden sm:flex items-center gap-1.5 px-2.5 py-2 rounded-xl text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 border border-rose-200 dark:border-rose-900/40 text-xs font-semibold transition cursor-pointer shrink-0"
                     title="Hapus Paket Mata Pelajaran Ini"
                   >
                     <Trash2 className="w-4 h-4 shrink-0" />
-                    <span>Hapus Mapel</span>
+                    <span className="hidden 2xl:inline">Hapus Mapel</span>
                   </button>
 
                   {/* Di HP: Grid 4 Kolom Seimbang untuk AI, Import, Backup & G-Form */}
-                  <div className="grid grid-cols-4 sm:flex sm:items-center gap-2 w-full sm:w-auto">
+                  <div className="grid grid-cols-4 sm:flex sm:items-center gap-1.5 sm:gap-2 w-full sm:w-auto shrink-0">
                     <button
                       type="button"
                       onClick={() => setIsAiModalOpen(true)}
-                      className="flex items-center justify-center gap-1.5 px-3 py-2.5 sm:px-3.5 sm:py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs shadow-md shadow-indigo-600/20 transition cursor-pointer w-full sm:w-auto"
+                      className="flex items-center justify-center gap-1 px-2 py-2 sm:px-3 sm:py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs shadow-md shadow-indigo-600/20 transition cursor-pointer w-full sm:w-auto shrink-0 whitespace-nowrap"
                       title="Buat butir soal otomatis dengan AI"
                     >
-                      <Bot className="w-4 h-4 shrink-0" />
+                      <Bot className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
                       <span>Buat AI</span>
                     </button>
 
                     <button
                       type="button"
                       onClick={() => setIsImportModalOpen(true)}
-                      className="flex items-center justify-center gap-1.5 px-3 py-2.5 sm:px-3.5 sm:py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs shadow-md shadow-emerald-600/20 transition cursor-pointer w-full sm:w-auto"
+                      className="flex items-center justify-center gap-1 px-2 py-2 sm:px-3 sm:py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs shadow-md shadow-emerald-600/20 transition cursor-pointer w-full sm:w-auto shrink-0 whitespace-nowrap"
                       title="Import butir soal dari file PDF, Word, atau file backup CBT (.json)"
                     >
-                      <FileUp className="w-4 h-4 shrink-0" />
+                      <FileUp className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
                       <span>Import</span>
                     </button>
 
                     <button
                       type="button"
                       onClick={handleBackupQuestions}
-                      className="flex items-center justify-center gap-1.5 px-3 py-2.5 sm:px-3.5 sm:py-2 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-semibold text-xs shadow-md shadow-sky-600/20 transition cursor-pointer w-full sm:w-auto"
+                      className="flex items-center justify-center gap-1 px-2 py-2 sm:px-3 sm:py-2 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-semibold text-xs shadow-md shadow-sky-600/20 transition cursor-pointer w-full sm:w-auto shrink-0 whitespace-nowrap"
                       title="Unduh file backup seluruh butir soal paket mapel ini (.json)"
                     >
-                      <Download className="w-4 h-4 shrink-0" />
+                      <Download className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
                       <span>Backup</span>
                     </button>
 
@@ -4952,18 +4953,19 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                         }
                         setIsGoogleFormModalOpen(true);
                       }}
-                      className="flex items-center justify-center gap-1.5 px-3 py-2.5 sm:px-3.5 sm:py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-semibold text-xs shadow-md shadow-purple-600/20 transition cursor-pointer w-full sm:w-auto"
+                      className="flex items-center justify-center gap-1 px-2 py-2 sm:px-3 sm:py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-semibold text-xs shadow-md shadow-purple-600/20 transition cursor-pointer w-full sm:w-auto shrink-0 whitespace-nowrap"
                       title="Export butir soal langsung jadi Google Form (Kuis)"
                     >
-                      <FormInput className="w-4 h-4 shrink-0" />
+                      <FormInput className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
                       <span>G-Form</span>
                     </button>
                   </div>
 
-                  {/* Di HP: Tombol Tambah Soal Utama Full Width */}
+                  {/* Tombol Tambah Soal Utama Full Width di HP, Auto di Desktop */}
                   <button
+                    type="button"
                     onClick={onOpenAddModal}
-                    className="flex items-center justify-center gap-1.5 px-4 py-2.5 sm:py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-bold text-xs shadow-md shadow-violet-600/20 transition cursor-pointer w-full sm:w-auto shrink-0"
+                    className="flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-bold text-xs shadow-md shadow-violet-600/20 transition cursor-pointer w-full sm:w-auto shrink-0 whitespace-nowrap"
                   >
                     <PlusCircle className="w-4 h-4 shrink-0" />
                     <span>{t.addQuestionBtn}</span>

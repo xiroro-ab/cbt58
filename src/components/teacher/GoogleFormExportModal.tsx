@@ -28,31 +28,12 @@ export const GoogleFormExportModal: React.FC<GoogleFormExportModalProps> = ({
   questions,
 }) => {
   const [copied, setCopied] = useState(false);
-  const [copiedKey, setCopiedKey] = useState(false);
   const [showCodePreview, setShowCodePreview] = useState(false);
 
   // Generate Google Apps Script code memoized
   const scriptContent = useMemo(() => {
     if (!subject || questions.length === 0) return '';
     return generateGoogleFormsAppsScript(subject, questions);
-  }, [subject, questions]);
-
-  // Panduan Kunci Jawaban Guru memoized
-  const answerKeyText = useMemo(() => {
-    if (!subject || questions.length === 0) return '';
-    return questions.map((q, idx) => {
-      const qNum = idx + 1;
-      let ansStr = '-';
-      if (q.type === 'Benar/Salah' && Array.isArray(q.options) && q.options.length > 0) {
-        const answers = Array.isArray(q.answer) ? q.answer : (typeof q.answer === 'string' ? q.answer.split(/[,;\/]+/) : []);
-        ansStr = q.options.map((opt: any, oIdx) => `\n   ${oIdx + 1}) ${opt.text || 'Pernyataan'}: ${answers[oIdx] || '-'}`).join('');
-      } else if (Array.isArray(q.answer)) {
-        ansStr = q.answer.join(', ');
-      } else if (q.answer) {
-        ansStr = String(q.answer);
-      }
-      return `${qNum}. [${q.type}] ${ansStr}`;
-    }).join('\n');
   }, [subject, questions]);
 
   if (!isOpen || !subject) return null;
@@ -72,23 +53,6 @@ export const GoogleFormExportModal: React.FC<GoogleFormExportModalProps> = ({
       document.body.removeChild(textArea);
       setCopied(true);
       setTimeout(() => setCopied(false), 2500);
-    }
-  };
-
-  const handleCopyKey = async () => {
-    try {
-      await navigator.clipboard.writeText(answerKeyText);
-      setCopiedKey(true);
-      setTimeout(() => setCopiedKey(false), 2500);
-    } catch {
-      const textArea = document.createElement('textarea');
-      textArea.value = answerKeyText;
-      document.body.appendChild(textArea);
-      textArea.select();
-      document.execCommand('copy');
-      document.body.removeChild(textArea);
-      setCopiedKey(true);
-      setTimeout(() => setCopiedKey(false), 2500);
     }
   };
 
@@ -213,27 +177,6 @@ export const GoogleFormExportModal: React.FC<GoogleFormExportModalProps> = ({
             >
               <ExternalLink className="w-4 h-4 shrink-0" />
               <span>2. Buka script.new</span>
-            </button>
-          </div>
-
-          {/* Tombol Cadangan: Salin Kunci Jawaban Lengkap Guru */}
-          <div className="pt-1">
-            <button
-              type="button"
-              onClick={handleCopyKey}
-              className="w-full flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-semibold text-xs border border-slate-200 dark:border-slate-700 transition cursor-pointer"
-            >
-              {copiedKey ? (
-                <>
-                  <Check className="w-4 h-4 text-emerald-600" />
-                  <span className="text-emerald-600 font-bold">Kunci Jawaban Guru Berhasil Disalin!</span>
-                </>
-              ) : (
-                <>
-                  <Copy className="w-4 h-4 text-purple-600" />
-                  <span>Salin Dokumen Kunci Jawaban Guru (Pedoman Penilaian)</span>
-                </>
-              )}
             </button>
           </div>
 

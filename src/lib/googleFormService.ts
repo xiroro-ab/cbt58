@@ -131,9 +131,20 @@ function buatGoogleFormUjian() {
         if (statements.length > 0) {
           const rows: string[] = statements.map((stmt, sIdx) => {
             const raw = cleanHtmlText(typeof stmt === 'string' ? stmt : (stmt?.text || stmt?.statement || stmt?.row || `Pernyataan ${sIdx + 1}`));
-            const clean = raw.replace(/^\d+[\.\)]\s*/, '').trim();
-            return `${sIdx + 1}. ${clean || raw}`;
+            // Hapus penomoran di awal agar tidak dobel dengan nomor baris otomatis Google Form
+            const clean = raw.replace(/^(\d+[\.\)]\s*)+/, '').trim();
+            return clean || raw;
           });
+
+          // Parse kunci jawaban untuk dicatat di log guru
+          let answersList: string[] = [];
+          if (Array.isArray(q.answer)) {
+            answersList = q.answer.map(a => String(a).trim());
+          } else if (typeof q.answer === 'string') {
+            answersList = q.answer.split(/[,;\/]+/).map(a => a.trim());
+          } else if (typeof q.answer === 'object' && q.answer !== null) {
+            answersList = Object.values(q.answer).map(a => String(a).trim());
+          }
 
           script += `  // --- Soal No. ${qNum} (Kisi Benar/Salah) ---
   var gridItem${qNum} = form.addGridItem();
@@ -141,7 +152,13 @@ function buatGoogleFormUjian() {
   gridItem${qNum}.setRows(${JSON.stringify(rows)});
   gridItem${qNum}.setColumns(["Benar", "Salah"]);
   gridItem${qNum}.setRequired(true);
-  gridItem${qNum}.setHelpText("Pilih Benar atau Salah untuk setiap pernyataan di atas.");\n\n`;
+  gridItem${qNum}.setHelpText("Pilih Benar atau Salah untuk setiap pernyataan di atas.");
+`;
+          if (answersList.length > 0) {
+            const guideText = answersList.map((a, i) => `Baris ${i + 1} (${rows[i] || 'Pernyataan'}): ${a}`).join('\n');
+            script += `  Logger.log("Kunci Jawaban Soal ${qNum} (Kisi Benar/Salah):\\n" + ${JSON.stringify(guideText)});\n`;
+          }
+          script += `\n`;
         } else {
           // Format Benar/Salah Pernyataan Tunggal Klasik
           const rawAns = typeof q.answer === 'string' ? q.answer.trim().toLowerCase() : '';
@@ -194,7 +211,7 @@ function buatGoogleFormUjian() {
         if (q.answer) {
           const ansKey = Array.isArray(q.answer) ? q.answer.join(' / ') : String(q.answer);
           script += `  try {
-    var fbIsian${qNum} = FormApp.createFeedback().setText(${JSON.stringify(`Kunci Jawaban Guru: ${ansKey}`)}).build();
+    var fbIsian${qNum} = FormApp.createQuizFeedback().setText(${JSON.stringify(`Kunci Jawaban Guru: ${ansKey}`)}).build();
     qItem${qNum}.setGeneralFeedback(fbIsian${qNum});
   } catch (errFb) {}\n`;
         }
@@ -211,7 +228,7 @@ function buatGoogleFormUjian() {
         if (q.answer) {
           const ansKey = Array.isArray(q.answer) ? q.answer.join('\n') : String(q.answer);
           script += `  try {
-    var fbEsai${qNum} = FormApp.createFeedback().setText(${JSON.stringify(`Panduan Jawaban Guru:\n${ansKey}`)}).build();
+    var fbEsai${qNum} = FormApp.createQuizFeedback().setText(${JSON.stringify(`Panduan Jawaban Guru:\n${ansKey}`)}).build();
     qItem${qNum}.setGeneralFeedback(fbEsai${qNum});
   } catch (errFb) {}\n`;
         }
@@ -237,7 +254,7 @@ function buatGoogleFormUjian() {
   qItem${qNum}.setHelpText("Pasangkan premis dengan jawaban yang tepat di kolom jawaban.");\n`;
         if (pairsText) {
           script += `  try {
-    var fbPair${qNum} = FormApp.createFeedback().setText(${JSON.stringify(`Kunci Pasangan Guru:\n${pairsText}`)}).build();
+    var fbPair${qNum} = FormApp.createQuizFeedback().setText(${JSON.stringify(`Kunci Pasangan Guru:\n${pairsText}`)}).build();
     qItem${qNum}.setGeneralFeedback(fbPair${qNum});
   } catch (errFb) {}\n`;
         }

@@ -39,6 +39,7 @@ import {
   CheckCircle2,
   XCircle,
   HelpCircle,
+  Bot,
   Search,
   Filter,
   Check,
@@ -4678,6 +4679,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                     className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs shadow-md shadow-indigo-600/20 transition cursor-pointer"
                     title="Generate butir soal dengan bantuan AI"
                   >
+                    <Bot className="w-4 h-4" />
                     <span>Buat AI</span>
                   </button>
 
@@ -4910,6 +4912,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                       className="flex items-center justify-center gap-1.5 px-3 py-2.5 sm:px-3.5 sm:py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs shadow-md shadow-indigo-600/20 transition cursor-pointer w-full sm:w-auto"
                       title="Buat butir soal otomatis dengan AI"
                     >
+                      <Bot className="w-4 h-4 shrink-0" />
                       <span>Buat AI</span>
                     </button>
 
@@ -4989,6 +4992,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                         onClick={() => setIsAiModalOpen(true)}
                         className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs shadow-md shadow-indigo-600/20 transition cursor-pointer"
                       >
+                        <Bot className="w-4 h-4" />
                         <span>Buat AI</span>
                       </button>
                       <button
@@ -8606,6 +8610,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                     }}
                     className="px-2.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-bold shrink-0 transition cursor-pointer shadow-xs flex items-center gap-1"
                   >
+                    <Bot className="w-3.5 h-3.5" />
                     <span>Buat AI</span>
                   </button>
                 </div>

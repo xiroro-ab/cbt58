@@ -620,6 +620,21 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
     setLocalSettingsForm(effectiveSchoolSettings);
   }, [effectiveSchoolSettings]);
 
+  // Sinkronisasi otomatis NIP guru pengampu jika data NIP guru tersebut diubah di Kelola Akun Guru
+  useEffect(() => {
+    if (localSettingsForm.teacherName && teachers && teachers.length > 0) {
+      const matchedTeacher = teachers.find(
+        t => t.name.trim().toLowerCase() === localSettingsForm.teacherName.trim().toLowerCase()
+      );
+      if (matchedTeacher && matchedTeacher.nip && matchedTeacher.nip !== localSettingsForm.teacherNip) {
+        setLocalSettingsForm(prev => ({
+          ...prev,
+          teacherNip: matchedTeacher.nip
+        }));
+      }
+    }
+  }, [teachers, localSettingsForm.teacherName, localSettingsForm.teacherNip]);
+
   // Resolusi Penandatangan Dossier Aktif
   const activeDossierSigner = useMemo(() => {
     if (dossierSignerMode === 'principal') {
@@ -8345,26 +8360,26 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
 
                 {/* Bagian B: Guru Pengampu / Proktor (Untuk Dossier Rekap Nilai Siswa) */}
                 <div className="pt-3 border-t border-slate-100 dark:border-slate-800 space-y-3">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="w-2 h-2 rounded-full bg-emerald-600 inline-block"></span>
+                  <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+                    <div className="flex items-center gap-2 flex-wrap flex-1 min-w-0">
+                      <span className="w-2 h-2 rounded-full bg-emerald-600 inline-block shrink-0"></span>
                       <h5 className="font-bold text-xs sm:text-sm text-slate-800 dark:text-slate-200">
                         {currentTeacher?.role === 'admin'
                           ? '2. Guru Pengampu / Proktor Default (Cetak Dossier Ujian Siswa)'
                           : '2. Profil Guru Pengampu / Proktor Saya'}
                       </h5>
                       {currentTeacher?.role === 'admin' ? (
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
-                          ⚙️ Mode Admin (Dokumen Cetak)
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800 shrink-0">
+                          ⚙️ Mode Admin
                         </span>
                       ) : (
-                        <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800">
+                        <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800 shrink-0">
                           👨‍🏫 Profil Akun Anda
                         </span>
                       )}
                     </div>
 
-                    <div className="flex items-center gap-2 flex-wrap">
+                    <div className="flex items-center gap-2 flex-wrap sm:shrink-0">
                       {currentTeacher?.role === 'admin' && (
                         <button
                           type="button"
@@ -8384,39 +8399,16 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
 
                   {/* Panel Pilihan Khusus Admin: Pilih Guru Pengampu Default untuk Dossier */}
                   {currentTeacher?.role === 'admin' && (
-                    <div className="p-3.5 rounded-2xl bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200/80 dark:border-amber-800/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                      <div>
-                        <span className="text-xs font-bold text-amber-900 dark:text-amber-200 block">
-                          Pilih Guru Pengampu Default dari Daftar Dewan Guru:
-                        </span>
-                        <p className="text-[11px] text-amber-700/80 dark:text-amber-400">
-                          Sebagai Admin, Anda dapat memilih guru dari daftar untuk mengisi otomatis Nama &amp; NIP penandatangan Dossier di bawah ini.
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-2 flex-wrap sm:shrink-0">
-                        <select
-                          onChange={e => {
-                            const selectedTeacher = teachers.find(t => t.id === e.target.value);
-                            if (selectedTeacher) {
-                              setLocalSettingsForm(prev => ({
-                                ...prev,
-                                teacherName: selectedTeacher.name,
-                                teacherNip: selectedTeacher.nip || prev.teacherNip
-                              }));
-                            }
-                          }}
-                          defaultValue=""
-                          className="px-3 py-1.5 rounded-xl border border-amber-300 dark:border-amber-700 bg-white dark:bg-slate-900 text-xs font-bold text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-amber-500 cursor-pointer shadow-xs"
-                        >
-                          <option value="" disabled>-- Pilih dari Dewan Guru --</option>
-                          {teachers
-                            .filter(t => !t.id?.startsWith('__cbt_'))
-                            .map(t => (
-                              <option key={t.id} value={t.id}>
-                                {t.name} (NIP: {t.nip}) - {t.subject || t.role}
-                              </option>
-                            ))}
-                        </select>
+                    <div className="p-4 rounded-2xl bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200/80 dark:border-amber-800/60 space-y-3">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                        <div>
+                          <span className="text-xs font-bold text-amber-900 dark:text-amber-200 block">
+                            Pilih Guru Pengampu Default dari Daftar Dewan Guru:
+                          </span>
+                          <p className="text-[11px] text-amber-700/80 dark:text-amber-400 mt-0.5 leading-relaxed">
+                            Pilih nama guru dari daftar untuk mengisi otomatis Nama &amp; NIP penandatangan lembar Dossier di bawah ini.
+                          </p>
+                        </div>
                         <button
                           type="button"
                           onClick={() => {
@@ -8426,11 +8418,42 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                               teacherNip: currentTeacher.nip || prev.teacherNip
                             }));
                           }}
-                          className="text-[10px] font-bold text-violet-600 dark:text-violet-400 bg-white dark:bg-slate-900 hover:bg-violet-50 dark:hover:bg-violet-950/60 px-2.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 transition cursor-pointer shadow-xs"
+                          className="inline-flex items-center gap-1.5 text-[11px] font-bold text-violet-700 dark:text-violet-300 bg-white dark:bg-slate-900 hover:bg-violet-50 dark:hover:bg-violet-950/60 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 transition cursor-pointer shadow-xs shrink-0 self-start sm:self-auto"
                           title="Gunakan nama akun Admin yang sedang login"
                         >
-                          Gunakan Akun Admin
+                          <span>👤 Gunakan Akun Admin</span>
                         </button>
+                      </div>
+
+                      <div className="w-full">
+                        <select
+                          value={(() => {
+                            const found = teachers.find(
+                              t => t.name.trim().toLowerCase() === (localSettingsForm.teacherName || '').trim().toLowerCase()
+                            );
+                            return found?.id || '';
+                          })()}
+                          onChange={e => {
+                            const selectedTeacher = teachers.find(t => t.id === e.target.value);
+                            if (selectedTeacher) {
+                              setLocalSettingsForm(prev => ({
+                                ...prev,
+                                teacherName: selectedTeacher.name,
+                                teacherNip: selectedTeacher.nip || '-'
+                              }));
+                            }
+                          }}
+                          className="w-full p-2.5 rounded-xl border border-amber-300 dark:border-amber-700 bg-white dark:bg-slate-900 text-xs font-bold text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-amber-500 cursor-pointer shadow-xs"
+                        >
+                          <option value="" disabled>-- Pilih Guru Pengampu / Proktor dari Daftar --</option>
+                          {teachers
+                            .filter(t => !t.id?.startsWith('__cbt_'))
+                            .map(t => (
+                              <option key={t.id} value={t.id}>
+                                {t.name} (NIP: {t.nip}) — {t.subject || t.role}
+                              </option>
+                            ))}
+                        </select>
                       </div>
                     </div>
                   )}

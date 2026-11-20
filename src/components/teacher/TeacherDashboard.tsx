@@ -39,7 +39,6 @@ import {
   CheckCircle2,
   XCircle,
   HelpCircle,
-  Sparkles,
   Search,
   Filter,
   Check,
@@ -3319,7 +3318,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
               ) : (
                 <div className="w-full flex flex-col sm:flex-row sm:items-center justify-between text-xs text-slate-400 dark:text-slate-500 p-3 rounded-2xl bg-slate-50/70 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800/80 gap-2">
                   <span className="flex items-center gap-1.5">
-                    <Sparkles className="w-3.5 h-3.5 text-violet-500 flex-shrink-0" />
+                    <Eye className="w-3.5 h-3.5 text-violet-500 flex-shrink-0" />
                     <span>Sentuh atau arahkan kursor pada kurva &amp; batang untuk inspeksi detail • Klik titik untuk filter data tabel.</span>
                   </span>
                   {statsFilterClass !== 'Semua Kelas' && (
@@ -4676,11 +4675,10 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                   <button
                     type="button"
                     onClick={() => setIsAiModalOpen(true)}
-                    className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-gradient-to-r from-violet-600 via-fuchsia-600 to-pink-600 hover:opacity-90 text-white font-semibold text-xs shadow-md shadow-violet-600/20 transition cursor-pointer"
-                    title="Generate butir soal dengan bantuan AI Gemini"
+                    className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs shadow-md shadow-indigo-600/20 transition cursor-pointer"
+                    title="Generate butir soal dengan bantuan AI"
                   >
-                    <Sparkles className="w-4 h-4" />
-                    <span>AI Question Generator</span>
+                    <span>Buat AI</span>
                   </button>
 
                   {(currentTeacher?.role === 'admin' || currentTeacher?.role === 'pengawas') && (
@@ -4909,11 +4907,10 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                     <button
                       type="button"
                       onClick={() => setIsAiModalOpen(true)}
-                      className="flex items-center justify-center gap-1.5 px-3 py-2.5 sm:px-3.5 sm:py-2 rounded-xl bg-gradient-to-r from-violet-600 via-fuchsia-600 to-pink-600 hover:opacity-90 text-white font-semibold text-xs shadow-md shadow-violet-600/20 transition cursor-pointer w-full sm:w-auto"
-                      title="Buat butir soal otomatis dengan Gemini AI"
+                      className="flex items-center justify-center gap-1.5 px-3 py-2.5 sm:px-3.5 sm:py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs shadow-md shadow-indigo-600/20 transition cursor-pointer w-full sm:w-auto"
+                      title="Buat butir soal otomatis dengan AI"
                     >
-                      <Sparkles className="w-4 h-4 shrink-0" />
-                      <span>Buat Soal AI<span className="hidden 2xl:inline"> (Gemini)</span></span>
+                      <span>Buat AI</span>
                     </button>
 
                     <button
@@ -4923,7 +4920,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                       title="Import butir soal dari file PDF, Word, atau file backup CBT (.json)"
                     >
                       <FileUp className="w-4 h-4 shrink-0" />
-                      <span>Import Soal<span className="hidden 2xl:inline"> (Dokumen / Backup)</span></span>
+                      <span>Import</span>
                     </button>
 
                     <button
@@ -4933,7 +4930,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                       title="Unduh file backup seluruh butir soal paket mapel ini (.json)"
                     >
                       <Download className="w-4 h-4 shrink-0" />
-                      <span>Backup Soal</span>
+                      <span>Backup</span>
                     </button>
                   </div>
 
@@ -4990,10 +4987,9 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                       <button
                         type="button"
                         onClick={() => setIsAiModalOpen(true)}
-                        className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-violet-600 via-fuchsia-600 to-pink-600 hover:opacity-90 text-white font-semibold text-xs shadow-md shadow-violet-600/20 transition cursor-pointer"
+                        className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs shadow-md shadow-indigo-600/20 transition cursor-pointer"
                       >
-                        <Sparkles className="w-4 h-4" />
-                        <span>Buat Soal Otomatis AI (Gemini)</span>
+                        <span>Buat AI</span>
                       </button>
                       <button
                         type="button"
@@ -5001,7 +4997,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                         className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs shadow-md shadow-emerald-600/20 transition cursor-pointer"
                       >
                         <FileUp className="w-4 h-4" />
-                        <span>Import Soal (Dokumen / File Backup)</span>
+                        <span>Import</span>
                       </button>
                       <button
                         type="button"
@@ -5009,7 +5005,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                         className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-semibold text-xs shadow-md shadow-violet-600/20 transition cursor-pointer"
                       >
                         <PlusCircle className="w-4 h-4" />
-                        <span>Tambah Manual</span>
+                        <span>Tambah Soal</span>
                       </button>
                     </div>
                   </div>
@@ -8585,7 +8581,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
             {!editingQuestion && (
               <div className="p-3 rounded-xl bg-gradient-to-r from-violet-500/10 via-fuchsia-500/10 to-transparent border border-violet-200 dark:border-violet-800/60 flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <Sparkles className="w-4 h-4 text-violet-600 dark:text-violet-400 shrink-0" />
+                  <BookOpen className="w-4 h-4 text-violet-600 dark:text-violet-400 shrink-0" />
                   <p className="text-[11px] text-slate-600 dark:text-slate-300">
                     Ingin membuat paket butir soal otomatis berstandar <strong>AKM, PISA, & TKA</strong>?
                   </p>
@@ -8608,10 +8604,9 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                       handleCloseQuestionModal();
                       setIsAiModalOpen(true);
                     }}
-                    className="px-2.5 py-1.5 rounded-lg bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:opacity-90 text-white text-[11px] font-bold shrink-0 transition cursor-pointer shadow-xs flex items-center gap-1"
+                    className="px-2.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-bold shrink-0 transition cursor-pointer shadow-xs flex items-center gap-1"
                   >
-                    <Sparkles className="w-3.5 h-3.5" />
-                    <span>AI Generator</span>
+                    <span>Buat AI</span>
                   </button>
                 </div>
               </div>

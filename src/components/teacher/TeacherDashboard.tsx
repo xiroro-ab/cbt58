@@ -230,6 +230,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
 
   // Pengaturan Dokumen, Pejabat & TTE Digital
   const effectiveSchoolSettings: SchoolSettings = useMemo(() => {
+    const isTeacher = currentTeacher && currentTeacher.role !== 'admin';
     return {
       institution1: schoolSettings?.institution1 || 'PEMERINTAH KOTA PALEMBANG',
       institution2: schoolSettings?.institution2 || 'DINAS PENDIDIKAN',
@@ -242,8 +243,8 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
       principalNip: schoolSettings?.principalNip || '19680512 199412 2 001',
       principalTitle: schoolSettings?.principalTitle || `Kepala ${schoolSettings?.schoolName?.replace('SMP NEGERI ', 'SMPN ') || 'SMPN 58 Palembang'}`,
       principalPhoto: schoolSettings?.principalPhoto || '',
-      teacherName: schoolSettings?.teacherName || currentTeacher?.name || 'Aris Bermansyah, S.Kom',
-      teacherNip: schoolSettings?.teacherNip || currentTeacher?.nip || '199611142024211010',
+      teacherName: isTeacher ? currentTeacher.name : (schoolSettings?.teacherName || currentTeacher?.name || 'Aris Bermansyah, S.Kom'),
+      teacherNip: isTeacher ? (currentTeacher.nip || '-') : (schoolSettings?.teacherNip || currentTeacher?.nip || '199611142024211010'),
       city: schoolSettings?.city || 'Palembang',
       enableTTE: schoolSettings?.enableTTE !== false,
       tteType: schoolSettings?.tteType || 'qrcode',
@@ -434,23 +435,47 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   };
 
   const handleSavePejabatSettings = () => {
-    // 1. Simpan ke School Settings (Cloud Supabase)
-    onUpdateSchoolSettings?.(localSettingsForm);
+    const newName = (localSettingsForm.teacherName || '').trim();
+    const newNip = (localSettingsForm.teacherNip || '').trim();
 
-    // 2. Simpan juga ke Profil Akun Guru yang sedang login (Cloud Supabase & local storage cache)
-    if (currentTeacher) {
+    const updatedSettings: SchoolSettings = {
+      ...localSettingsForm,
+      teacherName: newName,
+      teacherNip: newNip
+    };
+
+    // 1. Simpan ke School Settings (Cloud Supabase)
+    onUpdateSchoolSettings?.(updatedSettings);
+
+    // 2. Jika yang login adalah Guru Mapel / Pengawas (bukan admin): perbarui profil akun login
+    if (currentTeacher && currentTeacher.role !== 'admin') {
       const updatedTeacherObj: Teacher = {
         ...currentTeacher,
-        name: (localSettingsForm.teacherName || currentTeacher.name).trim(),
-        nip: (localSettingsForm.teacherNip || currentTeacher.nip).trim()
+        name: newName || currentTeacher.name,
+        nip: newNip || currentTeacher.nip
       };
       onUpdateTeacher?.(updatedTeacherObj);
     }
 
+    // 3. Jika yang login adalah Admin dan nama yang disimpan cocok dengan seorang guru di dewan guru
+    if (currentTeacher?.role === 'admin' && newName) {
+      const matchedTeacher = (teachers || []).find(
+        t => t.name.trim().toLowerCase() === newName.toLowerCase()
+      );
+      if (matchedTeacher) {
+        const updatedTarget: Teacher = {
+          ...matchedTeacher,
+          name: newName,
+          nip: newNip
+        };
+        onUpdateTeacher?.(updatedTarget);
+      }
+    }
+
     setSettingsSavedToast(true);
     showThemedAlert(
-      'Pengaturan & Profil Guru Tersimpan ke Cloud',
-      'Data nama kepala sekolah, profil guru pengampu (nama & NIP), dan konfigurasi TTE digital telah berhasil disimpan ke Cloud Database Supabase dan disinkronkan ke seluruh sistem.',
+      'Pengaturan & NIP Berhasil Disimpan ke Cloud',
+      `Data nama ("${newName}") dan NIP ("${newNip}") telah berhasil disimpan permanen ke Cloud Database Supabase dan disinkronkan ke seluruh sistem.`,
       'info'
     );
     setTimeout(() => setSettingsSavedToast(false), 3000);
@@ -620,20 +645,21 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
     setLocalSettingsForm(effectiveSchoolSettings);
   }, [effectiveSchoolSettings]);
 
-  // Sinkronisasi otomatis NIP guru pengampu jika data NIP guru tersebut diubah di Kelola Akun Guru
-  useEffect(() => {
-    if (localSettingsForm.teacherName && teachers && teachers.length > 0) {
-      const matchedTeacher = teachers.find(
-        t => t.name.trim().toLowerCase() === localSettingsForm.teacherName.trim().toLowerCase()
-      );
-      if (matchedTeacher && matchedTeacher.nip && matchedTeacher.nip !== localSettingsForm.teacherNip) {
-        setLocalSettingsForm(prev => ({
-          ...prev,
-          teacherNip: matchedTeacher.nip
-        }));
-      }
+  // Handler saat akun guru diperbarui dari Modal Kelola Akun Guru
+  const handleTeacherUpdatedFromModal = (updatedT: Teacher) => {
+    // Jika guru yang diupdate sama dengan yang sedang dipilih di form Nomor 2, perbarui form
+    if (
+      (localSettingsForm.teacherName && localSettingsForm.teacherName.trim().toLowerCase() === updatedT.name.trim().toLowerCase()) ||
+      currentTeacher?.id === updatedT.id
+    ) {
+      setLocalSettingsForm(prev => ({
+        ...prev,
+        teacherName: updatedT.name,
+        teacherNip: updatedT.nip
+      }));
     }
-  }, [teachers, localSettingsForm.teacherName, localSettingsForm.teacherNip]);
+    onUpdateTeacher?.(updatedT);
+  };
 
   // Resolusi Penandatangan Dossier Aktif
   const activeDossierSigner = useMemo(() => {
@@ -8500,20 +8526,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                       </p>
                       <button
                         type="button"
-                        onClick={() => {
-                          if (currentTeacher?.role === 'admin') {
-                            onUpdateSchoolSettings?.(localSettingsForm);
-                            setSettingsSavedToast(true);
-                            showThemedAlert(
-                              'Penandatangan Dossier Berhasil Disimpan',
-                              `Nama "${localSettingsForm.teacherName}" dan NIP "${localSettingsForm.teacherNip}" berhasil disimpan permanen ke Supabase Cloud untuk lembar cetak Dossier Siswa.`,
-                              'info'
-                            );
-                            setTimeout(() => setSettingsSavedToast(false), 3000);
-                          } else {
-                            handleSavePejabatSettings();
-                          }
-                        }}
+                        onClick={handleSavePejabatSettings}
                         className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 font-bold text-xs transition cursor-pointer shadow-xs"
                       >
                         <Save className="w-3.5 h-3.5 text-violet-600 dark:text-violet-400" />
@@ -10960,7 +10973,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
         teachers={teachers}
         currentTeacher={currentTeacher || null}
         allSubjects={accessibleSubjects}
-        onUpdateTeacher={onUpdateTeacher}
+        onUpdateTeacher={handleTeacherUpdatedFromModal}
         onAddTeacher={onAddTeacher}
         onDeleteTeacher={onDeleteTeacher}
       />

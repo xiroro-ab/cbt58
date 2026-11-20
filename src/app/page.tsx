@@ -1093,7 +1093,8 @@ export default function Home() {
 
     // 3. Sinkronkan juga ke schoolSettings jika guru yang di-edit adalah penandatangan default dossier
     setSchoolSettings(prev => {
-      if (prev.teacherName === updatedTeacher.name || (prev.teacherNip && prev.teacherNip === updatedTeacher.nip)) {
+      const isSameTeacher = (prev.teacherName || '').trim().toLowerCase() === (updatedTeacher.name || '').trim().toLowerCase();
+      if (isSameTeacher) {
         const nextSettings = {
           ...prev,
           teacherName: updatedTeacher.name,

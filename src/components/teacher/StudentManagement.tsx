@@ -278,9 +278,9 @@ export const StudentManagement: React.FC<StudentManagementProps> = ({
 
           <button
             onClick={handleOpenAdd}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-semibold text-xs shadow-md shadow-violet-600/20 transition"
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition cursor-pointer"
           >
-            <PlusCircle className="w-4 h-4" />
+            <PlusCircle className="w-4 h-4 text-violet-600 dark:text-violet-400" />
             <span>Tambah Siswa</span>
           </button>
         </div>
@@ -351,18 +351,18 @@ export const StudentManagement: React.FC<StudentManagementProps> = ({
               {selectedIds.length > 0 && (
                 <button
                   onClick={() => onBulkDeleteStudents(selectedIds)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-semibold text-xs shadow-xs"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-rose-300 dark:hover:border-rose-800 text-slate-700 dark:text-slate-300 hover:bg-rose-50 dark:hover:bg-rose-950/40 hover:text-rose-600 dark:hover:text-rose-400 font-semibold text-xs transition cursor-pointer"
                 >
-                  <Trash2 className="w-3.5 h-3.5" />
+                  <Trash2 className="w-3.5 h-3.5 text-rose-500 dark:text-rose-400" />
                   <span>Hapus {selectedIds.length} Siswa</span>
                 </button>
               )}
 
               <button
                 onClick={handleExportStudents}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition cursor-pointer"
               >
-                <Download className="w-3.5 h-3.5" />
+                <Download className="w-3.5 h-3.5 text-sky-600 dark:text-sky-400" />
                 <span>Ekspor Excel</span>
               </button>
             </div>
@@ -620,15 +620,16 @@ export const StudentManagement: React.FC<StudentManagementProps> = ({
                 <button
                   type="button"
                   onClick={() => setIsFormModalOpen(false)}
-                  className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold"
+                  className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 font-semibold text-xs transition cursor-pointer"
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-semibold shadow-xs"
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 font-semibold text-xs transition cursor-pointer"
                 >
-                  Simpan Siswa
+                  <PlusCircle className="w-4 h-4 text-violet-600 dark:text-violet-400" />
+                  <span>Simpan Siswa</span>
                 </button>
               </div>
             </form>
@@ -736,7 +737,7 @@ export const StudentManagement: React.FC<StudentManagementProps> = ({
                   setIsImportModalOpen(false);
                   setImportPreview([]);
                 }}
-                className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold text-xs"
+                className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 font-semibold text-xs transition cursor-pointer"
               >
                 Batal
               </button>
@@ -744,9 +745,10 @@ export const StudentManagement: React.FC<StudentManagementProps> = ({
                 type="button"
                 disabled={importPreview.length === 0}
                 onClick={handleConfirmImport}
-                className="px-5 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 disabled:opacity-40 text-white font-semibold text-xs transition"
+                className="flex items-center gap-1.5 px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-40 font-semibold text-xs transition cursor-pointer"
               >
-                Simpan {importPreview.length} Siswa ke Database
+                <PlusCircle className="w-4 h-4 text-violet-600 dark:text-violet-400" />
+                <span>Simpan {importPreview.length} Siswa ke Database</span>
               </button>
             </div>
           </div>

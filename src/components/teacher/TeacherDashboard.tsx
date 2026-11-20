@@ -4223,10 +4223,10 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                   setRecapModalClass(resultsClassFilter !== 'ALL' ? resultsClassFilter : (availableClasses[0] || 'VII.1'));
                   setIsClassRecapModalOpen(true);
                 }}
-                className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-xs transition cursor-pointer"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition cursor-pointer"
                 title="Cetak rekapan nilai lengkap per rombel kelas (misal: VII.1)"
               >
-                <FileSpreadsheet className="w-3.5 h-3.5" />
+                <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
                 <span>Cetak Rekap Kelas</span>
               </button>
 
@@ -4238,16 +4238,16 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                 }}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition cursor-pointer"
               >
-                <Award className="w-3.5 h-3.5 text-violet-600" />
+                <Award className="w-3.5 h-3.5 text-violet-600 dark:text-violet-400" />
                 <span>{t.sendCertificatesBtn}</span>
               </button>
 
               {/* Tombol Ekspor CSV / Excel Aktif */}
               <button
                 onClick={exportResultsToCSV}
-                className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-xs font-semibold shadow-xs transition cursor-pointer"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition cursor-pointer"
               >
-                <Download className="w-3.5 h-3.5" />
+                <Download className="w-3.5 h-3.5 text-sky-600 dark:text-sky-400" />
                 <span>{t.exportCsvBtn}</span>
               </button>
             </div>
@@ -4437,9 +4437,9 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                       }
                     });
                   }}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-bold text-[11px] transition shadow-xs cursor-pointer"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-rose-300 dark:hover:border-rose-800 text-slate-700 dark:text-slate-300 hover:bg-rose-50 dark:hover:bg-rose-950/40 hover:text-rose-600 dark:hover:text-rose-400 font-semibold text-[11px] transition cursor-pointer"
                 >
-                  <Trash2 className="w-3.5 h-3.5" />
+                  <Trash2 className="w-3.5 h-3.5 text-rose-500 dark:text-rose-400" />
                   <span>Hapus Nilai Terpilih</span>
                 </button>
 
@@ -4449,9 +4449,9 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                     const target = results.find(r => selectedResultIds.includes(r.id));
                     onOpenCertificates?.(target);
                   }}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-violet-600 hover:bg-violet-500 text-white font-bold text-[11px] transition shadow-xs cursor-pointer"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 font-semibold text-[11px] transition cursor-pointer"
                 >
-                  <Award className="w-3.5 h-3.5" />
+                  <Award className="w-3.5 h-3.5 text-violet-600 dark:text-violet-400" />
                   <span>Cetak Sertifikat Siswa Terpilih</span>
                 </button>
               </div>
@@ -4679,19 +4679,19 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                   <button
                     type="button"
                     onClick={() => setIsAiModalOpen(true)}
-                    className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs shadow-md shadow-indigo-600/20 transition cursor-pointer"
+                    className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 font-semibold text-xs transition cursor-pointer"
                     title="Generate butir soal dengan bantuan AI"
                   >
-                    <Bot className="w-4 h-4" />
+                    <Bot className="w-4 h-4 text-indigo-500 dark:text-indigo-400" />
                     <span>Buat AI</span>
                   </button>
 
                   {(currentTeacher?.role === 'admin' || currentTeacher?.role === 'pengawas') && (
                     <button
                       onClick={() => setIsAddScheduleModalOpen(true)}
-                      className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-semibold text-xs shadow-md shadow-violet-600/20 transition cursor-pointer"
+                      className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 font-semibold text-xs transition cursor-pointer"
                     >
-                      <Plus className="w-4 h-4" />
+                      <Plus className="w-4 h-4 text-violet-500 dark:text-violet-400" />
                       <span>Tambah Paket Mapel</span>
                     </button>
                   )}
@@ -4752,9 +4752,9 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                     <button
                       type="button"
                       onClick={() => setIsAddScheduleModalOpen(true)}
-                      className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-xs font-bold transition shadow-md shadow-violet-600/20 cursor-pointer mt-2"
+                      className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 text-xs font-semibold transition cursor-pointer mt-2"
                     >
-                      <Plus className="w-4 h-4" />
+                      <Plus className="w-4 h-4 text-violet-500 dark:text-violet-400" />
                       <span>+ Tambah Paket Mapel Baru</span>
                     </button>
                   )}
@@ -4864,10 +4864,10 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                     <button
                       type="button"
                       onClick={() => setBankView('catalog')}
-                      className="p-2 sm:p-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-violet-600 hover:text-white text-slate-700 dark:text-slate-300 transition cursor-pointer flex items-center justify-center shrink-0 border border-slate-200/80 dark:border-slate-700/80 shadow-xs"
+                      className="p-2 sm:p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition cursor-pointer flex items-center justify-center shrink-0 shadow-xs"
                       title="Kembali ke Katalog Mapel"
                     >
-                      <ArrowLeft className="w-4 h-4 shrink-0" />
+                      <ArrowLeft className="w-4 h-4 text-slate-600 dark:text-slate-300 shrink-0" />
                     </button>
 
                     <div className="h-5 w-[1px] bg-slate-200 dark:bg-slate-700 hidden sm:block shrink-0"></div>
@@ -4888,10 +4888,10 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                   {/* Tombol Hapus Khusus Layar HP di Pojok Kanan Atas */}
                   <button
                     onClick={() => setSubjectToDelete(currentBankSubject)}
-                    className="sm:hidden p-2 rounded-xl text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 border border-rose-200 dark:border-rose-900/40 transition cursor-pointer shrink-0"
+                    className="sm:hidden p-2 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-rose-300 dark:hover:border-rose-800 text-slate-700 dark:text-slate-300 hover:bg-rose-50 dark:hover:bg-rose-950/40 hover:text-rose-500 transition cursor-pointer shrink-0"
                     title="Hapus Paket Mata Pelajaran Ini"
                   >
-                    <Trash2 className="w-4 h-4" />
+                    <Trash2 className="w-4 h-4 text-rose-500 shrink-0" />
                   </button>
                 </div>
 
@@ -4901,10 +4901,10 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                   <button
                     type="button"
                     onClick={() => setSubjectToDelete(currentBankSubject)}
-                    className="hidden sm:flex items-center gap-1.5 px-2.5 py-2 rounded-xl text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 border border-rose-200 dark:border-rose-900/40 text-xs font-semibold transition cursor-pointer shrink-0"
+                    className="hidden sm:flex items-center gap-1.5 px-2.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-rose-300 dark:hover:border-rose-800 text-slate-700 dark:text-slate-300 hover:bg-rose-50 dark:hover:bg-rose-950/40 hover:text-rose-500 text-xs font-semibold transition cursor-pointer shrink-0"
                     title="Hapus Paket Mata Pelajaran Ini"
                   >
-                    <Trash2 className="w-4 h-4 shrink-0" />
+                    <Trash2 className="w-4 h-4 text-rose-500 shrink-0" />
                     <span className="hidden 2xl:inline">Hapus Mapel</span>
                   </button>
 
@@ -4913,30 +4913,30 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                     <button
                       type="button"
                       onClick={() => setIsAiModalOpen(true)}
-                      className="flex items-center justify-center gap-1 px-2 py-2 sm:px-3 sm:py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs shadow-md shadow-indigo-600/20 transition cursor-pointer w-full sm:w-auto shrink-0 whitespace-nowrap"
+                      className="flex items-center justify-center gap-1 px-2.5 py-2 sm:px-3 sm:py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 font-semibold text-xs transition cursor-pointer w-full sm:w-auto shrink-0 whitespace-nowrap"
                       title="Buat butir soal otomatis dengan AI"
                     >
-                      <Bot className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
+                      <Bot className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-indigo-500 dark:text-indigo-400 shrink-0" />
                       <span>Buat AI</span>
                     </button>
 
                     <button
                       type="button"
                       onClick={() => setIsImportModalOpen(true)}
-                      className="flex items-center justify-center gap-1 px-2 py-2 sm:px-3 sm:py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs shadow-md shadow-emerald-600/20 transition cursor-pointer w-full sm:w-auto shrink-0 whitespace-nowrap"
+                      className="flex items-center justify-center gap-1 px-2.5 py-2 sm:px-3 sm:py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 font-semibold text-xs transition cursor-pointer w-full sm:w-auto shrink-0 whitespace-nowrap"
                       title="Import butir soal dari file PDF, Word, atau file backup CBT (.json)"
                     >
-                      <FileUp className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
+                      <FileUp className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-500 dark:text-emerald-400 shrink-0" />
                       <span>Import</span>
                     </button>
 
                     <button
                       type="button"
                       onClick={handleBackupQuestions}
-                      className="flex items-center justify-center gap-1 px-2 py-2 sm:px-3 sm:py-2 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-semibold text-xs shadow-md shadow-sky-600/20 transition cursor-pointer w-full sm:w-auto shrink-0 whitespace-nowrap"
+                      className="flex items-center justify-center gap-1 px-2.5 py-2 sm:px-3 sm:py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 font-semibold text-xs transition cursor-pointer w-full sm:w-auto shrink-0 whitespace-nowrap"
                       title="Unduh file backup seluruh butir soal paket mapel ini (.json)"
                     >
-                      <Download className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
+                      <Download className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-sky-500 dark:text-sky-400 shrink-0" />
                       <span>Backup</span>
                     </button>
 
@@ -4953,10 +4953,10 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                         }
                         setIsGoogleFormModalOpen(true);
                       }}
-                      className="flex items-center justify-center gap-1 px-2 py-2 sm:px-3 sm:py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-semibold text-xs shadow-md shadow-purple-600/20 transition cursor-pointer w-full sm:w-auto shrink-0 whitespace-nowrap"
+                      className="flex items-center justify-center gap-1 px-2.5 py-2 sm:px-3 sm:py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 font-semibold text-xs transition cursor-pointer w-full sm:w-auto shrink-0 whitespace-nowrap"
                       title="Export butir soal langsung jadi Google Form (Kuis)"
                     >
-                      <FormInput className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
+                      <FormInput className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-purple-500 dark:text-purple-400 shrink-0" />
                       <span>G-Form</span>
                     </button>
                   </div>
@@ -4965,9 +4965,9 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                   <button
                     type="button"
                     onClick={onOpenAddModal}
-                    className="flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-bold text-xs shadow-md shadow-violet-600/20 transition cursor-pointer w-full sm:w-auto shrink-0 whitespace-nowrap"
+                    className="flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 font-semibold text-xs transition cursor-pointer w-full sm:w-auto shrink-0 whitespace-nowrap"
                   >
-                    <PlusCircle className="w-4 h-4 shrink-0" />
+                    <PlusCircle className="w-4 h-4 text-violet-500 dark:text-violet-400 shrink-0" />
                     <span>{t.addQuestionBtn}</span>
                   </button>
                 </div>
@@ -5015,25 +5015,25 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                       <button
                         type="button"
                         onClick={() => setIsAiModalOpen(true)}
-                        className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs shadow-md shadow-indigo-600/20 transition cursor-pointer"
+                        className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 font-semibold text-xs transition cursor-pointer"
                       >
-                        <Bot className="w-4 h-4" />
+                        <Bot className="w-4 h-4 text-indigo-500 dark:text-indigo-400" />
                         <span>Buat AI</span>
                       </button>
                       <button
                         type="button"
                         onClick={() => setIsImportModalOpen(true)}
-                        className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs shadow-md shadow-emerald-600/20 transition cursor-pointer"
+                        className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 font-semibold text-xs transition cursor-pointer"
                       >
-                        <FileUp className="w-4 h-4" />
+                        <FileUp className="w-4 h-4 text-emerald-500 dark:text-emerald-400" />
                         <span>Import</span>
                       </button>
                       <button
                         type="button"
                         onClick={onOpenAddModal}
-                        className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-semibold text-xs shadow-md shadow-violet-600/20 transition cursor-pointer"
+                        className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 font-semibold text-xs transition cursor-pointer"
                       >
-                        <PlusCircle className="w-4 h-4" />
+                        <PlusCircle className="w-4 h-4 text-violet-500 dark:text-violet-400" />
                         <span>Tambah Soal</span>
                       </button>
                     </div>
@@ -5254,9 +5254,9 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
               <button
                 type="button"
                 onClick={() => window.print()}
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-xs font-bold transition shadow-md shadow-violet-600/20 cursor-pointer"
+                className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 text-xs font-semibold transition cursor-pointer"
               >
-                <Printer className="w-4 h-4" />
+                <Printer className="w-4 h-4 text-violet-600 dark:text-violet-400" />
                 <span>Cetak Dokumen / Simpan PDF</span>
               </button>
 
@@ -5267,10 +5267,10 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                   setRecapModalClass(selectedDocClass !== 'Semua Kelas' ? selectedDocClass : (availableClasses[0] || 'VII.1'));
                   setIsClassRecapModalOpen(true);
                 }}
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition shadow-md shadow-emerald-600/20 cursor-pointer"
+                className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 text-xs font-semibold transition cursor-pointer"
                 title="Buka Lembar Rekapan Nilai Per Rombel Kelas Lengkap dengan Statistik & TTE"
               >
-                <FileSpreadsheet className="w-4 h-4" />
+                <FileSpreadsheet className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
                 <span>Rekap Nilai Per Kelas</span>
               </button>
             </div>
@@ -6793,10 +6793,10 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                         }
                       });
                     }}
-                    className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold shadow-md shadow-blue-600/20 transition"
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 text-xs font-semibold transition cursor-pointer"
                     title="Reset semua siswa terkunci sekaligus"
                   >
-                    <Unlock className="w-3.5 h-3.5" />
+                    <Unlock className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
                     <span className="hidden sm:inline">Reset Semua ({blockedCount})</span>
                     <span className="sm:hidden">{blockedCount}</span>
                   </button>
@@ -6879,9 +6879,9 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                     </span>
                     <button
                       type="submit"
-                      className="px-5 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-bold text-xs shadow-md shadow-violet-600/20 transition flex items-center gap-2 cursor-pointer active:scale-95"
+                      className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 font-semibold text-xs transition flex items-center gap-2 cursor-pointer"
                     >
-                      <Megaphone className="w-3.5 h-3.5" />
+                      <Megaphone className="w-3.5 h-3.5 text-violet-600 dark:text-violet-400" />
                       <span>Siarkan ke Seluruh Layar Siswa</span>
                     </button>
                   </div>
@@ -7316,9 +7316,9 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                 <button
                   type="button"
                   onClick={handleSaveTeacherAssignments}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-bold text-xs shadow-md shadow-violet-600/20 transition cursor-pointer shrink-0"
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 font-semibold text-xs transition cursor-pointer shrink-0"
                 >
-                  <Save className="w-3.5 h-3.5" />
+                  <Save className="w-3.5 h-3.5 text-violet-600 dark:text-violet-400" />
                   <span>Simpan Penugasan</span>
                 </button>
               </div>
@@ -7388,9 +7388,9 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                   <button
                     type="button"
                     onClick={handleAddAssignment}
-                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs transition shadow-xs cursor-pointer shrink-0"
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 font-semibold text-xs transition cursor-pointer shrink-0"
                   >
-                    <Plus className="w-3.5 h-3.5" />
+                    <Plus className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
                     <span>+ Tambah Mata Pelajaran (Multi-Mapel)</span>
                   </button>
                 </div>
@@ -7580,9 +7580,9 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                   <button
                     type="button"
                     onClick={handleSaveTeacherAssignments}
-                    className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-bold text-xs shadow-md shadow-violet-600/20 transition cursor-pointer"
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 font-semibold text-xs transition cursor-pointer"
                   >
-                    <Save className="w-4 h-4" />
+                    <Save className="w-4 h-4 text-violet-600 dark:text-violet-400" />
                     <span>Simpan Penugasan Mengajar ke Cloud</span>
                   </button>
                 </div>
@@ -7644,9 +7644,9 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                     );
                     setTimeout(() => setSettingsSavedToast(false), 3000);
                   }}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs shadow-md shadow-blue-600/20 transition cursor-pointer shrink-0"
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 font-semibold text-xs transition cursor-pointer shrink-0"
                 >
-                  <Save className="w-3.5 h-3.5" />
+                  <Save className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
                   <span>Simpan Kop Surat</span>
                 </button>
               </div>
@@ -8062,9 +8062,9 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                             );
                             setTimeout(() => setSettingsSavedToast(false), 3000);
                           }}
-                          className="px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 active:scale-95 text-white font-bold text-xs shadow-md shadow-violet-600/20 transition cursor-pointer flex items-center gap-1.5 shrink-0"
+                          className="px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 font-semibold text-xs transition cursor-pointer flex items-center gap-1.5 shrink-0"
                         >
-                          <Save className="w-3.5 h-3.5" />
+                          <Save className="w-3.5 h-3.5 text-violet-600 dark:text-violet-400" />
                           <span>Simpan Password</span>
                         </button>
                       </div>
@@ -8183,9 +8183,9 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                   );
                   setTimeout(() => setSettingsSavedToast(false), 3000);
                 }}
-                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-bold text-xs shadow-md shadow-violet-600/20 transition cursor-pointer shrink-0"
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 font-semibold text-xs transition cursor-pointer shrink-0"
               >
-                <Save className="w-4 h-4" />
+                <Save className="w-4 h-4 text-violet-600 dark:text-violet-400" />
                 <span>Simpan Pengaturan Pejabat & TTE</span>
               </button>
             </div>
@@ -8622,9 +8622,9 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                       handleCloseQuestionModal();
                       setIsImportModalOpen(true);
                     }}
-                    className="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold shrink-0 transition cursor-pointer shadow-xs flex items-center gap-1"
+                    className="px-2.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 text-[11px] font-semibold shrink-0 transition cursor-pointer flex items-center gap-1"
                   >
-                    <FileUp className="w-3.5 h-3.5" />
+                    <FileUp className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
                     <span>Import PDF</span>
                   </button>
                   <button
@@ -8633,9 +8633,9 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                       handleCloseQuestionModal();
                       setIsAiModalOpen(true);
                     }}
-                    className="px-2.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-bold shrink-0 transition cursor-pointer shadow-xs flex items-center gap-1"
+                    className="px-2.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 text-[11px] font-semibold shrink-0 transition cursor-pointer flex items-center gap-1"
                   >
-                    <Bot className="w-3.5 h-3.5" />
+                    <Bot className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
                     <span>Buat AI</span>
                   </button>
                 </div>
@@ -9271,15 +9271,16 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                 <button
                   type="button"
                   onClick={handleCloseQuestionModal}
-                  className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold cursor-pointer"
+                  className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 font-semibold text-xs transition cursor-pointer"
                 >
                   {t.cancel}
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-semibold transition cursor-pointer shadow-md shadow-violet-600/20"
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 font-semibold text-xs transition cursor-pointer"
                 >
-                  {editingQuestion ? 'Simpan Perubahan Soal' : t.saveQuestionBtn}
+                  <Save className="w-4 h-4 text-violet-600 dark:text-violet-400" />
+                  <span>{editingQuestion ? 'Simpan Perubahan Soal' : t.saveQuestionBtn}</span>
                 </button>
               </div>
             </form>
@@ -10302,15 +10303,16 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                 <button
                   type="button"
                   onClick={() => setIsAddScheduleModalOpen(false)}
-                  className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold cursor-pointer"
+                  className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 font-semibold text-xs transition cursor-pointer"
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-semibold transition cursor-pointer shadow-md shadow-violet-600/20"
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 font-semibold text-xs transition cursor-pointer"
                 >
-                  Simpan & Rilis Jadwal
+                  <Save className="w-4 h-4 text-violet-600 dark:text-violet-400" />
+                  <span>Simpan & Rilis Jadwal</span>
                 </button>
               </div>
             </form>
@@ -10586,15 +10588,16 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                 <button
                   type="button"
                   onClick={() => setIsEditScheduleModalOpen(false)}
-                  className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold cursor-pointer"
+                  className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 font-semibold text-xs transition cursor-pointer"
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-semibold transition cursor-pointer shadow-md shadow-violet-600/20"
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 font-semibold text-xs transition cursor-pointer"
                 >
-                  Simpan Perubahan
+                  <Save className="w-4 h-4 text-violet-600 dark:text-violet-400" />
+                  <span>Simpan Perubahan</span>
                 </button>
               </div>
             </form>

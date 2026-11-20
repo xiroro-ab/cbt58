@@ -1471,9 +1471,9 @@ export function AiQuestionGeneratorModal({
                 type="button"
                 onClick={handleConfirmSave}
                 disabled={selectedQuestionIds.size === 0}
-                className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold text-xs shadow-lg shadow-emerald-600/25 transition cursor-pointer"
+                className="w-full sm:w-auto flex items-center justify-center gap-2 px-5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed font-semibold text-xs transition cursor-pointer"
               >
-                <Check className="w-4 h-4" />
+                <Check className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
                 <span>Simpan {selectedQuestionIds.size} Soal ke Bank Soal</span>
               </button>
             </>
@@ -1542,9 +1542,10 @@ export function AiQuestionGeneratorModal({
                 type="button"
                 onClick={handleImportPastedJson}
                 disabled={!manualJsonInput.trim()}
-                className="px-5 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 disabled:opacity-40 text-white font-bold text-xs shadow-md shadow-violet-600/20 transition cursor-pointer"
+                className="flex items-center gap-1.5 px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-40 font-semibold text-xs transition cursor-pointer"
               >
-                Validasi &amp; Tampilkan Butir Soal
+                <ClipboardPaste className="w-4 h-4 text-violet-600 dark:text-violet-400" />
+                <span>Validasi &amp; Tampilkan Butir Soal</span>
               </button>
             </div>
           </div>

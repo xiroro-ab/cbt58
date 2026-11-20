@@ -119,9 +119,9 @@ export const CertificateModal: React.FC<CertificateModalProps> = ({
             <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
               <button
                 onClick={handlePrint}
-                className="flex items-center gap-1.5 px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-semibold text-xs shadow-md shadow-violet-600/20 transition cursor-pointer"
+                className="flex items-center gap-1.5 px-3 sm:px-3.5 py-1.5 sm:py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 font-semibold text-xs transition cursor-pointer"
               >
-                <Printer className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                <Printer className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-violet-600 dark:text-violet-400" />
                 <span>{language === 'id' ? 'Cetak / PDF' : 'Print / PDF'}</span>
               </button>
 

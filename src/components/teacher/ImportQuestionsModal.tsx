@@ -22,6 +22,7 @@ import {
 import { Question, Subject, OptionItem } from '@/types/cbt';
 import { validateAndConvertRawQuestions, sanitizeAndParseAiJson } from '@/lib/aiQuestionGenerator';
 import { parseQuestionsFromRawText } from '@/lib/documentQuestionParser';
+import { parseQuestionsBackup } from '@/lib/backupService';
 import { AiExternalPromptCard } from './AiExternalPromptCard';
 
 interface ImportQuestionsModalProps {
@@ -276,19 +277,44 @@ Aturan Analisis & Format:
       return;
     }
 
-    // Validasi ekstensi yang diizinkan
-    const validExtensions = ['.pdf', '.txt', '.doc', '.docx', '.png', '.jpg', '.jpeg'];
+    // Validasi ekstensi yang diizinkan (termasuk file backup .json)
+    const validExtensions = ['.pdf', '.txt', '.doc', '.docx', '.png', '.jpg', '.jpeg', '.json'];
     const fileNameLower = file.name.toLowerCase();
     const hasValidExt = validExtensions.some(ext => fileNameLower.endsWith(ext));
 
-    if (!hasValidExt && file.type !== 'application/pdf' && !file.type.startsWith('image/')) {
-      setFileError('Format berkas tidak didukung. Harap unggah naskah soal berformat PDF, Dokumen Teks/Word, atau Gambar.');
+    if (!hasValidExt && file.type !== 'application/pdf' && !file.type.startsWith('image/') && file.type !== 'application/json') {
+      setFileError('Format berkas tidak didukung. Harap unggah naskah soal berformat PDF, Dokumen Teks/Word, Gambar, atau File Backup CBT (.json).');
       return;
     }
 
     setSelectedFile(file);
 
-    // Baca ke Base64 untuk dikirim ke AI
+    // Jika file adalah backup JSON CBT, parse langsung secara instan tanpa perlu AI
+    if (fileNameLower.endsWith('.json') || file.type === 'application/json') {
+      const jsonReader = new FileReader();
+      jsonReader.onload = () => {
+        try {
+          const text = jsonReader.result as string;
+          const parsedQuestions = parseQuestionsBackup(text, currentSubject.id, existingQuestionsCount + 1);
+          if (parsedQuestions.length > 0) {
+            setExtractedQuestions(parsedQuestions);
+            setSelectedQuestionIds(new Set(parsedQuestions.map(q => q.id)));
+            setCurrentStep('preview');
+          } else {
+            setFileError('File JSON tidak memuat butir soal yang valid.');
+          }
+        } catch (e: any) {
+          setFileError('Gagal memproses file backup: ' + (e?.message || 'Format tidak valid'));
+        }
+      };
+      jsonReader.onerror = () => {
+        setFileError('Gagal membaca file JSON dari perangkat.');
+      };
+      jsonReader.readAsText(file);
+      return;
+    }
+
+    // Baca ke Base64 untuk dikirim ke AI jika dokumen PDF/Word/Gambar
     const reader = new FileReader();
     reader.onload = () => {
       const base64 = reader.result as string;
@@ -622,7 +648,7 @@ Aturan Analisis & Format:
                     type="file"
                     ref={fileInputRef}
                     onChange={handleFileChange}
-                    accept=".pdf,.png,.jpg,.jpeg,.txt,.doc,.docx,application/pdf"
+                    accept=".pdf,.png,.jpg,.jpeg,.txt,.doc,.docx,.json,application/pdf,application/json"
                     className="hidden"
                   />
 
@@ -656,7 +682,7 @@ Aturan Analisis & Format:
                           : 'Tarik & Letakkan File di Sini, atau Klik untuk Memilih'}
                       </p>
                       <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                        Format yang didukung: <strong>PDF (Sangat Direkomendasikan)</strong>, TXT, DOCX, dan Foto Naskah (Maks. 20 MB)
+                        Format didukung: <strong>PDF</strong>, DOCX, TXT, Gambar, atau <strong>File Backup Soal (.json)</strong> (Maks. 20 MB)
                       </p>
                     </div>
 

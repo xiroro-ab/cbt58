@@ -8,6 +8,7 @@ import { StudentManagement } from './StudentManagement';
 import { AiQuestionGeneratorModal } from './AiQuestionGeneratorModal';
 import { ImportQuestionsModal } from './ImportQuestionsModal';
 import { extractSubjectAndGrade } from '@/lib/aiQuestionGenerator';
+import { downloadQuestionsBackup, parseQuestionsBackup } from '@/lib/backupService';
 import { evaluateFullExam, calculateSingleQuestionScore } from '@/lib/scoringEngine';
 import { sendProctorCommand, subscribeToLiveSessions, removeStudentSession, broadcastAnnouncementToStudents } from '@/lib/liveMonitoringService';
 import { clearStudentAutolockInSupabase, clearAllLockedStudents, insertMessage, fetchQuestionsBySubject, updateTeacherPhotoInSupabase, fetchExamResultAnswers } from '@/lib/supabaseService';
@@ -1344,6 +1345,105 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
       return matchesSearch && matchesType;
     });
   }, [bankSubjectQuestions, searchQuery, bankTypeFilter]);
+
+  // File input ref untuk restore soal backup .json
+  const restoreFileInputRef = useRef<HTMLInputElement>(null);
+
+  // Fungsi Backup Soal: Mengunduh seluruh butir soal paket mapel aktif ke file JSON
+  const handleBackupQuestions = () => {
+    if (!currentBankSubject) return;
+
+    if (bankSubjectQuestions.length === 0) {
+      showThemedAlert(
+        'Belum Ada Butir Soal',
+        `Mata pelajaran "${currentBankSubject.title}" (${currentBankSubject.className}) belum memiliki butir soal untuk di-backup. Silakan tambahkan soal terlebih dahulu.`,
+        'warning'
+      );
+      return;
+    }
+
+    try {
+      downloadQuestionsBackup(currentBankSubject, bankSubjectQuestions);
+      showThemedAlert(
+        'Backup Soal Berhasil',
+        `Sebanyak ${bankSubjectQuestions.length} butir soal untuk mata pelajaran "${currentBankSubject.title}" berhasil diunduh ke file JSON. Simpan file ini sebagai cadangan atau untuk dipulihkan kembali kapan saja.`,
+        'info'
+      );
+    } catch (e: any) {
+      showThemedAlert(
+        'Gagal Backup Soal',
+        `Terjadi kendala saat mengunduh file backup: ${e?.message || 'Error'}`,
+        'danger'
+      );
+    }
+  };
+
+  // Fungsi Restore Soal: Membaca file backup .json dan memasukkan butir soal ke Bank Soal
+  const handleRestoreFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    e.target.value = '';
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const text = event.target?.result as string;
+        if (!text) throw new Error('File kosong atau tidak terbaca.');
+
+        const parsedQuestions = parseQuestionsBackup(
+          text,
+          currentBankSubject.id,
+          bankSubjectQuestions.length + 1
+        );
+
+        if (parsedQuestions.length === 0) {
+          showThemedAlert(
+            'Tidak Ada Soal Valid',
+            'File backup tidak memuat butir soal yang dapat dibaca. Pastikan file merupakan file backup CBT berekstensi .json yang valid.',
+            'warning'
+          );
+          return;
+        }
+
+        // Tampilkan modal konfirmasi sebelum memasukkan soal
+        setCustomDialog({
+          isOpen: true,
+          type: 'confirm',
+          variant: 'info',
+          title: 'Konfirmasi Restore Soal',
+          message: `Ditemukan ${parsedQuestions.length} butir soal dari file backup "${file.name}". Apakah Anda ingin memasukkan seluruh butir soal ini ke Bank Soal "${currentBankSubject.title}" (${currentBankSubject.className})?`,
+          confirmLabel: `Ya, Tambahkan ${parsedQuestions.length} Soal`,
+          cancelLabel: 'Batal',
+          onConfirm: () => {
+            parsedQuestions.forEach(q => {
+              onAddQuestion(q);
+            });
+            setCustomDialog(prev => ({ ...prev, isOpen: false }));
+            setTimeout(() => {
+              showThemedAlert(
+                'Restore Soal Berhasil',
+                `Sebanyak ${parsedQuestions.length} butir soal berhasil ditambahkan ke Bank Soal "${currentBankSubject.title}".`,
+                'info'
+              );
+            }, 150);
+          }
+        });
+      } catch (err: any) {
+        showThemedAlert(
+          'Gagal Membaca File Backup',
+          `Format file tidak sesuai: ${err?.message || 'Pastikan file berekstensi .json'}.`,
+          'danger'
+        );
+      }
+    };
+
+    reader.onerror = () => {
+      showThemedAlert('Gagal Membaca File', 'Tidak dapat membaca file dari perangkat.', 'danger');
+    };
+
+    reader.readAsText(file);
+  };
 
   // Chips filter dinamis berbasis data riil mapel yang diinputkan guru / tersedia di database
   const dynamicFilterChips = useMemo(() => {
@@ -4874,8 +4974,17 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                     <span>Hapus Mapel</span>
                   </button>
 
-                  {/* Di HP: Grid 2 Kolom Seimbang untuk AI & Import Soal */}
-                  <div className="grid grid-cols-2 gap-2 w-full sm:w-auto sm:flex sm:items-center">
+                  {/* Input tersembunyi untuk memilih file restore backup .json */}
+                  <input
+                    type="file"
+                    ref={restoreFileInputRef}
+                    onChange={handleRestoreFileSelected}
+                    accept=".json,application/json"
+                    className="hidden"
+                  />
+
+                  {/* Di HP: Grid 2 Kolom Seimbang untuk AI, Import, Backup & Restore Soal */}
+                  <div className="grid grid-cols-2 sm:flex sm:items-center gap-2 w-full sm:w-auto">
                     <button
                       type="button"
                       onClick={() => setIsAiModalOpen(true)}
@@ -4890,10 +4999,30 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                       type="button"
                       onClick={() => setIsImportModalOpen(true)}
                       className="flex items-center justify-center gap-1.5 px-3 py-2.5 sm:px-3.5 sm:py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs shadow-md shadow-emerald-600/20 transition cursor-pointer w-full sm:w-auto"
-                      title="Import butir soal dari file PDF, Word, atau teks naskah soal"
+                      title="Import butir soal dari file PDF, Word, atau file backup CBT (.json)"
                     >
                       <FileUp className="w-4 h-4 shrink-0" />
                       <span>Import Soal<span className="hidden 2xl:inline"> (Dokumen)</span></span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleBackupQuestions}
+                      className="flex items-center justify-center gap-1.5 px-3 py-2.5 sm:px-3.5 sm:py-2 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-semibold text-xs shadow-md shadow-sky-600/20 transition cursor-pointer w-full sm:w-auto"
+                      title="Unduh file backup seluruh butir soal paket mapel ini (.json)"
+                    >
+                      <Download className="w-4 h-4 shrink-0" />
+                      <span>Backup Soal</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => restoreFileInputRef.current?.click()}
+                      className="flex items-center justify-center gap-1.5 px-3 py-2.5 sm:px-3.5 sm:py-2 rounded-xl bg-slate-700 hover:bg-slate-600 dark:bg-slate-800 dark:hover:bg-slate-700 text-white font-semibold text-xs shadow-md shadow-slate-700/20 transition cursor-pointer w-full sm:w-auto"
+                      title="Unggah dan pulihkan butir soal dari file backup (.json)"
+                    >
+                      <Upload className="w-4 h-4 shrink-0" />
+                      <span>Restore Soal</span>
                     </button>
                   </div>
 
@@ -4962,6 +5091,15 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                       >
                         <FileUp className="w-4 h-4" />
                         <span>Import Naskah Soal (PDF / Dokumen)</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => restoreFileInputRef.current?.click()}
+                        className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-slate-700 hover:bg-slate-600 dark:bg-slate-800 dark:hover:bg-slate-700 text-white font-semibold text-xs shadow-md shadow-slate-700/20 transition cursor-pointer"
+                        title="Unggah dan pulihkan butir soal dari file backup .json"
+                      >
+                        <Upload className="w-4 h-4" />
+                        <span>Restore File Backup (.json)</span>
                       </button>
                       <button
                         type="button"

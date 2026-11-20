@@ -2429,7 +2429,7 @@ export async function updateTeacherInSupabase(t: Teacher): Promise<boolean> {
       name: t.name,
       nip: t.nip,
       email: t.email,
-      subject: t.subject,
+      subject: t.subject || 'Semua Mata Pelajaran',
       classes: t.classes || [],
       assignments: t.assignments || [],
       role: t.role || 'guru_mapel',
@@ -2437,13 +2437,46 @@ export async function updateTeacherInSupabase(t: Teacher): Promise<boolean> {
       avatar_color: t.avatarColor || 'bg-violet-600'
     };
 
-    // Gunakan upsert dengan onConflict id agar jika akun guru belum ada di Supabase, langsung dibuatkan
-    const { error } = await supabase
+    // 1. Coba UPDATE langsung berdasarkan ID
+    const { data: updateData, error: updateError } = await supabase
+      .from('teachers')
+      .update(payload)
+      .eq('id', t.id)
+      .select('id');
+
+    if (!updateError && updateData && updateData.length > 0) {
+      return true;
+    }
+
+    // 2. Jika baris ID belum cocok (misal ID lama), coba update berdasarkan email
+    if (t.email) {
+      const { data: emailData, error: emailErr } = await supabase
+        .from('teachers')
+        .update(payload)
+        .eq('email', t.email)
+        .select('id');
+
+      if (!emailErr && emailData && emailData.length > 0) {
+        return true;
+      }
+    }
+
+    // 3. Jika belum ada di Supabase, lakukan INSERT
+    const { error: insertErr } = await supabase
+      .from('teachers')
+      .insert(payload);
+
+    if (!insertErr) {
+      return true;
+    }
+
+    // 4. Fallback terakhir coba upsert
+    const { error: upsertErr } = await supabase
       .from('teachers')
       .upsert(payload, { onConflict: 'id' });
 
-    if (error) {
-      console.warn('Gagal updateTeacherInSupabase:', error.message);
+    if (upsertErr) {
+      console.warn('Gagal upsert fallback updateTeacherInSupabase:', upsertErr.message);
       return false;
     }
     return true;

@@ -7308,12 +7308,12 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
           {/* ============================================================== */}
           <div className="p-5 sm:p-7 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-6">
             {/* Header Card */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100 dark:border-slate-800">
-              <div className="flex items-start sm:items-center gap-3">
+            <div className="flex flex-col xl:flex-row xl:items-start justify-between gap-4 pb-4 border-b border-slate-100 dark:border-slate-800">
+              <div className="flex items-start gap-3 flex-1 min-w-0">
                 <div className="w-10 h-10 rounded-2xl bg-violet-50 dark:bg-violet-950/60 border border-violet-200/60 dark:border-violet-800/60 text-violet-600 dark:text-violet-400 flex items-center justify-center shrink-0">
                   <BookOpen className="w-5 h-5" />
                 </div>
-                <div>
+                <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <h4 className="font-bold text-slate-900 dark:text-white text-base">
                       Kelola Penugasan Mengajar (Mata Pelajaran & Rombel)
@@ -7326,13 +7326,13 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                       <span>Cloud Database Supabase</span>
                     </span>
                   </div>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 leading-relaxed">
                     Atur atau perbaiki mata pelajaran dan rombel kelas yang diampu. Penambahan mapel atau perubahan rombel tersimpan permanen dan tidak akan menghapus atau membenturkan bank soal yang telah dibuat sebelumnya.
                   </p>
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 shrink-0">
+              <div className="flex items-center gap-2 flex-wrap sm:shrink-0">
                 <button
                   type="button"
                   onClick={() => setIsAssignmentSectionOpen(prev => !prev)}
@@ -7346,7 +7346,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                   <button
                     type="button"
                     onClick={() => setIsTeacherManagementModalOpen(true)}
-                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 font-semibold text-xs transition cursor-pointer shrink-0"
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 font-semibold text-xs transition cursor-pointer"
                     title="Buka panel kelola akun dewan guru"
                   >
                     <Users className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
@@ -7357,7 +7357,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                 <button
                   type="button"
                   onClick={handleSaveTeacherAssignments}
-                  className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 font-semibold text-xs transition cursor-pointer shrink-0"
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 font-semibold text-xs transition cursor-pointer"
                 >
                   <Save className="w-3.5 h-3.5 text-violet-600 dark:text-violet-400" />
                   <span>Simpan Penugasan</span>
@@ -7636,12 +7636,12 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
           {/* ============================================================== */}
           <div className="p-5 sm:p-7 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-6">
             {/* Header Card */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100 dark:border-slate-800">
-              <div className="flex items-start sm:items-center gap-3">
+            <div className="flex flex-col xl:flex-row xl:items-start justify-between gap-4 pb-4 border-b border-slate-100 dark:border-slate-800">
+              <div className="flex items-start gap-3 flex-1 min-w-0">
                 <div className="w-10 h-10 rounded-2xl bg-blue-50 dark:bg-blue-950/60 border border-blue-200/60 dark:border-blue-800/60 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
                   <Building2 className="w-5 h-5" />
                 </div>
-                <div>
+                <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <h4 className="font-bold text-slate-900 dark:text-white text-base">
                       Identitas Kop Surat Resmi Sekolah
@@ -7657,13 +7657,13 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                       {localSettingsForm.schoolName}
                     </span>
                   </div>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 leading-relaxed">
                     Pengaturan terpusat Kop Surat dinas & dual-logo (Dinas Kiri + Sekolah Kanan) tersimpan permanen di Supabase Cloud untuk seluruh lembar cetak guru.
                   </p>
                 </div>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <button
                   type="button"
                   onClick={() => setIsKopSettingsOpen(prev => !prev)}
@@ -8207,8 +8207,8 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
 
           {/* SECTION 1: PENGATURAN PEJABAT & TANDA TANGAN ELEKTRONIK (TTE) */}
           <div className="p-5 sm:p-7 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-6">
-            <div className="border-b border-slate-100 dark:border-slate-800 pb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div>
+            <div className="border-b border-slate-100 dark:border-slate-800 pb-4 flex flex-col xl:flex-row xl:items-start justify-between gap-4">
+              <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap mb-1">
                   <h4 className="font-bold text-slate-900 dark:text-white text-sm sm:text-base flex items-center gap-2">
                     <ShieldCheck className="w-5 h-5 text-violet-600" />
@@ -8219,7 +8219,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                     <span>Database Cloud Supabase</span>
                   </span>
                 </div>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 leading-relaxed">
                   Data ini tersimpan di Supabase Cloud dan otomatis dicetak pada Sertifikat Kelulusan, Dossier Lembar Jawaban Siswa, Berita Acara Ujian (BAP), dan Leger Nilai.
                 </p>
               </div>
@@ -8345,44 +8345,31 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
 
                 {/* Bagian B: Guru Pengampu / Proktor (Untuk Dossier Rekap Nilai Siswa) */}
                 <div className="pt-3 border-t border-slate-100 dark:border-slate-800 space-y-3">
-                  <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="w-2 h-2 rounded-full bg-emerald-600 inline-block"></span>
-                      <h5 className="font-bold text-xs text-slate-800 dark:text-slate-200">
-                        2. Data Guru Pengampu / Proktor
+                      <h5 className="font-bold text-xs sm:text-sm text-slate-800 dark:text-slate-200">
+                        {currentTeacher?.role === 'admin'
+                          ? '2. Guru Pengampu / Proktor Default (Cetak Dossier Ujian Siswa)'
+                          : '2. Profil Guru Pengampu / Proktor Saya'}
                       </h5>
-                    </div>
-                    <div className="flex items-center gap-2 flex-wrap">
-                      {currentTeacher && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setLocalSettingsForm(prev => ({
-                              ...prev,
-                              teacherName: currentTeacher.name,
-                              teacherNip: currentTeacher.nip || prev.teacherNip
-                            }));
-                          }}
-                          className="text-[10px] font-bold text-violet-600 dark:text-violet-400 bg-slate-100 dark:bg-slate-800 hover:bg-violet-50 dark:hover:bg-violet-950/60 px-2 py-0.5 rounded-lg border border-slate-200 dark:border-slate-700 transition cursor-pointer"
-                          title="Klik untuk mengisi otomatis nama guru dari akun yang sedang login"
-                        >
-                          Gunakan Akun Login ({currentTeacher.name.split(',')[0]})
-                        </button>
+                      {currentTeacher?.role === 'admin' ? (
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+                          ⚙️ Mode Admin (Dokumen Cetak)
+                        </span>
+                      ) : (
+                        <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800">
+                          👨‍🏫 Profil Akun Anda
+                        </span>
                       )}
-                      <button
-                        type="button"
-                        onClick={handleSavePejabatSettings}
-                        className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 font-bold text-xs transition cursor-pointer"
-                        title="Simpan perubahan nama & NIP akun guru ke Supabase Cloud"
-                      >
-                        <Save className="w-3.5 h-3.5 text-violet-600 dark:text-violet-400" />
-                        <span>Simpan Profil Saya</span>
-                      </button>
+                    </div>
+
+                    <div className="flex items-center gap-2 flex-wrap">
                       {currentTeacher?.role === 'admin' && (
                         <button
                           type="button"
                           onClick={() => setIsTeacherManagementModalOpen(true)}
-                          className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 font-bold text-xs transition cursor-pointer"
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 font-bold text-xs transition cursor-pointer"
                           title="Kelola semua akun guru (Edit, Tambah, Reset PIN, Hapus)"
                         >
                           <Users className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
@@ -8395,11 +8382,66 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                     </div>
                   </div>
 
+                  {/* Panel Pilihan Khusus Admin: Pilih Guru Pengampu Default untuk Dossier */}
+                  {currentTeacher?.role === 'admin' && (
+                    <div className="p-3.5 rounded-2xl bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200/80 dark:border-amber-800/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div>
+                        <span className="text-xs font-bold text-amber-900 dark:text-amber-200 block">
+                          Pilih Guru Pengampu Default dari Daftar Dewan Guru:
+                        </span>
+                        <p className="text-[11px] text-amber-700/80 dark:text-amber-400">
+                          Sebagai Admin, Anda dapat memilih guru dari daftar untuk mengisi otomatis Nama &amp; NIP penandatangan Dossier di bawah ini.
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2 flex-wrap sm:shrink-0">
+                        <select
+                          onChange={e => {
+                            const selectedTeacher = teachers.find(t => t.id === e.target.value);
+                            if (selectedTeacher) {
+                              setLocalSettingsForm(prev => ({
+                                ...prev,
+                                teacherName: selectedTeacher.name,
+                                teacherNip: selectedTeacher.nip || prev.teacherNip
+                              }));
+                            }
+                          }}
+                          defaultValue=""
+                          className="px-3 py-1.5 rounded-xl border border-amber-300 dark:border-amber-700 bg-white dark:bg-slate-900 text-xs font-bold text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-amber-500 cursor-pointer shadow-xs"
+                        >
+                          <option value="" disabled>-- Pilih dari Dewan Guru --</option>
+                          {teachers
+                            .filter(t => !t.id?.startsWith('__cbt_'))
+                            .map(t => (
+                              <option key={t.id} value={t.id}>
+                                {t.name} (NIP: {t.nip}) - {t.subject || t.role}
+                              </option>
+                            ))}
+                        </select>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setLocalSettingsForm(prev => ({
+                              ...prev,
+                              teacherName: currentTeacher.name,
+                              teacherNip: currentTeacher.nip || prev.teacherNip
+                            }));
+                          }}
+                          className="text-[10px] font-bold text-violet-600 dark:text-violet-400 bg-white dark:bg-slate-900 hover:bg-violet-50 dark:hover:bg-violet-950/60 px-2.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 transition cursor-pointer shadow-xs"
+                          title="Gunakan nama akun Admin yang sedang login"
+                        >
+                          Gunakan Akun Admin
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     {/* Nama Guru Pengampu */}
                     <div>
                       <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">
-                        Nama Guru Pengampu / Proktor:
+                        {currentTeacher?.role === 'admin'
+                          ? 'Nama Guru Pengampu / Proktor Default:'
+                          : 'Nama Guru Pengampu / Proktor:'}
                       </label>
                       <input
                         type="text"
@@ -8413,7 +8455,9 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                     {/* NIP Guru */}
                     <div>
                       <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">
-                        NIP Guru Pengampu / Proktor:
+                        {currentTeacher?.role === 'admin'
+                          ? 'NIP Guru Pengampu / Proktor Default:'
+                          : 'NIP Guru Pengampu / Proktor:'}
                       </label>
                       <input
                         type="text"
@@ -8424,27 +8468,48 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                       />
                     </div>
 
-                    {/* Quick Save Bar for Teacher Profile */}
+                    {/* Quick Save Bar */}
                     <div className="sm:col-span-2 flex items-center justify-between flex-wrap gap-2 pt-1">
                       <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                        💡 Perubahan nama & NIP akan langsung memperbarui profil akun guru Anda dan tersimpan permanen di Supabase Cloud.
+                        {currentTeacher?.role === 'admin'
+                          ? '💡 Nama & NIP di atas tersimpan permanen di Cloud Supabase sebagai penandatangan resmi default pada Dossier Siswa.'
+                          : '💡 Perubahan nama & NIP akan langsung memperbarui profil akun guru Anda dan tersimpan permanen di Supabase Cloud.'}
                       </p>
                       <button
                         type="button"
-                        onClick={handleSavePejabatSettings}
+                        onClick={() => {
+                          if (currentTeacher?.role === 'admin') {
+                            onUpdateSchoolSettings?.(localSettingsForm);
+                            setSettingsSavedToast(true);
+                            showThemedAlert(
+                              'Penandatangan Dossier Berhasil Disimpan',
+                              `Nama "${localSettingsForm.teacherName}" dan NIP "${localSettingsForm.teacherNip}" berhasil disimpan permanen ke Supabase Cloud untuk lembar cetak Dossier Siswa.`,
+                              'info'
+                            );
+                            setTimeout(() => setSettingsSavedToast(false), 3000);
+                          } else {
+                            handleSavePejabatSettings();
+                          }
+                        }}
                         className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 font-bold text-xs transition cursor-pointer shadow-xs"
                       >
                         <Save className="w-3.5 h-3.5 text-violet-600 dark:text-violet-400" />
-                        <span>Simpan Nama & NIP Guru</span>
+                        <span>
+                          {currentTeacher?.role === 'admin'
+                            ? 'Simpan Penandatangan Dossier'
+                            : 'Simpan Profil Saya'}
+                        </span>
                       </button>
                     </div>
                   </div>
 
-                  {/* Foto Profil Guru Pengampu (Khusus Akun Login Ini) */}
+                  {/* Foto Profil (Khusus Akun Login Ini) */}
                   {currentTeacher && (
                     <div className="pt-3 border-t border-slate-100 dark:border-slate-800">
                       <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1.5">
-                        Foto Profil Guru Pengampu (Akun: {currentTeacher.name}):
+                        {currentTeacher.role === 'admin'
+                          ? `Foto Profil Akun Administrator (${currentTeacher.name}):`
+                          : `Foto Profil Guru Pengampu (Akun: ${currentTeacher.name}):`}
                       </label>
                       <div className="flex items-center gap-4">
                         <div className="w-16 h-20 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center shrink-0 shadow-xs overflow-hidden">
@@ -8487,7 +8552,9 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                             )}
                           </div>
                           <p className="text-[10px] text-slate-400 leading-snug">
-                            Foto ini terisolasi khusus untuk akun Anda ({currentTeacher.name}) dan otomatis muncul di pojok kanan atas Navbar serta halaman verifikasi barcode. Guru lain yang login akan memiliki slot foto sendiri.
+                            {currentTeacher.role === 'admin'
+                              ? `Foto ini terikat khusus untuk akun Admin Anda (${currentTeacher.name}) dan otomatis muncul di pojok kanan atas Navbar.`
+                              : `Foto ini terisolasi khusus untuk akun Anda (${currentTeacher.name}) dan otomatis muncul di pojok kanan atas Navbar serta halaman verifikasi barcode.`}
                           </p>
                         </div>
                       </div>

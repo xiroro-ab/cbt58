@@ -1032,12 +1032,13 @@ export default function Home() {
   };
 
   const handleUpdateTeacher = (updatedTeacher: Teacher) => {
-    // Jika guru yang diperbarui adalah guru yang sedang login
-    if (currentTeacher?.id === updatedTeacher.id) {
-      setCurrentTeacher(updatedTeacher);
+    // 1. Jika guru yang diperbarui adalah guru yang sedang login
+    if (currentTeacher?.id === updatedTeacher.id || (currentTeacher?.email && currentTeacher.email.toLowerCase() === updatedTeacher.email?.toLowerCase())) {
+      const mergedCurrent = { ...currentTeacher, ...updatedTeacher };
+      setCurrentTeacher(mergedCurrent);
       if (typeof window !== 'undefined') {
         try {
-          localStorage.setItem('cbt_current_teacher', JSON.stringify(updatedTeacher));
+          localStorage.setItem('cbt_current_teacher', JSON.stringify(mergedCurrent));
         } catch (e) {}
       }
       // Sinkronkan mapel aktif jika perlu
@@ -1073,20 +1074,43 @@ export default function Home() {
       }
     }
 
+    // 2. Perbarui state teachers dan local cache
     setTeachers(prev => {
-      const updated = prev.map(t => t.id === updatedTeacher.id ? updatedTeacher : t);
+      const updated = prev.map(t => (t.id === updatedTeacher.id || (t.email && t.email.toLowerCase() === updatedTeacher.email?.toLowerCase())) ? updatedTeacher : t);
       if (typeof window !== 'undefined') {
         try {
           localStorage.setItem('cbt_cached_teachers', JSON.stringify(updated));
           if (updatedTeacher.photoUrl) {
             localStorage.setItem(`cbt_teacher_${updatedTeacher.id}_photo`, updatedTeacher.photoUrl);
+            if (updatedTeacher.nip) {
+              localStorage.setItem(`cbt_teacher_${updatedTeacher.nip}_photo`, updatedTeacher.photoUrl);
+            }
           }
         } catch (e) {}
       }
       return updated;
     });
 
-    // Simpan seluruh data akun guru (nama, NIP, email, PIN, role, mapel, kelas) ke Supabase Cloud
+    // 3. Sinkronkan juga ke schoolSettings jika guru yang di-edit adalah penandatangan default dossier
+    setSchoolSettings(prev => {
+      if (prev.teacherName === updatedTeacher.name || (prev.teacherNip && prev.teacherNip === updatedTeacher.nip)) {
+        const nextSettings = {
+          ...prev,
+          teacherName: updatedTeacher.name,
+          teacherNip: updatedTeacher.nip
+        };
+        saveSchoolSettingsToSupabase(nextSettings).catch(console.warn);
+        if (typeof window !== 'undefined') {
+          try {
+            localStorage.setItem('cbt_school_settings', JSON.stringify(nextSettings));
+          } catch (e) {}
+        }
+        return nextSettings;
+      }
+      return prev;
+    });
+
+    // 4. Simpan seluruh data akun guru (nama, NIP, email, PIN, role, mapel, kelas) ke Supabase Cloud
     updateTeacherInSupabase(updatedTeacher).catch(console.warn);
     updateTeacherPhotoInSupabase(updatedTeacher.id, updatedTeacher.photoUrl || '', updatedTeacher.nip).catch(console.warn);
     updateTeacherAssignmentsInSupabase(

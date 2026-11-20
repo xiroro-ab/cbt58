@@ -52,6 +52,13 @@ export const TeacherManagementModal: React.FC<TeacherManagementModalProps> = ({
   const [roleFilter, setRoleFilter] = useState<'all' | 'admin' | 'guru_mapel' | 'pengawas'>('all');
   const [showPinIds, setShowPinIds] = useState<Record<string, boolean>>({});
 
+  // Internal list of teachers for instant, reactive UI updates
+  const [teachersList, setTeachersList] = useState<Teacher[]>(teachers || []);
+
+  React.useEffect(() => {
+    setTeachersList(teachers || []);
+  }, [teachers]);
+
   // Sub-modal state for Edit / Add
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
   const [editingTeacher, setEditingTeacher] = useState<Teacher | null>(null);
@@ -74,7 +81,7 @@ export const TeacherManagementModal: React.FC<TeacherManagementModalProps> = ({
 
   // Filtered teachers list
   const filteredTeachers = useMemo(() => {
-    return (teachers || []).filter(t => {
+    return (teachersList || []).filter(t => {
       // Exclude internal configuration pseudo-rows
       if (t.id === '__cbt_school_settings__' || t.id === '__cbt_teacher_photos__' || t.nip?.startsWith('CFG-')) {
         return false;
@@ -89,18 +96,18 @@ export const TeacherManagementModal: React.FC<TeacherManagementModalProps> = ({
       const matchSubject = (t.subject || '').toLowerCase().includes(q);
       return matchName || matchNip || matchEmail || matchSubject;
     });
-  }, [teachers, roleFilter, searchQuery]);
+  }, [teachersList, roleFilter, searchQuery]);
 
   // Counts
   const counts = useMemo(() => {
-    const valid = (teachers || []).filter(t => !t.id?.startsWith('__cbt_'));
+    const valid = (teachersList || []).filter(t => !t.id?.startsWith('__cbt_'));
     return {
       all: valid.length,
       admin: valid.filter(t => t.role === 'admin').length,
       guru_mapel: valid.filter(t => t.role === 'guru_mapel').length,
       pengawas: valid.filter(t => t.role === 'pengawas').length
     };
-  }, [teachers]);
+  }, [teachersList]);
 
   if (!isOpen) return null;
 
@@ -158,8 +165,12 @@ export const TeacherManagementModal: React.FC<TeacherManagementModalProps> = ({
           : [{ id: 'asg-1', subject: formSubject, classes: formClasses }]
       };
 
+      // 1. Update internal list secara instan
+      setTeachersList(prev => prev.map(t => (t.id === updated.id || (editingTeacher.nip && t.nip === editingTeacher.nip)) ? updated : t));
+
+      // 2. Kirim update ke parent & Cloud
       onUpdateTeacher?.(updated);
-      showToast(`Data guru "${updated.name}" berhasil diperbarui.`);
+      showToast(`Data NIP & profil guru "${updated.name}" berhasil diperbarui.`);
       setIsFormModalOpen(false);
     } else {
       // ADD NEW TEACHER
@@ -178,6 +189,7 @@ export const TeacherManagementModal: React.FC<TeacherManagementModalProps> = ({
         status: 'Offline'
       };
 
+      setTeachersList(prev => [...prev, newTeacher]);
       await onAddTeacher?.(newTeacher);
       showToast(`Akun guru baru "${newTeacher.name}" berhasil dibuat.`);
       setIsFormModalOpen(false);
@@ -192,6 +204,7 @@ export const TeacherManagementModal: React.FC<TeacherManagementModalProps> = ({
       return;
     }
 
+    setTeachersList(prev => prev.filter(t => t.id !== teacherToDelete.id));
     await onDeleteTeacher?.(teacherToDelete.id);
     showToast(`Akun "${teacherToDelete.name}" telah berhasil dihapus.`);
     setTeacherToDelete(null);

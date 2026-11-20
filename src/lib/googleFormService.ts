@@ -125,68 +125,23 @@ function buatGoogleFormUjian() {
       }
 
       case 'Benar/Salah': {
-        const statements = (Array.isArray(q.options) ? q.options : []) as OptionItem[];
+        const statements = (Array.isArray(q.options) ? q.options : []) as any[];
 
-        // Jika soal Benar/Salah berupa multi-pernyataan (seperti tabel pernyataan AKM / ANBK)
+        // Jika soal Benar/Salah berupa multi-pernyataan: gunakan Kisi Pilihan Ganda (GridItem)
         if (statements.length > 0) {
-          // Parse kunci jawaban ke dalam array
-          let answersList: string[] = [];
-          if (Array.isArray(q.answer)) {
-            answersList = q.answer.map(a => String(a).trim());
-          } else if (typeof q.answer === 'string') {
-            if (q.answer.includes(',') || q.answer.includes(';') || q.answer.includes('/')) {
-              answersList = q.answer.split(/[,;\/]+/).map(a => a.trim());
-            } else {
-              answersList = [q.answer.trim()];
-            }
-          } else if (typeof q.answer === 'object' && q.answer !== null) {
-            answersList = Object.values(q.answer).map(a => String(a).trim());
-          }
-
-          // Tambahkan blok wacana / stimulus soal terlebih dahulu jika ada
-          if (qText) {
-            script += `  var secBS${qNum} = form.addSectionHeaderItem();
-  secBS${qNum}.setTitle(${JSON.stringify(`Soal No. ${qNum} (Benar / Salah)`)});
-  secBS${qNum}.setHelpText(${JSON.stringify(qText)});\n`;
-          }
-
-          const totalStatements = statements.length;
-          const basePoint = Math.max(1, Math.floor(points / totalStatements));
-          const remainder = points % totalStatements;
-
-          statements.forEach((stmt, sIdx) => {
-            const rawStmt = cleanHtmlText(stmt.text || `Pernyataan ${sIdx + 1}`);
-            // Bersihkan penomoran awal jika ada (e.g. "1. ") agar tidak dobel nomor
-            const cleanStmt = rawStmt.replace(/^\d+[\.\)]\s*/, '').trim();
-            const stmtTitle = `${qNum}.${sIdx + 1}. ${cleanStmt || rawStmt}`;
-
-            // Hitung poin per pernyataan agar totalnya pas sesuai bobot soal
-            const stmtPoint = Math.max(1, basePoint + (sIdx < remainder ? 1 : 0));
-
-            // Periksa kunci jawaban untuk pernyataan ini
-            const rawAns = (answersList[sIdx] || '').toLowerCase();
-            const isBenar = rawAns === 'benar' || rawAns === 'b' || rawAns === 'true' || rawAns === '1' || rawAns === 'ya';
-            const isSalah = rawAns === 'salah' || rawAns === 's' || rawAns === 'false' || rawAns === '0' || rawAns === 'tidak';
-
-            // Jika ada gambar per pernyataan
-            if (stmt.img && stmt.img.startsWith('http')) {
-              script += `  try {
-    var imgStmt${qNum}_${sIdx + 1} = UrlFetchApp.fetch(${JSON.stringify(stmt.img)}).getBlob();
-    form.addImageItem().setImage(imgStmt${qNum}_${sIdx + 1}).setTitle(${JSON.stringify(`Gambar Pernyataan ${qNum}.${sIdx + 1}`)});
-  } catch (errImg) {}\n`;
-            }
-
-            script += `  var qItem${qNum}_${sIdx + 1} = form.addMultipleChoiceItem();
-  qItem${qNum}_${sIdx + 1}.setTitle(${JSON.stringify(stmtTitle)});
-  qItem${qNum}_${sIdx + 1}.setPoints(${stmtPoint});
-  qItem${qNum}_${sIdx + 1}.setRequired(true);
-  qItem${qNum}_${sIdx + 1}.setChoices([
-    qItem${qNum}_${sIdx + 1}.createChoice("Benar", ${isBenar ? 'true' : 'false'}),
-    qItem${qNum}_${sIdx + 1}.createChoice("Salah", ${isSalah ? 'true' : 'false'})
-  ]);\n`;
+          const rows: string[] = statements.map((stmt, sIdx) => {
+            const raw = cleanHtmlText(typeof stmt === 'string' ? stmt : (stmt?.text || stmt?.statement || stmt?.row || `Pernyataan ${sIdx + 1}`));
+            const clean = raw.replace(/^\d+[\.\)]\s*/, '').trim();
+            return `${sIdx + 1}. ${clean || raw}`;
           });
 
-          script += `\n`;
+          script += `  // --- Soal No. ${qNum} (Kisi Benar/Salah) ---
+  var gridItem${qNum} = form.addGridItem();
+  gridItem${qNum}.setTitle(${JSON.stringify(`${qNum}. [Benar/Salah] ${qText}`)});
+  gridItem${qNum}.setRows(${JSON.stringify(rows)});
+  gridItem${qNum}.setColumns(["Benar", "Salah"]);
+  gridItem${qNum}.setRequired(true);
+  gridItem${qNum}.setHelpText("Pilih Benar atau Salah untuk setiap pernyataan di atas.");\n\n`;
         } else {
           // Format Benar/Salah Pernyataan Tunggal Klasik
           const rawAns = typeof q.answer === 'string' ? q.answer.trim().toLowerCase() : '';
@@ -235,10 +190,13 @@ function buatGoogleFormUjian() {
   qItem${qNum}.setTitle(${JSON.stringify(`${qNum}. [Isian Singkat] ${qText}`)});
   qItem${qNum}.setPoints(${points});
   qItem${qNum}.setRequired(true);
-`;
+  qItem${qNum}.setHelpText("Tuliskan jawaban singkat Anda.");\n`;
         if (q.answer) {
           const ansKey = Array.isArray(q.answer) ? q.answer.join(' / ') : String(q.answer);
-          script += `  qItem${qNum}.setHelpText(${JSON.stringify(`Kunci Jawaban Guru: ${ansKey}`)});\n`;
+          script += `  try {
+    var fbIsian${qNum} = FormApp.createFeedback().setText(${JSON.stringify(`Kunci Jawaban Guru: ${ansKey}`)}).build();
+    qItem${qNum}.setGeneralFeedback(fbIsian${qNum});
+  } catch (errFb) {}\n`;
         }
         script += `\n`;
         break;
@@ -249,10 +207,13 @@ function buatGoogleFormUjian() {
   qItem${qNum}.setTitle(${JSON.stringify(`${qNum}. [Esai / Uraian] ${qText}`)});
   qItem${qNum}.setPoints(${points});
   qItem${qNum}.setRequired(true);
-`;
+  qItem${qNum}.setHelpText("Tuliskan uraian jawaban Anda secara lengkap dan jelas.");\n`;
         if (q.answer) {
           const ansKey = Array.isArray(q.answer) ? q.answer.join('\n') : String(q.answer);
-          script += `  qItem${qNum}.setHelpText(${JSON.stringify(`Panduan Jawaban Guru: ${ansKey}`)});\n`;
+          script += `  try {
+    var fbEsai${qNum} = FormApp.createFeedback().setText(${JSON.stringify(`Panduan Jawaban Guru:\n${ansKey}`)}).build();
+    qItem${qNum}.setGeneralFeedback(fbEsai${qNum});
+  } catch (errFb) {}\n`;
         }
         script += `\n`;
         break;
@@ -270,10 +231,17 @@ function buatGoogleFormUjian() {
         }
 
         script += `  var qItem${qNum} = form.addParagraphTextItem();
-  qItem${qNum}.setTitle(${JSON.stringify(`${qNum}. [Menjodohkan] ${qText}${pairsText ? '\n\nPasangan Kunci Jawaban:\n' + pairsText : ''}`)});
+  qItem${qNum}.setTitle(${JSON.stringify(`${qNum}. [Menjodohkan] ${qText}`)});
   qItem${qNum}.setPoints(${points});
   qItem${qNum}.setRequired(true);
-  qItem${qNum}.setHelpText("Tuliskan pasangan jawaban yang tepat di kolom jawaban.");\n\n`;
+  qItem${qNum}.setHelpText("Pasangkan premis dengan jawaban yang tepat di kolom jawaban.");\n`;
+        if (pairsText) {
+          script += `  try {
+    var fbPair${qNum} = FormApp.createFeedback().setText(${JSON.stringify(`Kunci Pasangan Guru:\n${pairsText}`)}).build();
+    qItem${qNum}.setGeneralFeedback(fbPair${qNum});
+  } catch (errFb) {}\n`;
+        }
+        script += `\n`;
         break;
       }
 

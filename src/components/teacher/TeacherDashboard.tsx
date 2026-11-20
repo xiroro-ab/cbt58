@@ -7,6 +7,7 @@ import { useLanguage } from '@/context/LanguageContext';
 import { StudentManagement } from './StudentManagement';
 import { AiQuestionGeneratorModal } from './AiQuestionGeneratorModal';
 import { ImportQuestionsModal } from './ImportQuestionsModal';
+import { GoogleFormExportModal } from './GoogleFormExportModal';
 import { extractSubjectAndGrade } from '@/lib/aiQuestionGenerator';
 import { downloadQuestionsBackup } from '@/lib/backupService';
 import { evaluateFullExam, calculateSingleQuestionScore } from '@/lib/scoringEngine';
@@ -40,6 +41,7 @@ import {
   XCircle,
   HelpCircle,
   Bot,
+  FormInput,
   Search,
   Filter,
   Check,
@@ -1030,6 +1032,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   // AI Question Generator Modal State & Handler
   const [isAiModalOpen, setIsAiModalOpen] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [isGoogleFormModalOpen, setIsGoogleFormModalOpen] = useState(false);
   const handleSaveAiQuestions = (newQuestions: Question[]) => {
     newQuestions.forEach(q => {
       onAddQuestion(q);
@@ -4904,8 +4907,8 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                     <span>Hapus Mapel</span>
                   </button>
 
-                  {/* Di HP: Grid 3 Kolom Seimbang untuk AI, Import & Backup Soal */}
-                  <div className="grid grid-cols-3 sm:flex sm:items-center gap-2 w-full sm:w-auto">
+                  {/* Di HP: Grid 4 Kolom Seimbang untuk AI, Import, Backup & G-Form */}
+                  <div className="grid grid-cols-4 sm:flex sm:items-center gap-2 w-full sm:w-auto">
                     <button
                       type="button"
                       onClick={() => setIsAiModalOpen(true)}
@@ -4934,6 +4937,26 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                     >
                       <Download className="w-4 h-4 shrink-0" />
                       <span>Backup</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (bankSubjectQuestions.length === 0) {
+                          showThemedAlert(
+                            'Bank Soal Masih Kosong',
+                            'Silakan buat atau import butir soal terlebih dahulu sebelum mengekspor ke Google Form.',
+                            'warning'
+                          );
+                          return;
+                        }
+                        setIsGoogleFormModalOpen(true);
+                      }}
+                      className="flex items-center justify-center gap-1.5 px-3 py-2.5 sm:px-3.5 sm:py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-semibold text-xs shadow-md shadow-purple-600/20 transition cursor-pointer w-full sm:w-auto"
+                      title="Export butir soal langsung jadi Google Form (Kuis)"
+                    >
+                      <FormInput className="w-4 h-4 shrink-0" />
+                      <span>G-Form</span>
                     </button>
                   </div>
 
@@ -10710,6 +10733,18 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
           currentSubject={currentBankSubject}
           existingQuestionsCount={bankSubjectQuestions.length}
           onSaveQuestions={handleSaveImportedQuestions}
+        />
+      </div>
+
+      {/* ============================================================== */}
+      {/* 8C. MODAL EXPORT TO GOOGLE FORM                                */}
+      {/* ============================================================== */}
+      <div className="print:hidden">
+        <GoogleFormExportModal
+          isOpen={isGoogleFormModalOpen}
+          onClose={() => setIsGoogleFormModalOpen(false)}
+          subject={currentBankSubject}
+          questions={bankSubjectQuestions}
         />
       </div>
 

@@ -18,6 +18,7 @@ import { resolveStudentSingleClass, isClassInGrade } from '@/lib/rosterStudents'
 import { initialTeachers } from '@/lib/rosterTeachers';
 import { TTESignatureSeal } from '@/components/common/TTESignatureSeal';
 import { ClassRecapModal } from '../modals/ClassRecapModal';
+import { TeacherManagementModal } from './TeacherManagementModal';
 import {
   TrendingUp,
   Award,
@@ -113,6 +114,8 @@ interface TeacherDashboardProps {
   schoolSettings?: SchoolSettings;
   onUpdateSchoolSettings?: (settings: SchoolSettings) => void;
   onUpdateTeacher?: (updatedTeacher: Teacher) => void;
+  onAddTeacher?: (newTeacher: Teacher) => Promise<boolean> | void;
+  onDeleteTeacher?: (teacherId: string) => Promise<boolean> | void;
 }
 
 // Kata-kata umum mata pelajaran yang dikecualikan dari pemotongan kata kunci agar tidak terjadi kebocoran mapel lintas guru
@@ -211,7 +214,9 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   onOpenCertificates,
   schoolSettings,
   onUpdateSchoolSettings,
-  onUpdateTeacher
+  onUpdateTeacher,
+  onAddTeacher,
+  onDeleteTeacher
 }) => {
   const { language, t } = useLanguage();
   const [selectedResult, setSelectedResult] = useState<ExamResult | null>(null);
@@ -237,8 +242,8 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
       principalNip: schoolSettings?.principalNip || '19680512 199412 2 001',
       principalTitle: schoolSettings?.principalTitle || `Kepala ${schoolSettings?.schoolName?.replace('SMP NEGERI ', 'SMPN ') || 'SMPN 58 Palembang'}`,
       principalPhoto: schoolSettings?.principalPhoto || '',
-      teacherName: currentTeacher?.name || schoolSettings?.teacherName || 'Aris Bermansyah, S.Kom',
-      teacherNip: currentTeacher?.nip || schoolSettings?.teacherNip || '199611142024211010',
+      teacherName: schoolSettings?.teacherName || currentTeacher?.name || 'Aris Bermansyah, S.Kom',
+      teacherNip: schoolSettings?.teacherNip || currentTeacher?.nip || '199611142024211010',
       city: schoolSettings?.city || 'Palembang',
       enableTTE: schoolSettings?.enableTTE !== false,
       tteType: schoolSettings?.tteType || 'qrcode',
@@ -251,6 +256,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   const [localSettingsForm, setLocalSettingsForm] = useState<SchoolSettings>(effectiveSchoolSettings);
   const [settingsSavedToast, setSettingsSavedToast] = useState(false);
   const [isKopSettingsOpen, setIsKopSettingsOpen] = useState(true);
+  const [isTeacherManagementModalOpen, setIsTeacherManagementModalOpen] = useState(false);
 
   // Penugasan Mengajar (Mapel & Rombel Kelas)
   const [selectedAssignmentTeacherId, setSelectedAssignmentTeacherId] = useState<string>(currentTeacher?.id || '');
@@ -422,6 +428,29 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
     showThemedAlert(
       'Penugasan Mengajar Berhasil Disimpan',
       `Penugasan mengajar untuk ${targetAssignmentTeacher.name} (${cleanAssignments.length} mapel, ${cleanAssignments.map(a => a.classes.length).reduce((a, b) => a + b, 0)} rombel) telah berhasil disimpan permanen ke Cloud Database Supabase. Bank soal yang telah dibuat tetap aman dan tidak tertukar.`,
+      'info'
+    );
+    setTimeout(() => setSettingsSavedToast(false), 3000);
+  };
+
+  const handleSavePejabatSettings = () => {
+    // 1. Simpan ke School Settings (Cloud Supabase)
+    onUpdateSchoolSettings?.(localSettingsForm);
+
+    // 2. Simpan juga ke Profil Akun Guru yang sedang login (Cloud Supabase & local storage cache)
+    if (currentTeacher) {
+      const updatedTeacherObj: Teacher = {
+        ...currentTeacher,
+        name: (localSettingsForm.teacherName || currentTeacher.name).trim(),
+        nip: (localSettingsForm.teacherNip || currentTeacher.nip).trim()
+      };
+      onUpdateTeacher?.(updatedTeacherObj);
+    }
+
+    setSettingsSavedToast(true);
+    showThemedAlert(
+      'Pengaturan & Profil Guru Tersimpan ke Cloud',
+      'Data nama kepala sekolah, profil guru pengampu (nama & NIP), dan konfigurasi TTE digital telah berhasil disimpan ke Cloud Database Supabase dan disinkronkan ke seluruh sistem.',
       'info'
     );
     setTimeout(() => setSettingsSavedToast(false), 3000);
@@ -7313,6 +7342,18 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                   <span>{isAssignmentSectionOpen ? '▲' : '▼'}</span>
                 </button>
 
+                {currentTeacher?.role === 'admin' && (
+                  <button
+                    type="button"
+                    onClick={() => setIsTeacherManagementModalOpen(true)}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 font-semibold text-xs transition cursor-pointer shrink-0"
+                    title="Buka panel kelola akun dewan guru"
+                  >
+                    <Users className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+                    <span>Kelola Akun Guru ({teachers.length})</span>
+                  </button>
+                )}
+
                 <button
                   type="button"
                   onClick={handleSaveTeacherAssignments}
@@ -7631,6 +7672,18 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                   <span>{isKopSettingsOpen ? 'Tutup Pengaturan' : 'Buka Pengaturan'}</span>
                   <span>{isKopSettingsOpen ? '▲' : '▼'}</span>
                 </button>
+
+                {currentTeacher?.role === 'admin' && (
+                  <button
+                    type="button"
+                    onClick={() => setIsTeacherManagementModalOpen(true)}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 font-semibold text-xs transition cursor-pointer shrink-0"
+                    title="Buka panel kelola akun dewan guru (Tambah, Edit, Reset PIN, Hapus)"
+                  >
+                    <Users className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+                    <span>Kelola Akun Guru ({teachers.length})</span>
+                  </button>
+                )}
 
                 <button
                   type="button"
@@ -8171,23 +8224,28 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                 </p>
               </div>
 
-              <button
-                type="button"
-                onClick={() => {
-                  onUpdateSchoolSettings?.(localSettingsForm);
-                  setSettingsSavedToast(true);
-                  showThemedAlert(
-                    'Pengaturan Tersimpan ke Database Cloud',
-                    'Data nama kepala sekolah, foto resmi, guru pengampu, dan konfigurasi TTE digital telah berhasil disimpan ke Cloud Database Supabase dan tersinkronisasi ke seluruh akun guru & proktor.',
-                    'info'
-                  );
-                  setTimeout(() => setSettingsSavedToast(false), 3000);
-                }}
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 font-semibold text-xs transition cursor-pointer shrink-0"
-              >
-                <Save className="w-4 h-4 text-violet-600 dark:text-violet-400" />
-                <span>Simpan Pengaturan Pejabat & TTE</span>
-              </button>
+              <div className="flex items-center gap-2 flex-wrap shrink-0">
+                {currentTeacher?.role === 'admin' && (
+                  <button
+                    type="button"
+                    onClick={() => setIsTeacherManagementModalOpen(true)}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 font-semibold text-xs transition cursor-pointer"
+                    title="Buka panel kelola akun dewan guru (Tambah, Edit, Reset PIN, Hapus)"
+                  >
+                    <Users className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+                    <span>Kelola Akun Guru ({teachers.length})</span>
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  onClick={handleSavePejabatSettings}
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 font-semibold text-xs transition cursor-pointer shrink-0"
+                >
+                  <Save className="w-4 h-4 text-violet-600 dark:text-violet-400" />
+                  <span>Simpan Pengaturan Pejabat & TTE</span>
+                </button>
+              </div>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -8311,6 +8369,26 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                           Gunakan Akun Login ({currentTeacher.name.split(',')[0]})
                         </button>
                       )}
+                      <button
+                        type="button"
+                        onClick={handleSavePejabatSettings}
+                        className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 font-bold text-xs transition cursor-pointer"
+                        title="Simpan perubahan nama & NIP akun guru ke Supabase Cloud"
+                      >
+                        <Save className="w-3.5 h-3.5 text-violet-600 dark:text-violet-400" />
+                        <span>Simpan Profil Saya</span>
+                      </button>
+                      {currentTeacher?.role === 'admin' && (
+                        <button
+                          type="button"
+                          onClick={() => setIsTeacherManagementModalOpen(true)}
+                          className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 font-bold text-xs transition cursor-pointer"
+                          title="Kelola semua akun guru (Edit, Tambah, Reset PIN, Hapus)"
+                        >
+                          <Users className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+                          <span>Kelola Akun Guru ({teachers.length})</span>
+                        </button>
+                      )}
                       <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800">
                         👨‍🏫 Digunakan pada Cetak Dossier Siswa
                       </span>
@@ -8344,6 +8422,21 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                         placeholder="199611142024211010"
                         className="w-full p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-mono font-semibold text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-500"
                       />
+                    </div>
+
+                    {/* Quick Save Bar for Teacher Profile */}
+                    <div className="sm:col-span-2 flex items-center justify-between flex-wrap gap-2 pt-1">
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                        💡 Perubahan nama & NIP akan langsung memperbarui profil akun guru Anda dan tersimpan permanen di Supabase Cloud.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={handleSavePejabatSettings}
+                        className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 font-bold text-xs transition cursor-pointer shadow-xs"
+                      >
+                        <Save className="w-3.5 h-3.5 text-violet-600 dark:text-violet-400" />
+                        <span>Simpan Nama & NIP Guru</span>
+                      </button>
                     </div>
                   </div>
 
@@ -10766,6 +10859,20 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
         currentTeacher={currentTeacher}
         initialClass={recapModalClass || (resultsClassFilter !== 'ALL' ? resultsClassFilter : (availableClasses[0] || 'VII.1'))}
         initialSubjectId={resultsSubjectFilter !== 'ALL' ? resultsSubjectFilter : (selectedBankSubjectId || subject.id)}
+      />
+
+      {/* ============================================================== */}
+      {/* 14. MODAL KELOLA AKUN GURU (ADMIN ONLY)                        */}
+      {/* ============================================================== */}
+      <TeacherManagementModal
+        isOpen={isTeacherManagementModalOpen}
+        onClose={() => setIsTeacherManagementModalOpen(false)}
+        teachers={teachers}
+        currentTeacher={currentTeacher || null}
+        allSubjects={accessibleSubjects}
+        onUpdateTeacher={onUpdateTeacher}
+        onAddTeacher={onAddTeacher}
+        onDeleteTeacher={onDeleteTeacher}
       />
     </div>
   );

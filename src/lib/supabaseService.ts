@@ -2420,6 +2420,61 @@ export async function updateTeacherAssignmentsInSupabase(
 }
 
 /**
+ * Memperbarui profil akun guru (nama, NIP, email, pin, role, mapel, kelas) di Cloud Supabase
+ */
+export async function updateTeacherInSupabase(t: Teacher): Promise<boolean> {
+  try {
+    const payload = {
+      id: t.id,
+      name: t.name,
+      nip: t.nip,
+      email: t.email,
+      subject: t.subject,
+      classes: t.classes || [],
+      assignments: t.assignments || [],
+      role: t.role || 'guru_mapel',
+      pin: t.pin || '123456',
+      avatar_color: t.avatarColor || 'bg-violet-600'
+    };
+
+    // Gunakan upsert dengan onConflict id agar jika akun guru belum ada di Supabase, langsung dibuatkan
+    const { error } = await supabase
+      .from('teachers')
+      .upsert(payload, { onConflict: 'id' });
+
+    if (error) {
+      console.warn('Gagal updateTeacherInSupabase:', error.message);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error('Exception updateTeacherInSupabase:', err);
+    return false;
+  }
+}
+
+/**
+ * Menghapus akun guru dari Cloud Supabase
+ */
+export async function deleteTeacherInSupabase(teacherId: string): Promise<boolean> {
+  try {
+    const { error } = await supabase
+      .from('teachers')
+      .delete()
+      .eq('id', teacherId);
+
+    if (error) {
+      console.warn('Gagal deleteTeacherInSupabase:', error.message);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error('Exception deleteTeacherInSupabase:', err);
+    return false;
+  }
+}
+
+/**
  * Pengaturan Default Sekolah Resmi (Kop Surat, Pejabat & TTE)
  */
 export const defaultSchoolSettings: SchoolSettings = {

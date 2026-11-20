@@ -60,6 +60,8 @@ import {
   bulkRemoveStudentsFromSupabase,
   fetchTeachers,
   insertTeacher,
+  updateTeacherInSupabase,
+  deleteTeacherInSupabase,
   updateTeacherStatusInSupabase,
   subscribeToTeacherStatus,
   updateTeacherPhotoInSupabase,
@@ -1033,6 +1035,11 @@ export default function Home() {
     // Jika guru yang diperbarui adalah guru yang sedang login
     if (currentTeacher?.id === updatedTeacher.id) {
       setCurrentTeacher(updatedTeacher);
+      if (typeof window !== 'undefined') {
+        try {
+          localStorage.setItem('cbt_current_teacher', JSON.stringify(updatedTeacher));
+        } catch (e) {}
+      }
       // Sinkronkan mapel aktif jika perlu
       const hasCurrentMapel = updatedTeacher.assignments?.some(a => a.subject === activeAssignmentSubject);
       if (!hasCurrentMapel) {
@@ -1079,6 +1086,8 @@ export default function Home() {
       return updated;
     });
 
+    // Simpan seluruh data akun guru (nama, NIP, email, PIN, role, mapel, kelas) ke Supabase Cloud
+    updateTeacherInSupabase(updatedTeacher).catch(console.warn);
     updateTeacherPhotoInSupabase(updatedTeacher.id, updatedTeacher.photoUrl || '', updatedTeacher.nip).catch(console.warn);
     updateTeacherAssignmentsInSupabase(
       updatedTeacher.id,
@@ -1086,6 +1095,46 @@ export default function Home() {
       updatedTeacher.subject || '',
       updatedTeacher.classes || []
     ).catch(console.warn);
+  };
+
+  const handleAddTeacher = async (newTeacher: Teacher): Promise<boolean> => {
+    setTeachers(prev => {
+      const updated = [...prev, newTeacher];
+      if (typeof window !== 'undefined') {
+        try {
+          localStorage.setItem('cbt_cached_teachers', JSON.stringify(updated));
+        } catch (e) {}
+      }
+      return updated;
+    });
+
+    try {
+      const ok = await insertTeacher(newTeacher);
+      return ok;
+    } catch (err) {
+      console.warn('Gagal insertTeacher:', err);
+      return false;
+    }
+  };
+
+  const handleDeleteTeacher = async (teacherId: string): Promise<boolean> => {
+    setTeachers(prev => {
+      const updated = prev.filter(t => t.id !== teacherId);
+      if (typeof window !== 'undefined') {
+        try {
+          localStorage.setItem('cbt_cached_teachers', JSON.stringify(updated));
+        } catch (e) {}
+      }
+      return updated;
+    });
+
+    try {
+      const ok = await deleteTeacherInSupabase(teacherId);
+      return ok;
+    } catch (err) {
+      console.warn('Gagal deleteTeacherInSupabase:', err);
+      return false;
+    }
   };
 
   const handleStartExam = async (e: React.FormEvent) => {
@@ -2317,6 +2366,8 @@ export default function Home() {
               schoolSettings={schoolSettings}
               onUpdateSchoolSettings={handleUpdateSchoolSettings}
               onUpdateTeacher={handleUpdateTeacher}
+              onAddTeacher={handleAddTeacher}
+              onDeleteTeacher={handleDeleteTeacher}
             />
           </ErrorBoundary>
         </main>

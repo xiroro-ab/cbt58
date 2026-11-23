@@ -9894,7 +9894,27 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
               </div>
             )}
 
-            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-3xl w-full max-h-[90vh] overflow-y-auto p-5 sm:p-7 space-y-5 shadow-2xl animate-in zoom-in-95 print:border-none print:shadow-none print:max-w-none print:max-h-none print:overflow-visible print:p-0 print:bg-white print:text-black print:w-full print:space-y-4">
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-3xl w-full max-h-[90vh] flex flex-col overflow-hidden shadow-2xl animate-in zoom-in-95 print:border-none print:shadow-none print:max-w-none print:max-h-none print:overflow-visible print:block print:bg-white print:text-black print:w-full">
+              {/* HEADER ATAS MODAL DOSSIER (SELALU TERLIHAT TANPA PERLU SCROLL) */}
+              <div className="flex items-center justify-between gap-3 px-5 sm:px-7 py-3.5 border-b border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 shrink-0 print:hidden">
+                <div className="flex items-center gap-2 min-w-0">
+                  <FileText className="w-4 h-4 text-violet-600 dark:text-violet-400 shrink-0" />
+                  <span className="text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-100 truncate">
+                    Dossier Jawaban • {formatProperName(selectedResult.studentName)} ({cleanDossierClass})
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSelectedResult(null)}
+                  title="Tutup Dossier"
+                  aria-label="Tutup Dossier"
+                  className="p-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-transparent hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition cursor-pointer shrink-0"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-5 sm:p-7 space-y-5 print:overflow-visible print:p-0 print:space-y-4">
               {/* KOP SURAT RESMI KHUSUS CETAK DOSSIER (DUAL LOGO RESMI) */}
               <div className="hidden print:block border-b-4 border-double border-slate-900 pb-2 mb-4 text-center">
                 <div className="flex items-center justify-between gap-4">
@@ -10624,6 +10644,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                     </button>
                   </div>
                 </div>
+              </div>
               </div>
             </div>
           </div>

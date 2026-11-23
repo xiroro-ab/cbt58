@@ -530,12 +530,18 @@ async function findCommandRows(
 function pickCommandRow(rows: CommandRow[], className?: string): CommandRow | null {
   if (!rows || rows.length === 0) return null;
   const cleanClass = (className || '').toLowerCase().trim();
+  const eligibleRows = cleanClass
+    ? rows.filter(r => !r.className || r.className === cleanClass)
+    : rows;
+
+  if (eligibleRows.length === 0) return null;
+
   if (cleanClass) {
-    const exact = rows.find(r => r.className === cleanClass);
+    const exact = eligibleRows.find(r => r.className === cleanClass);
     if (exact) return exact;
   }
-  // Prioritaskan row yang memiliki command aktif
-  const withCommand = rows.find(r => {
+  // Prioritaskan row yang memiliki command aktif pada rombel yang cocok
+  const withCommand = eligibleRows.find(r => {
     try {
       const p = JSON.parse(r.message || '{}');
       return Boolean(p.command);
@@ -544,7 +550,7 @@ function pickCommandRow(rows: CommandRow[], className?: string): CommandRow | nu
     }
   });
   if (withCommand) return withCommand;
-  return rows[0] || null;
+  return eligibleRows[0] || null;
 }
 
 export async function writeProctorCommand(
@@ -630,10 +636,14 @@ export async function readProctorCommand(
     if (!parsed.command) return null;
     if (!['FORCE_FINISH', 'RESET_VIOLATION', 'RESET_EXAM'].includes(parsed.command)) return null;
 
+    // Abaikan perintah pengawas yang sudah kadaluarsa (> 5 menit) agar sisa perintah lama tidak memaksa siswa keluar mendadak saat sesi baru dimulai
+    const cmdAt = Number(parsed.commandAt) || 0;
+    if (cmdAt > 0 && Date.now() - cmdAt > 5 * 60 * 1000) return null;
+
     return {
       id: String(parsed.commandId || `cmd_${parsed.commandAt || Date.now()}`),
       action: parsed.command as ProctorCommandAction,
-      commandAt: Number(parsed.commandAt) || Date.now(),
+      commandAt: cmdAt || Date.now(),
       score: typeof parsed.score === 'number' ? parsed.score : undefined,
       totalEarned: typeof parsed.totalEarned === 'number' ? parsed.totalEarned : undefined,
       totalMax: typeof parsed.totalMax === 'number' ? parsed.totalMax : undefined
@@ -665,6 +675,9 @@ export async function clearProctorCommand(
       delete parsed.command;
       delete parsed.commandAt;
       delete parsed.commandId;
+      delete parsed.score;
+      delete parsed.totalEarned;
+      delete parsed.totalMax;
 
       await supabase
         .from('exam_notifications')

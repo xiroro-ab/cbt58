@@ -142,20 +142,36 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
   });
 
   const [secondsRemaining, setSecondsRemaining] = useState<number>(() => {
+    const safeDurationSeconds = Math.max(
+      60,
+      (typeof subject.durationMinutes === 'number' && subject.durationMinutes > 0 ? subject.durationMinutes : 60) * 60
+    );
+    const hasServerSessionTime = typeof initialRemainingSeconds === 'number' && initialRemainingSeconds > 0;
+    const hasLocalAnsweredItems = Boolean(
+      savedLocalState &&
+      Array.isArray(savedLocalState.answers) &&
+      savedLocalState.answers.some((a: any) => a?.answer !== null && a?.answer !== '')
+    );
+
     if (savedLocalState && typeof savedLocalState.secondsRemaining === 'number' && savedLocalState.secondsRemaining > 0) {
       if (savedLocalState.lastSavedTime && typeof savedLocalState.lastSavedTime === 'number') {
         const elapsedSinceLastSave = Math.floor((Date.now() - savedLocalState.lastSavedTime) / 1000);
         if (elapsedSinceLastSave > 0) {
           const restored = Math.max(0, savedLocalState.secondsRemaining - elapsedSinceLastSave);
-          if (restored > 0) return restored;
-          if (typeof initialRemainingSeconds === 'number' && initialRemainingSeconds > 0) return initialRemainingSeconds;
-          return subject.durationMinutes * 60;
+          // Cegah sisa waktu localStorage usang (< 15 detik) tanpa sesi server & tanpa jawaban memicu submit 0% seketika saat baru membuka ujian
+          if (restored > 0 && (restored >= 15 || hasServerSessionTime || hasLocalAnsweredItems)) {
+            return restored;
+          }
+          if (hasServerSessionTime) return initialRemainingSeconds;
+          return safeDurationSeconds;
         }
       }
-      return savedLocalState.secondsRemaining;
+      if (savedLocalState.secondsRemaining >= 15 || hasServerSessionTime || hasLocalAnsweredItems) {
+        return savedLocalState.secondsRemaining;
+      }
     }
-    if (typeof initialRemainingSeconds === 'number' && initialRemainingSeconds > 0) return initialRemainingSeconds;
-    return subject.durationMinutes * 60;
+    if (hasServerSessionTime) return initialRemainingSeconds;
+    return safeDurationSeconds;
   });
 
   const [violationCount, setViolationCount] = useState<number>(() => {

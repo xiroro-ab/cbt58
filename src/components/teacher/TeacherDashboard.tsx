@@ -99,7 +99,7 @@ interface TeacherDashboardProps {
   onAddQuestion: (newQuestion: Question) => void;
   onUpdateQuestion?: (updatedQuestion: Question) => void;
   onDeleteQuestion: (questionId: string) => void;
-  onUpdateResult?: (updatedResult: ExamResult) => void;
+  onUpdateResult?: (updatedResult: ExamResult, skipRemoteWrite?: boolean) => void | Promise<void>;
   onDeleteResult?: (resultId: string, subjectId?: string, studentName?: string, className?: string) => void;
   onAddStudent?: (s: Student) => void;
   onUpdateStudent?: (s: Student) => void;
@@ -221,6 +221,9 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
 }) => {
   const { language, t } = useLanguage();
   const [selectedResult, setSelectedResult] = useState<ExamResult | null>(null);
+  const [isLoadingDossierAnswers, setIsLoadingDossierAnswers] = useState(false);
+  const [isRecalculatingScores, setIsRecalculatingScores] = useState(false);
+  const repairedResultIdsRef = useRef<Set<string>>(new Set());
   const [selectedResultIds, setSelectedResultIds] = useState<string[]>([]);
   const [manualEssayScores, setManualEssayScores] = useState<Record<string, number>>({});
   const [essaySavedNotice, setEssaySavedNotice] = useState(false);
@@ -765,6 +768,8 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   };
 
   // DOSSIER COMPUTATIONS
+  const [fetchedDossierQuestions, setFetchedDossierQuestions] = useState<Question[]>([]);
+
   const dossierSubject = useMemo(() => {
     if (!selectedResult) return subject;
     return (allSubjects || []).find(s => s.id === selectedResult.subjectId) || subject;
@@ -772,9 +777,16 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
 
   const dossierQuestions = useMemo(() => {
     if (!selectedResult) return [];
-    // 1. Direct match by subjectId
+    const hasKeys = (qList: Question[]) =>
+      qList.some(q => q.type === 'Esai' || (q.answer !== undefined && q.answer !== null && q.answer !== ''));
+
+    // 0. Prioritaskan soal segar dari Supabase jika baru diambil khusus untuk Dossier ini
+    const fetchedMatches = fetchedDossierQuestions.filter(q => q.subjectId === selectedResult.subjectId);
+    if (fetchedMatches.length > 0 && hasKeys(fetchedMatches)) return fetchedMatches;
+
+    // 1. Direct match by subjectId (hanya jika memiliki kunci jawaban valid)
     const directMatches = questions.filter(q => q.subjectId === selectedResult.subjectId);
-    if (directMatches.length > 0) return directMatches;
+    if (directMatches.length > 0 && hasKeys(directMatches)) return directMatches;
 
     // 2. Direct match by subject title
     if (selectedResult.subjectTitle) {
@@ -782,7 +794,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
         const sub = (allSubjects || []).find(s => s.id === q.subjectId);
         return sub && sub.title.toLowerCase().trim() === selectedResult.subjectTitle.toLowerCase().trim();
       });
-      if (titleMatches.length > 0) return titleMatches;
+      if (titleMatches.length > 0 && hasKeys(titleMatches)) return titleMatches;
     }
 
     // 3. Fallback localStorage specific key
@@ -791,7 +803,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
         const stored = localStorage.getItem(`cbt_questions_${selectedResult.subjectId}`);
         if (stored) {
           const parsed = JSON.parse(stored);
-          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+          if (Array.isArray(parsed) && parsed.length > 0 && hasKeys(parsed)) return parsed;
         }
       } catch {}
 
@@ -803,7 +815,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
             const stored = localStorage.getItem(key);
             if (stored) {
               const parsed = JSON.parse(stored);
-              if (Array.isArray(parsed) && parsed.some(q => (selectedResult.answers || []).some(a => a.questionId === q.id))) {
+              if (Array.isArray(parsed) && parsed.some(q => (selectedResult.answers || []).some(a => a.questionId === q.id)) && hasKeys(parsed)) {
                 return parsed;
               }
             }
@@ -811,6 +823,8 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
         }
       } catch {}
     }
+
+    if (directMatches.length > 0) return directMatches;
 
     // 5. Fallback reconstruction from selectedResult.details
     if (selectedResult.details && selectedResult.details.length > 0) {
@@ -839,15 +853,26 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
     }
 
     return directMatches;
-  }, [selectedResult, questions, allSubjects]);
+  }, [selectedResult, questions, fetchedDossierQuestions, allSubjects]);
 
   useEffect(() => {
     if (selectedResult?.subjectId) {
-      const hasQ = questions.some(q => q.subjectId === selectedResult.subjectId);
-      if (!hasQ) {
+      const hasValidQ =
+        questions.some(
+          q => q.subjectId === selectedResult.subjectId &&
+            (q.type === 'Esai' || (q.answer !== undefined && q.answer !== null && q.answer !== ''))
+        ) ||
+        fetchedDossierQuestions.some(
+          q => q.subjectId === selectedResult.subjectId &&
+            (q.type === 'Esai' || (q.answer !== undefined && q.answer !== null && q.answer !== ''))
+        );
+      if (!hasValidQ) {
         fetchQuestionsBySubject(selectedResult.subjectId).then(fetched => {
           if (fetched && fetched.length > 0) {
-            fetched.forEach(q => onAddQuestion(q));
+            setFetchedDossierQuestions(prev => [
+              ...prev.filter(q => q.subjectId !== selectedResult.subjectId),
+              ...fetched
+            ]);
           }
         }).catch(() => {});
       }
@@ -855,7 +880,10 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
   }, [selectedResult?.subjectId]);
 
   useEffect(() => {
-    if (!selectedResult) return;
+    if (!selectedResult) {
+      setIsLoadingDossierAnswers(false);
+      return;
+    }
     setManualEssayScores(selectedResult.essayScores || {});
     setEssayMaxNotice(null);
     setEssaySavedNotice(false);
@@ -863,27 +891,81 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
     // Jawaban tidak diunduh saat daftar nilai di-fetch (hemat egress).
     // Ambil on-demand saat dossier dibuka, lalu inject ke selectedResult.
     if (!selectedResult.answers || selectedResult.answers.length === 0) {
-      fetchExamResultAnswers(selectedResult.id).then(answers => {
-        if (answers && answers.length > 0) {
-          setSelectedResult(prev =>
-            prev && prev.id === selectedResult.id
-              ? { ...prev, answers }
-              : prev
-          );
-        }
-      }).catch(() => {});
+      let active = true;
+      setIsLoadingDossierAnswers(true);
+      fetchExamResultAnswers(selectedResult.id, {
+        subjectId: selectedResult.subjectId,
+        studentName: selectedResult.studentName,
+        className: selectedResult.className
+      })
+        .then(answers => {
+          if (active && answers && answers.length > 0) {
+            setSelectedResult(prev =>
+              prev && prev.id === selectedResult.id
+                ? { ...prev, answers }
+                : prev
+            );
+          }
+        })
+        .catch(() => {})
+        .finally(() => {
+          if (active) setIsLoadingDossierAnswers(false);
+        });
+      return () => { active = false; };
+    } else {
+      setIsLoadingDossierAnswers(false);
     }
   }, [selectedResult?.id]);
 
   const liveDossierEval = useMemo(() => {
     if (!selectedResult) return null;
+    const hasAnswers = Array.isArray(selectedResult.answers) && selectedResult.answers.length > 0;
+    if (isLoadingDossierAnswers && !hasAnswers) return null;
+    if (!hasAnswers && (selectedResult.score > 0 || selectedResult.totalEarned > 0)) return null;
+    if (dossierQuestions.length === 0) return null;
     return evaluateFullExam(
       dossierQuestions,
       selectedResult.answers || [],
       dossierSubject.scoringRules || {},
       manualEssayScores
     );
-  }, [selectedResult, dossierQuestions, dossierSubject.scoringRules, manualEssayScores]);
+  }, [selectedResult, isLoadingDossierAnswers, dossierQuestions, dossierSubject.scoringRules, manualEssayScores]);
+
+  // Pemulihan otomatis nilai 0% ketika Dossier dibuka dan ternyata lembar jawaban memiliki nilai riil > 0
+  useEffect(() => {
+    if (
+      isLoadingDossierAnswers ||
+      !selectedResult ||
+      !liveDossierEval ||
+      !Array.isArray(selectedResult.answers) ||
+      selectedResult.answers.length === 0
+    ) {
+      return;
+    }
+    if (
+      selectedResult.score === 0 &&
+      selectedResult.totalEarned === 0 &&
+      liveDossierEval.totalEarned > 0 &&
+      !repairedResultIdsRef.current.has(selectedResult.id)
+    ) {
+      repairedResultIdsRef.current.add(selectedResult.id);
+      const repairedResult: ExamResult = {
+        ...selectedResult,
+        score: liveDossierEval.finalScore,
+        totalEarned: liveDossierEval.totalEarned,
+        totalMax: liveDossierEval.totalMax,
+        details: liveDossierEval.details
+      };
+      setSelectedResult(repairedResult);
+      if (onUpdateResult) {
+        void onUpdateResult(repairedResult);
+      }
+      setDossierSuccessToast(
+        `Nilai "${selectedResult.studentName}" otomatis dipulihkan dari lembar jawaban menjadi ${liveDossierEval.finalScore}% (${liveDossierEval.totalEarned}/${liveDossierEval.totalMax} Poin).`
+      );
+      setTimeout(() => setDossierSuccessToast(null), 4000);
+    }
+  }, [isLoadingDossierAnswers, selectedResult, liveDossierEval, onUpdateResult]);
 
   const dossierStats = useMemo(() => {
     let correctCount = 0;
@@ -1311,6 +1393,77 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
     const remedialPct = Math.round((remedial / total) * 100);
     return { total, avg, passed, passedPct, remedial, remedialPct };
   }, [filteredResults]);
+
+  const zeroScoreResults = useMemo(
+    () => filteredResults.filter(r => (r.score || 0) === 0 && (r.totalEarned || 0) === 0),
+    [filteredResults]
+  );
+
+  const handleRecalculateZeroScores = async () => {
+    if (isRecalculatingScores || zeroScoreResults.length === 0) return;
+    setIsRecalculatingScores(true);
+    let fixedCount = 0;
+
+    try {
+      for (const r of zeroScoreResults) {
+        try {
+          let ans = Array.isArray(r.answers) && r.answers.length > 0 ? r.answers : [];
+          if (ans.length === 0) {
+            ans = await fetchExamResultAnswers(r.id, {
+              subjectId: r.subjectId,
+              studentName: r.studentName,
+              className: r.className
+            });
+          }
+
+          const res = await fetch('/api/exam/submit-score', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              subjectId: r.subjectId,
+              studentName: r.studentName,
+              className: r.className,
+              answers: ans,
+              violationCount: r.violationCount || 0,
+              preserveTimestamp: true,
+              essayScores: r.essayScores || {}
+            })
+          });
+
+          if (res.ok) {
+            const data = await res.json();
+            if (data?.evaluation && data?.result) {
+              const updated: ExamResult = {
+                ...r,
+                ...data.result,
+                subjectTitle: r.subjectTitle || data.result.subjectTitle,
+                submittedAt: r.submittedAt || data.result.submittedAt,
+                violationCount: r.violationCount ?? data.result.violationCount
+              };
+              if (updated.score > 0 || updated.totalEarned > 0) {
+                fixedCount++;
+              }
+              if (onUpdateResult) {
+                await onUpdateResult(updated, true);
+              }
+            }
+          }
+        } catch (err) {
+          console.warn('Gagal hitung ulang nilai untuk', r.studentName, err);
+        }
+      }
+
+      showThemedAlert(
+        fixedCount > 0 ? 'Sinkronisasi Nilai Selesai' : 'Pemeriksaan Nilai Selesai',
+        fixedCount > 0
+          ? `Berhasil menghitung ulang & memulihkan nilai ${fixedCount} dari ${zeroScoreResults.length} siswa dari lembar jawaban mereka di Cloud Supabase.`
+          : `Sudah memeriksa ${zeroScoreResults.length} data nilai 0%. Siswa tersebut memang tidak memiliki jawaban benar yang tersimpan.`,
+        'info'
+      );
+    } finally {
+      setIsRecalculatingScores(false);
+    }
+  };
 
   // Daftar mapel yang berhak diakses (Admin & Pengawas: SEMUA mapel; Guru Mapel: HANYA mapel miliknya atau yang baru dibuatnya)
   const accessibleSubjects = useMemo(() => {
@@ -4296,6 +4449,24 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
             </div>
 
             <div className="flex items-center gap-2 flex-wrap">
+              {/* Tombol Hitung Ulang / Pulihkan Nilai 0% dari Lembar Jawaban Cloud */}
+              {zeroScoreResults.length > 0 && (
+                <button
+                  type="button"
+                  onClick={handleRecalculateZeroScores}
+                  disabled={isRecalculatingScores}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-amber-300 dark:border-amber-700/80 text-xs font-bold text-amber-700 dark:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-950/40 transition cursor-pointer disabled:opacity-60 disabled:cursor-wait"
+                  title="Hitung ulang dan sinkronkan nilai 0% berdasarkan lembar jawaban siswa di Supabase"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 text-amber-600 dark:text-amber-400 ${isRecalculatingScores ? 'animate-spin' : ''}`} />
+                  <span>
+                    {isRecalculatingScores
+                      ? 'Menghitung Ulang...'
+                      : `Perbaiki Nilai 0% (${zeroScoreResults.length})`}
+                  </span>
+                </button>
+              )}
+
               {/* Tombol Cetak Rekap Nilai Siswa Per Kelas */}
               <button
                 type="button"
@@ -7197,8 +7368,10 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                                       onConfirm: async () => {
                                         const cleanName = s.studentName.toLowerCase().trim();
                                         const cleanClass = (s.className || '').toLowerCase().trim();
+                                        const resolvedClass = resolveStudentSingleClass(s.studentName, s.className, students);
+                                        const matchedSub = (allSubjects || []).find(sub => sub.id === s.subjectId) || subject;
 
-                                        // 1. Ambil jawaban terbaru siswa dari sesi database (bukan dari memori guru)
+                                        // 1. Ambil jawaban terbaru siswa dari sesi database (dengan fallback tanpa class_name)
                                         let sessionAnswers = await fetchExamSessionAnswers(s.subjectId, s.studentName, s.className);
                                         if ((!sessionAnswers || sessionAnswers.length === 0) && Array.isArray(s.answers) && s.answers.length > 0) {
                                           sessionAnswers = s.answers;
@@ -7219,35 +7392,73 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                                             localStorage.removeItem(`cbt_exam_state_${s.subjectId}_${cleanName}`);
                                           } catch {}
                                         }
-                                        // 3. Evaluasi nilai dan simpan ke database nilai SEBAGAI PRIORITAS UTAMA
-                                        const matchedSub = (allSubjects || []).find(sub => sub.id === s.subjectId) || subject;
-                                        let subjectQuestions = questions.filter(q => q.subjectId === s.subjectId);
-                                        if (subjectQuestions.length === 0) {
-                                          try {
-                                            const remoteQ = await fetchQuestionsBySubject(s.subjectId);
-                                            if (remoteQ && remoteQ.length > 0) {
-                                              subjectQuestions = remoteQ;
+
+                                        // 3. Evaluasi otoritatif di SERVER (/api/exam/submit-score) menggunakan kunci jawaban resmi Supabase
+                                        let forcedResult: ExamResult | null = null;
+                                        let savedOnServer = false;
+
+                                        try {
+                                          const serverRes = await fetch('/api/exam/submit-score', {
+                                            method: 'POST',
+                                            headers: { 'Content-Type': 'application/json' },
+                                            body: JSON.stringify({
+                                              subjectId: s.subjectId,
+                                              studentName: s.studentName,
+                                              className: resolvedClass,
+                                              answers: sessionAnswers || [],
+                                              violationCount: s.violationCount || 0
+                                            })
+                                          });
+                                          if (serverRes.ok) {
+                                            const data = await serverRes.json();
+                                            if (data?.evaluation && data?.result) {
+                                              forcedResult = {
+                                                ...data.result,
+                                                subjectTitle: data.result.subjectTitle || matchedSub.title,
+                                                studentId: s.studentId || data.result.studentId,
+                                                className: resolvedClass || data.result.className
+                                              };
+                                              savedOnServer = true;
                                             }
-                                          } catch {}
+                                          }
+                                        } catch (err) {
+                                          console.warn('Simpan Paksa gagal memanggil server submit-score, beralih ke fallback:', err);
                                         }
-                                        const evalRes = evaluateFullExam(subjectQuestions, sessionAnswers, matchedSub.scoringRules);
-                                        const forcedResult: ExamResult = {
-                                          id: `res-${Date.now()}`,
-                                          subjectId: s.subjectId,
-                                          subjectTitle: matchedSub.title,
-                                          studentId: s.studentId,
-                                          studentName: s.studentName,
-                                          className: resolveStudentSingleClass(s.studentName, s.className, students),
-                                          score: evalRes.finalScore,
-                                          totalEarned: evalRes.totalEarned,
-                                          totalMax: evalRes.totalMax,
-                                          answers: sessionAnswers,
-                                          submittedAt: new Date().toLocaleString('id-ID'),
-                                          violationCount: s.violationCount,
-                                          details: evalRes.details
-                                        };
-                                        if (onUpdateResult) {
-                                          await onUpdateResult(forcedResult);
+
+                                        // 3b. Fallback lokal hanya jika endpoint server offline (pastikan soal memiliki kunci jawaban valid)
+                                        if (!forcedResult) {
+                                          let subjectQuestions = questions.filter(q => q.subjectId === s.subjectId);
+                                          const hasValidKeys = subjectQuestions.some(
+                                            q => q.type === 'Esai' || (q.answer !== undefined && q.answer !== null && q.answer !== '')
+                                          );
+                                          if (!hasValidKeys) {
+                                            try {
+                                              const remoteQ = await fetchQuestionsBySubject(s.subjectId);
+                                              if (remoteQ && remoteQ.length > 0) {
+                                                subjectQuestions = remoteQ;
+                                              }
+                                            } catch {}
+                                          }
+                                          const evalRes = evaluateFullExam(subjectQuestions, sessionAnswers, matchedSub.scoringRules);
+                                          forcedResult = {
+                                            id: `res-${Date.now()}`,
+                                            subjectId: s.subjectId,
+                                            subjectTitle: matchedSub.title,
+                                            studentId: s.studentId,
+                                            studentName: s.studentName,
+                                            className: resolvedClass,
+                                            score: evalRes.finalScore,
+                                            totalEarned: evalRes.totalEarned,
+                                            totalMax: evalRes.totalMax,
+                                            answers: sessionAnswers,
+                                            submittedAt: new Date().toLocaleString('id-ID'),
+                                            violationCount: s.violationCount,
+                                            details: evalRes.details
+                                          };
+                                        }
+
+                                        if (onUpdateResult && forcedResult) {
+                                          await onUpdateResult(forcedResult, savedOnServer);
                                         }
 
                                         // 4. Perintahkan layar siswa untuk selesai
@@ -7256,9 +7467,9 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                                           studentName: s.studentName,
                                           subjectId: s.subjectId,
                                           className: s.className,
-                                          score: evalRes.finalScore,
-                                          totalEarned: evalRes.totalEarned,
-                                          totalMax: evalRes.totalMax
+                                          score: forcedResult?.score ?? 0,
+                                          totalEarned: forcedResult?.totalEarned ?? 0,
+                                          totalMax: forcedResult?.totalMax ?? 0
                                         });
 
                                         // 5. Bersihkan sesi dari database dan memori guru
@@ -7269,7 +7480,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                                             (!cleanClass || (sess.className || '').toLowerCase().trim() === cleanClass))
                                         ));
 
-                                        setMonitoringActionToast(`Ujian siswa ${s.studentName} telah diselesaikan paksa dan nilainya tersimpan.`);
+                                        setMonitoringActionToast(`Ujian siswa ${s.studentName} telah diselesaikan paksa (Skor Akhir: ${forcedResult?.score ?? 0}%).`);
                                       }
                                     });
                                   }}
@@ -9771,6 +9982,13 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                 </div>
               </div>
 
+              {isLoadingDossierAnswers && (
+                <div className="p-3 rounded-2xl bg-violet-50/70 dark:bg-violet-950/30 border border-violet-200 dark:border-violet-800/60 flex items-center gap-2.5 text-xs text-violet-700 dark:text-violet-300 font-semibold print:hidden">
+                  <RefreshCw className="w-4 h-4 animate-spin text-violet-600 dark:text-violet-400 shrink-0" />
+                  <span>Sedang mengambil rincian lembar jawaban siswa dari Cloud Supabase...</span>
+                </div>
+              )}
+
               {/* RINGKASAN HASIL EVALUASI JAWABAN SISWA (BENAR / SALAH / KOSONG) */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 p-3 sm:p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 print:bg-slate-100 border border-slate-200 dark:border-slate-700/80 print:border-slate-300 text-xs">
                 {/* 1. Benar */}
@@ -10322,7 +10540,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                           onUpdateResult(updated);
                         }
                         setEssaySavedNotice(true);
-                        setDossierSuccessToast(`Nilai uraian siswa "${selectedResult.studentName}" berhasil disimpan! Skor akhir baru: ${liveDossierEval.finalScore}%`);
+                        setDossierSuccessToast(`Nilai siswa "${selectedResult.studentName}" berhasil disimpan & disinkronkan! Skor akhir: ${liveDossierEval.finalScore}%`);
                         setTimeout(() => {
                           setEssaySavedNotice(false);
                           setDossierSuccessToast(null);
@@ -10342,7 +10560,7 @@ export const TeacherDashboard: React.FC<TeacherDashboardProps> = ({
                       ) : (
                         <>
                           <Save className="w-4 h-4" />
-                          <span>Simpan Nilai Uraian</span>
+                          <span>Simpan &amp; Sinkronkan Nilai</span>
                         </>
                       )}
                     </button>

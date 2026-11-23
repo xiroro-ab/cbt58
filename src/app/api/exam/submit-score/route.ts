@@ -13,7 +13,9 @@ export async function POST(req: NextRequest) {
       studentName,
       className = '',
       answers = [],
-      violationCount = 0
+      violationCount = 0,
+      preserveTimestamp = false,
+      essayScores = {}
     } = body;
 
     if (!subjectId || !studentName?.trim()) {
@@ -21,6 +23,54 @@ export async function POST(req: NextRequest) {
         { error: 'Data identitas siswa dan ID mapel wajib disertakan.' },
         { status: 400 }
       );
+    }
+
+    const cleanName = studentName.trim();
+    const cleanClass = (className || '').trim();
+
+    // Cek apakah sudah ada baris di exam_results untuk siswa & mapel ini
+    let existingQuery = supabase
+      .from('exam_results')
+      .select('id, answers, submitted_at, violation_count')
+      .eq('subject_id', subjectId)
+      .ilike('student_name', cleanName);
+
+    if (cleanClass) {
+      existingQuery = existingQuery.ilike('class_name', cleanClass);
+    }
+
+    let { data: existing } = await existingQuery.order('submitted_at', { ascending: false });
+    if ((!existing || existing.length === 0) && cleanClass) {
+      const fbExisting = await supabase
+        .from('exam_results')
+        .select('id, answers, submitted_at, violation_count')
+        .eq('subject_id', subjectId)
+        .ilike('student_name', cleanName)
+        .order('submitted_at', { ascending: false });
+      existing = fbExisting.data;
+    }
+
+    const hasAnsweredItem = (arr: any) =>
+      Array.isArray(arr) && arr.some(a => a && a.answer !== null && a.answer !== '' && !(Array.isArray(a.answer) && a.answer.length === 0));
+
+    let finalAnswers = Array.isArray(answers) ? answers : [];
+
+    // Jika payload jawaban kosong, coba ambil cadangan dari exam_sessions atau exam_results yang sudah ada
+    if (!hasAnsweredItem(finalAnswers)) {
+      const { data: sessRows } = await supabase
+        .from('exam_sessions')
+        .select('answers')
+        .eq('subject_id', subjectId)
+        .ilike('student_name', cleanName)
+        .order('last_heartbeat', { ascending: false })
+        .limit(3);
+
+      const sessWithAns = sessRows?.find(r => hasAnsweredItem(r.answers));
+      if (sessWithAns && Array.isArray(sessWithAns.answers)) {
+        finalAnswers = sessWithAns.answers;
+      } else if (existing && existing.length > 0 && hasAnsweredItem(existing[0].answers)) {
+        finalAnswers = existing[0].answers;
+      }
     }
 
     // 1. Ambil data mata pelajaran resmi & aturan penilaian dari Supabase
@@ -64,74 +114,70 @@ export async function POST(req: NextRequest) {
     }));
 
     // 3. Evaluasi nilai murni di sisi server (Mencegah manipulasi nilai dari DevTools browser siswa)
-    const evaluation = evaluateFullExam(officialQuestions, answers, scoringRules);
+    const evaluation = evaluateFullExam(officialQuestions, finalAnswers, scoringRules, essayScores);
 
     const nowIso = new Date().toISOString();
-    const nowLocalStr = new Date().toLocaleString('id-ID');
+    const existingRow = existing && existing.length > 0 ? existing[0] : null;
+    const effectiveSubmittedIso = (preserveTimestamp && existingRow?.submitted_at) ? existingRow.submitted_at : nowIso;
+    const effectiveLocalStr = new Date(effectiveSubmittedIso).toLocaleString('id-ID');
+    const effectiveViolation = preserveTimestamp && typeof existingRow?.violation_count === 'number'
+      ? existingRow.violation_count
+      : (violationCount || existingRow?.violation_count || 0);
 
     const resultPayload: ExamResult = {
-      id: `res-${Date.now()}`,
+      id: existingRow?.id || `res-${Date.now()}`,
       subjectId,
       subjectTitle: subData?.title || '',
-      studentId: `std-${Date.now()}`,
-      studentName: studentName.trim(),
-      className: className || '',
+      studentId: existingRow?.id || `std-${Date.now()}`,
+      studentName: cleanName,
+      className: cleanClass,
       score: evaluation.finalScore,
       totalEarned: evaluation.totalEarned,
       totalMax: evaluation.totalMax,
-      answers,
-      submittedAt: nowLocalStr,
-      violationCount: violationCount || 0,
+      answers: finalAnswers,
+      submittedAt: effectiveLocalStr,
+      violationCount: effectiveViolation,
       details: evaluation.details
     };
 
     // 4. Simpan atau perbarui di database Supabase (exam_results)
-    const cleanName = studentName.trim().toLowerCase();
-    const cleanClass = (className || '').trim().toLowerCase();
-    let existingQuery = supabase
-      .from('exam_results')
-      .select('id')
-      .eq('subject_id', subjectId)
-      .ilike('student_name', cleanName);
-
-    if (cleanClass) {
-      existingQuery = existingQuery.ilike('class_name', cleanClass);
-    }
-
-    const { data: existing } = await existingQuery.limit(1);
-
-    if (existing && existing.length > 0) {
+    if (existingRow) {
       await supabase
         .from('exam_results')
         .update({
           score: evaluation.finalScore,
           total_earned: evaluation.totalEarned,
           total_max: evaluation.totalMax,
-          answers,
-          submitted_at: nowIso,
-          violation_count: violationCount || 0
+          answers: finalAnswers,
+          ...(preserveTimestamp ? {} : { submitted_at: nowIso }),
+          violation_count: effectiveViolation
         })
-        .eq('id', existing[0].id);
-      resultPayload.id = existing[0].id;
+        .eq('id', existingRow.id);
+      if (existing && existing.length > 1) {
+        const dupIds = existing.slice(1).map((r: any) => r.id);
+        await supabase.from('exam_results').delete().in('id', dupIds);
+      }
+      resultPayload.id = existingRow.id;
     } else {
       const { data: inserted } = await supabase
         .from('exam_results')
         .insert({
           subject_id: subjectId,
-          student_name: studentName.trim(),
-          class_name: className || '',
+          student_name: cleanName,
+          class_name: cleanClass,
           score: evaluation.finalScore,
           total_earned: evaluation.totalEarned,
           total_max: evaluation.totalMax,
-          answers,
+          answers: finalAnswers,
           submitted_at: nowIso,
-          violation_count: violationCount || 0
+          violation_count: effectiveViolation
         })
         .select('id')
         .single();
 
       if (inserted?.id) {
         resultPayload.id = inserted.id;
+        resultPayload.studentId = inserted.id;
       }
     }
 

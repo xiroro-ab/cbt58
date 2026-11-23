@@ -473,7 +473,8 @@ export async function saveOrUpdateExamResult(result: ExamResult): Promise<boolea
 
   try {
     let existingId: string | null = null;
-    if (!result.id.startsWith('res-')) {
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(result.id);
+    if (isUuid) {
       const { data: byId } = await supabase.from('exam_results').select('id').eq('id', result.id).limit(1);
       if (byId && byId.length > 0) existingId = byId[0].id;
     }
@@ -489,7 +490,17 @@ export async function saveOrUpdateExamResult(result: ExamResult): Promise<boolea
         byNameQuery = byNameQuery.ilike('class_name', result.className.trim());
       }
 
-      const { data: byName } = await byNameQuery.order('submitted_at', { ascending: false });
+      let { data: byName } = await byNameQuery.order('submitted_at', { ascending: false });
+      if ((!byName || byName.length === 0) && result.className && result.className.trim()) {
+        const fbRes = await supabase
+          .from('exam_results')
+          .select('id, class_name')
+          .eq('subject_id', result.subjectId)
+          .ilike('student_name', result.studentName.trim())
+          .order('submitted_at', { ascending: false });
+        byName = fbRes.data;
+      }
+
       if (byName && byName.length > 0) {
         existingId = byName[0].id;
         // Jika sebelumnya sempat ada baris ganda, bersihkan baris kedua dst secara otomatis
@@ -501,13 +512,16 @@ export async function saveOrUpdateExamResult(result: ExamResult): Promise<boolea
     }
 
     if (existingId) {
-      const { error } = await supabase.from('exam_results').update({
+      const updatePayload: Record<string, any> = {
         score: result.score,
         total_earned: result.totalEarned,
         total_max: result.totalMax,
-        answers: result.answers,
         violation_count: result.violationCount
-      }).eq('id', existingId);
+      };
+      if (Array.isArray(result.answers) && result.answers.length > 0) {
+        updatePayload.answers = result.answers;
+      }
+      const { error } = await supabase.from('exam_results').update(updatePayload).eq('id', existingId);
       if (!error) {
         notifyResultChanged({ action: 'UPDATE', subjectId: result.subjectId, result: { ...result, id: existingId } });
       }
@@ -1093,16 +1107,60 @@ export async function fetchExamResults(subjectId?: string): Promise<ExamResult[]
 
 /**
  * Mengambil jawaban satu hasil ujian saat dossier dibuka (on-demand, bukan saat polling).
+ * Mendukung fallback subjectId + studentName jika resultId lokal belum berupa UUID resmi Supabase.
  */
-export async function fetchExamResultAnswers(resultId: string): Promise<StudentAnswerItem[]> {
+export async function fetchExamResultAnswers(
+  resultId: string,
+  fallbackMatch?: { subjectId?: string; studentName?: string; className?: string }
+): Promise<StudentAnswerItem[]> {
   try {
-    const { data, error } = await supabase
-      .from('exam_results')
-      .select('answers')
-      .eq('id', resultId)
-      .maybeSingle();
-    if (error || !data) return [];
-    return Array.isArray(data.answers) ? data.answers : [];
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(resultId || '');
+    if (isUuid) {
+      const { data, error } = await supabase
+        .from('exam_results')
+        .select('answers')
+        .eq('id', resultId)
+        .maybeSingle();
+      if (!error && data && Array.isArray(data.answers) && data.answers.length > 0) {
+        return data.answers;
+      }
+    }
+
+    if (fallbackMatch?.subjectId && fallbackMatch?.studentName?.trim()) {
+      let query = supabase
+        .from('exam_results')
+        .select('answers')
+        .eq('subject_id', fallbackMatch.subjectId)
+        .ilike('student_name', fallbackMatch.studentName.trim());
+
+      if (fallbackMatch.className?.trim()) {
+        query = query.ilike('class_name', fallbackMatch.className.trim());
+      }
+
+      let { data: fbData, error: fbError } = await query
+        .order('submitted_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if ((!fbData || fbError || !Array.isArray(fbData.answers) || fbData.answers.length === 0) && fallbackMatch.className?.trim()) {
+        const fbNoClass = await supabase
+          .from('exam_results')
+          .select('answers')
+          .eq('subject_id', fallbackMatch.subjectId)
+          .ilike('student_name', fallbackMatch.studentName.trim())
+          .order('submitted_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        fbData = fbNoClass.data;
+        fbError = fbNoClass.error;
+      }
+
+      if (!fbError && fbData && Array.isArray(fbData.answers)) {
+        return fbData.answers;
+      }
+    }
+
+    return [];
   } catch {
     return [];
   }

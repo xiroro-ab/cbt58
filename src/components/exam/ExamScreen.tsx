@@ -17,7 +17,7 @@ import {
   checkStudentExamSubmission,
   saveOrUpdateExamResult
 } from '@/lib/supabaseService';
-import { lookupStudentExamSession } from '@/lib/examSessionService';
+import { lookupStudentExamSession, upsertExamSession } from '@/lib/examSessionService';
 import {
   reportStudentSession,
   removeStudentSession,
@@ -548,7 +548,11 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
     }
 
     // 2. Evaluasi otoritatif via Serverless API dengan kunci jawaban resmi Supabase (Server-side)
-    if (finalScore === null) {
+    // Jalankan juga sebagai penyelamat otomatis jika server belum menerima jawaban terbaru siswa (finalScore === 0 saat siswa punya jawaban lokal)
+    const hasLocalAnswers = (answersRef.current || []).some(
+      a => a && a.answer !== null && a.answer !== '' && !(Array.isArray(a.answer) && a.answer.length === 0)
+    );
+    if (finalScore === null || (hasLocalAnswers && finalScore === 0 && (finalEarned === 0 || finalEarned === null))) {
       try {
         const res = await fetch('/api/exam/submit-score', {
           method: 'POST',
@@ -929,9 +933,29 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
 
     const limit = subject.violationLimit || 3;
     const actualClass = studentActualClass;
+    const answered = answersRef.current.filter(a => a.answer !== null && a.answer !== '').length;
+    const violationSessionPayload = {
+      id: `session_${studentName}_${subject.id}`,
+      subjectId: subject.id,
+      studentId: studentName,
+      studentName,
+      className: studentActualClass,
+      startTime: startTimeRef.current,
+      lastHeartbeat: Date.now(),
+      progressCount: answered,
+      totalQuestions: questions.length,
+      violationCount: nextCount,
+      answers: answersRef.current,
+      status: (shouldBlock ? 'blocked' : 'ongoing') as 'blocked' | 'ongoing',
+      isFocus: false,
+      remainingSeconds: secondsRemainingRef.current
+    };
 
-    // 1. Simpan status resmi (jumlah + terkunci) ke database — sumber kebenaran tunggal
-    await saveStudentLockState(subject.id, studentName, studentActualClass, nextCount, shouldBlock);
+    // 1. Simpan status kunci & jawaban terkini siswa secara paralel ke Supabase sebelum pengawas menekan Simpan Paksa
+    await Promise.all([
+      saveStudentLockState(subject.id, studentName, studentActualClass, nextCount, shouldBlock),
+      upsertExamSession(violationSessionPayload, true).catch(() => false)
+    ]);
 
     // 2. Catat log pelanggaran untuk guru (log ini TIDAK menentukan lock)
     try {
@@ -944,24 +968,8 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
       });
     } catch {}
 
-    // Segera laporkan sesi dengan status terbaru
-    const answered = answersRef.current.filter(a => a.answer !== null && a.answer !== '').length;
-    reportStudentSession({
-      id: `session_${studentName}_${subject.id}`,
-      subjectId: subject.id,
-      studentId: studentName,
-      studentName,
-      className: studentActualClass,
-      startTime: startTimeRef.current,
-      lastHeartbeat: Date.now(),
-      progressCount: answered,
-      totalQuestions: questions.length,
-      violationCount: nextCount,
-      answers: answersRef.current,
-      status: shouldBlock ? 'blocked' : 'ongoing',
-      isFocus: false,
-      remainingSeconds: secondsRemainingRef.current
-    }, true);
+    // Segera laporkan sesi ke cache lokal & listeners
+    reportStudentSession(violationSessionPayload, true);
 
     // Segera perbarui snapshot ujian ke localStorage secara sinkron agar tidak hilang jika siswa mematikan aplikasi/browser
     if (typeof window !== 'undefined') {
@@ -1279,29 +1287,29 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
     : { questionId: '', answer: null, isDoubtful: false };
 
   const handleUpdateAnswer = (newAnswer: QuestionAnswer) => {
-    setAnswers(prev => {
-      const updated = [...prev];
-      updated[currentIndex] = {
-        ...updated[currentIndex],
-        answer: newAnswer
-      };
-      answersRef.current = updated;
-      if (typeof window !== 'undefined') {
-        try {
-          localStorage.setItem(stateKey, JSON.stringify({
-            answers: updated,
-            secondsRemaining: secondsRemainingRef.current,
-            violationCount: violationCountRef.current,
-            isLocked: isLockedRef.current,
-            lastViolationReason,
-            startTime: startTimeRef.current,
-            currentIndex,
-            lastSavedTime: Date.now()
-          }));
-        } catch {}
-      }
-      return updated;
-    });
+    const base = answersRef.current && answersRef.current.length > 0 ? answersRef.current : answers;
+    const updated = [...base];
+    updated[currentIndex] = {
+      ...updated[currentIndex],
+      answer: newAnswer
+    };
+    answersRef.current = updated;
+    setAnswers(updated);
+
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem(stateKey, JSON.stringify({
+          answers: updated,
+          secondsRemaining: secondsRemainingRef.current,
+          violationCount: violationCountRef.current,
+          isLocked: isLockedRef.current,
+          lastViolationReason,
+          startTime: startTimeRef.current,
+          currentIndex,
+          lastSavedTime: Date.now()
+        }));
+      } catch {}
+    }
 
     // Segera laporkan jawaban terbaru siswa ke server agar pengawas selalu memiliki jawaban terkini
     sendDirectHeartbeat();
@@ -1365,6 +1373,9 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
     setShowConfirmSubmit(false);
     setShowWarningModal(false);
 
+    const latestAnswers = answersRef.current && answersRef.current.length > 0 ? answersRef.current : answers;
+    const latestViolations = typeof violationCountRef.current === 'number' ? violationCountRef.current : violationCount;
+
     // 1. Evaluasi & simpan nilai terverifikasi via Serverless Endpoint (Mencegah manipulasi client-side)
     // Dilengkapi retry 3x otomatis untuk mengantisipasi jika sinyal WiFi siswa sempat terputus sesaat saat submit
     let evaluation: any = null;
@@ -1380,8 +1391,8 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
             subjectId: subject.id,
             studentName,
             className: studentActualClass,
-            answers,
-            violationCount
+            answers: latestAnswers,
+            violationCount: latestViolations
           })
         });
         if (res.ok) {
@@ -1403,21 +1414,31 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
 
     // 2. Fail-safe fallback evaluasi lokal jika server offline
     if (!evaluation) {
-      evaluation = evaluateFullExam(questions, answers, subject.scoringRules);
+      evaluation = evaluateFullExam(questions, latestAnswers, subject.scoringRules);
     }
 
     const currentClass = studentActualClass;
-    const payload = serverResult || {
-      studentName,
-      className: currentClass,
-      score: evaluation.finalScore,
-      totalEarned: evaluation.totalEarned,
-      totalMax: evaluation.totalMax,
-      answers,
-      submittedAt: new Date().toLocaleString('id-ID'),
-      violationCount,
-      details: evaluation.details
-    };
+    const payload = serverResult
+      ? {
+          ...serverResult,
+          subjectId: subject.id,
+          subjectTitle: subject.title,
+          savedOnServer: true
+        }
+      : {
+          subjectId: subject.id,
+          subjectTitle: subject.title,
+          studentName,
+          className: currentClass,
+          score: evaluation.finalScore,
+          totalEarned: evaluation.totalEarned,
+          totalMax: evaluation.totalMax,
+          answers: latestAnswers,
+          submittedAt: new Date().toLocaleString('id-ID'),
+          violationCount: latestViolations,
+          details: evaluation.details,
+          savedOnServer: false
+        };
 
     setCompletedResult(payload);
     setIsExamCompleted(true);

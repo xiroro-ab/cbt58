@@ -43,8 +43,10 @@ export async function upsertExamSession(
     is_focus: session.isFocus !== false
   };
 
-  // Selalu sertakan jawaban siswa dalam payload agar tidak pernah ter-reset menjadi kosong []
-  payload.answers = Array.isArray(session.answers) ? session.answers : [];
+  // Selalu sertakan jawaban siswa jika tersedia agar tidak pernah ter-reset menjadi kosong []
+  if (includeAnswers || (Array.isArray(session.answers) && session.answers.length > 0)) {
+    payload.answers = Array.isArray(session.answers) ? session.answers : [];
+  }
 
   // Proteksi 1: Jika siswa sudah memiliki nilai akhir di exam_results (diselesaikan paksa oleh guru atau submit mandiri),
   // TOLAK KERAS semua heartbeat baru agar sesi ujian tidak pernah hidup kembali!
@@ -312,23 +314,40 @@ export async function fetchExamSessionAnswers(
   studentName: string,
   className?: string
 ): Promise<ExamSession['answers']> {
-  let query = supabase
+  const cleanName = studentName.trim();
+  const cleanClass = className?.trim();
+
+  if (cleanClass) {
+    const { data, error } = await supabase
+      .from('exam_sessions')
+      .select('answers')
+      .eq('subject_id', subjectId)
+      .ilike('student_name', cleanName)
+      .ilike('class_name', cleanClass)
+      .order('last_heartbeat', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (!error && data && Array.isArray(data.answers) && data.answers.length > 0) {
+      return data.answers;
+    }
+  }
+
+  // Fallback tanpa filter class_name jika sesi terkunci atau penulisan kelas berbeda
+  const { data: fallbackRows, error: fbError } = await supabase
     .from('exam_sessions')
     .select('answers')
     .eq('subject_id', subjectId)
-    .ilike('student_name', studentName.trim());
-
-  if (className?.trim()) {
-    query = query.ilike('class_name', className.trim());
-  }
-
-  const { data, error } = await query
+    .ilike('student_name', cleanName)
     .order('last_heartbeat', { ascending: false })
-    .limit(1)
-    .maybeSingle();
+    .limit(5);
 
-  if (error || !data) return [];
-  return Array.isArray(data.answers) ? data.answers : [];
+  if (fbError || !fallbackRows) return [];
+  const withAnswers = fallbackRows.find(
+    row => Array.isArray(row.answers) && row.answers.some((a: any) => a?.answer !== null && a?.answer !== '')
+  ) || fallbackRows.find(row => Array.isArray(row.answers) && row.answers.length > 0);
+
+  return withAnswers && Array.isArray(withAnswers.answers) ? withAnswers.answers : [];
 }
 
 export async function deleteExamSession(

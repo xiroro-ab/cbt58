@@ -187,6 +187,8 @@ export default function Home() {
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [subject, setSubject] = useState<Subject>(initialSubject);
   const [questions, setQuestions] = useState<Question[]>([]);
+  const [studentExamSubject, setStudentExamSubject] = useState<Subject | null>(null);
+  const [studentExamQuestions, setStudentExamQuestions] = useState<Question[]>([]);
   const [results, setResults] = useState<ExamResult[]>([]);
   const [students, setStudents] = useState<Student[]>(initialStudents);
   const [selectedStudentClass, setSelectedStudentClass] = useState<string>('');
@@ -586,9 +588,28 @@ export default function Home() {
       } else if (changePayload.result) {
         const res = changePayload.result;
         const cleanName = res.studentName.toLowerCase().trim();
+        const cleanClass = (res.className || '').toLowerCase().trim();
         setResults(prev => {
-          const filtered = prev.filter(r => r.id !== res.id && !(r.studentName.toLowerCase().trim() === cleanName && r.subjectId === res.subjectId));
-          return [res, ...filtered];
+          const existingMatch = prev.find(r =>
+            r.id === res.id || (
+              r.studentName.toLowerCase().trim() === cleanName &&
+              r.subjectId === res.subjectId &&
+              (!cleanClass || !r.className || r.className.toLowerCase().trim() === cleanClass)
+            )
+          );
+          const mergedRes: ExamResult = {
+            ...res,
+            subjectTitle: res.subjectTitle || existingMatch?.subjectTitle || '',
+            answers: (Array.isArray(res.answers) && res.answers.length > 0) ? res.answers : (existingMatch?.answers || [])
+          };
+          const filtered = prev.filter(r =>
+            r.id !== mergedRes.id && !(
+              r.studentName.toLowerCase().trim() === cleanName &&
+              r.subjectId === mergedRes.subjectId &&
+              (!cleanClass || !r.className || r.className.toLowerCase().trim() === cleanClass)
+            )
+          );
+          return [mergedRes, ...filtered];
         });
       }
     });
@@ -787,7 +808,7 @@ export default function Home() {
     }
   };
 
-  const handleUpdateResult = async (updatedResult: ExamResult) => {
+  const handleUpdateResult = async (updatedResult: ExamResult, skipRemoteWrite = false) => {
     const cleanName = updatedResult.studentName.toLowerCase().trim();
     const cleanClass = (updatedResult.className || '').toLowerCase().trim();
     setResults(prev => {
@@ -800,6 +821,23 @@ export default function Home() {
       );
       return [updatedResult, ...filtered];
     });
+    if (skipRemoteWrite) {
+      // Tetap sinkronkan ke localStorage dan broadcast agar UI & tab lain langsung terupdate
+      if (typeof window !== 'undefined' && updatedResult.subjectId) {
+        try {
+          const stored = localStorage.getItem(`cbt_results_${updatedResult.subjectId}`);
+          const list: ExamResult[] = stored ? JSON.parse(stored) : [];
+          const updated = [
+            updatedResult,
+            ...list.filter(
+              r => !(r.id === updatedResult.id || (r.studentName.toLowerCase().trim() === cleanName && r.subjectId === updatedResult.subjectId))
+            )
+          ];
+          localStorage.setItem(`cbt_results_${updatedResult.subjectId}`, JSON.stringify(updated));
+        } catch {}
+      }
+      return;
+    }
     try {
       await saveOrUpdateExamResult(updatedResult);
     } catch (err) {
@@ -1425,9 +1463,12 @@ export default function Home() {
         });
       }
 
-      // Pasang otomatis mata pelajaran & butir soal yang terdeteksi
-      setSubject(matchedSub);
-      setQuestions(finalQuestions);
+      // Pasang mata pelajaran & butir soal khusus sesi ujian siswa (TIDAK menimpa bank soal guru)
+      setStudentExamSubject(matchedSub);
+      setStudentExamQuestions(finalQuestions);
+      if (!currentTeacher) {
+        setSubject(matchedSub);
+      }
       setLoginError('');
 
       // Suguhkan Modal Informasi Ujian sebelum masuk ke lembar soal ujian
@@ -1480,6 +1521,13 @@ export default function Home() {
   }, [currentTeacher]);
 
   const handleFinishExam = async (resultData: any) => {
+    const activeExamSub =
+      (resultData.subjectId ? subjects.find(s => s.id === resultData.subjectId) : null) ||
+      studentExamSubject ||
+      subject;
+    const activeSubId = resultData.subjectId || activeExamSub.id;
+    const activeSubTitle = resultData.subjectTitle || activeExamSub.title;
+
     const cleanName = resultData.studentName.toLowerCase().trim();
     const finalClass = resolveStudentSingleClass(resultData.studentName, resultData.className || selectedStudentClass);
     const cleanClass = finalClass.toLowerCase().trim();
@@ -1487,25 +1535,25 @@ export default function Home() {
     if (typeof window !== 'undefined') {
       try {
         if (cleanClass) {
-          localStorage.setItem(`cbt_submitted_${subject.id}_${cleanClass}_${cleanName}`, JSON.stringify({
+          localStorage.setItem(`cbt_submitted_${activeSubId}_${cleanClass}_${cleanName}`, JSON.stringify({
             score: resultData.score,
             submittedAt: resultData.submittedAt
           }));
-          localStorage.removeItem(`cbt_exam_questions_${subject.id}_${cleanClass}_${cleanName}`);
+          localStorage.removeItem(`cbt_exam_questions_${activeSubId}_${cleanClass}_${cleanName}`);
         }
-        localStorage.setItem(`cbt_submitted_${subject.id}_${cleanName}`, JSON.stringify({
+        localStorage.setItem(`cbt_submitted_${activeSubId}_${cleanName}`, JSON.stringify({
           score: resultData.score,
           submittedAt: resultData.submittedAt
         }));
-        localStorage.removeItem(`cbt_exam_questions_${subject.id}_${cleanName}`);
+        localStorage.removeItem(`cbt_exam_questions_${activeSubId}_${cleanName}`);
       } catch {}
     }
 
     const newResult: ExamResult = {
-      id: `res-${Date.now()}`,
-      subjectId: subject.id,
-      subjectTitle: subject.title,
-      studentId: matchedStudent?.id || `std-${Date.now()}`,
+      id: resultData.id || `res-${Date.now()}`,
+      subjectId: activeSubId,
+      subjectTitle: activeSubTitle,
+      studentId: resultData.studentId || matchedStudent?.id || `std-${Date.now()}`,
       studentName: resultData.studentName,
       className: finalClass,
       score: resultData.score,
@@ -1521,16 +1569,18 @@ export default function Home() {
       const filtered = prev.filter(
         r => r.id !== newResult.id && !(
           r.studentName.toLowerCase().trim() === cleanName &&
-          r.subjectId === subject.id &&
+          r.subjectId === activeSubId &&
           (!cleanClass || !r.className || r.className.toLowerCase().trim() === cleanClass)
         )
       );
       return [newResult, ...filtered];
     });
-    try {
-      await saveExamResult(newResult);
-    } catch (err) {
-      console.warn('Supabase save result fallback:', err);
+    if (!resultData.savedOnServer) {
+      try {
+        await saveExamResult(newResult);
+      } catch (err) {
+        console.warn('Supabase save result fallback:', err);
+      }
     }
   };
 
@@ -1798,11 +1848,13 @@ export default function Home() {
   // VIEW 1: LAYAR PENGERJAAN UJIAN SISWA (FULLSCREEN / ANTI-CHEAT)
   // =========================================================================
   if (viewMode === 'student_exam') {
+    const activeExamSub = studentExamSubject || subject;
+    const activeExamQuestions = studentExamQuestions.length > 0 ? studentExamQuestions : questions;
     return (
       <ErrorBoundary fallbackTitle="Pemulihan Sesi Ujian Siswa">
         <ExamScreen
-          subject={subject}
-          questions={questions}
+          subject={activeExamSub}
+          questions={activeExamQuestions}
           studentName={studentName}
           studentClass={resolveStudentSingleClass(studentName, selectedStudentClass || matchedStudent?.className)}
           initialStartTime={studentResumeSession?.startTime}
@@ -1887,7 +1939,9 @@ export default function Home() {
               {t.studentLoginTitle}
             </h2>
             <p className="text-xs text-slate-500 dark:text-slate-400">
-              {subject.title} • {students.length} Siswa Terdaftar di Sistem
+              {detectedSubject
+                ? `${detectedSubject.title} • ${students.length} Siswa Terdaftar di Sistem`
+                : `${schoolSettings?.schoolName || 'SMP Negeri 58 Palembang'} • ${students.length} Siswa Terdaftar di Sistem`}
             </p>
           </div>
 
@@ -2024,7 +2078,7 @@ export default function Home() {
                   setInputToken(e.target.value.toUpperCase());
                   setLoginError('');
                 }}
-                placeholder="CONTOH: SMP58INF"
+                placeholder="MASUKKAN TOKEN UJIAN"
                 className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white uppercase tracking-widest font-mono text-center font-bold text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 transition"
               />
 

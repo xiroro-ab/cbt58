@@ -122,7 +122,7 @@ export async function POST(req: NextRequest) {
     const effectiveLocalStr = new Date(effectiveSubmittedIso).toLocaleString('id-ID');
     const effectiveViolation = preserveTimestamp && typeof existingRow?.violation_count === 'number'
       ? existingRow.violation_count
-      : (violationCount || existingRow?.violation_count || 0);
+      : Math.max(Number(violationCount) || 0, Number(existingRow?.violation_count) || 0);
 
     const resultPayload: ExamResult = {
       id: existingRow?.id || `res-${Date.now()}`,

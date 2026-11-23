@@ -16,7 +16,7 @@ import { HelpModal } from '@/components/modals/HelpModal';
 import { CertificateModal } from '@/components/modals/CertificateModal';
 import { ApkDownloadModal } from '@/components/modals/ApkDownloadModal';
 import { Footer } from '@/components/layout/Footer';
-import { broadcastAnnouncementToStudents } from '@/lib/liveMonitoringService';
+import { broadcastAnnouncementToStudents, notifyResultChanged } from '@/lib/liveMonitoringService';
 import { lookupStudentExamSession, clearProctorCommand } from '@/lib/examSessionService';
 import {
   fetchActiveSubject,
@@ -1575,7 +1575,20 @@ export default function Home() {
       );
       return [newResult, ...filtered];
     });
-    if (!resultData.savedOnServer) {
+    if (resultData.savedOnServer) {
+      if (typeof window !== 'undefined' && activeSubId) {
+        try {
+          const stored = localStorage.getItem(`cbt_results_${activeSubId}`);
+          const list: ExamResult[] = stored ? JSON.parse(stored) : [];
+          const updated = [
+            newResult,
+            ...list.filter(r => !(r.id === newResult.id || (r.studentName.toLowerCase().trim() === cleanName && r.subjectId === activeSubId)))
+          ];
+          localStorage.setItem(`cbt_results_${activeSubId}`, JSON.stringify(updated));
+        } catch {}
+      }
+      notifyResultChanged({ action: 'INSERT', subjectId: activeSubId, result: newResult });
+    } else {
       try {
         await saveExamResult(newResult);
       } catch (err) {

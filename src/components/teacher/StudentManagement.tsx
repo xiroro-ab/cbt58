@@ -3,6 +3,7 @@
 import React, { useState, useMemo } from 'react';
 import { Student, ExamResult } from '@/types/cbt';
 import { useLanguage } from '@/context/LanguageContext';
+import { formatStudentGender } from '@/lib/rosterStudents';
 import * as XLSX from 'xlsx';
 import {
   Users,
@@ -121,7 +122,7 @@ export const StudentManagement: React.FC<StudentManagementProps> = ({
     setEditingStudent(s);
     setFormNisn(s.nisn);
     setFormName(s.name);
-    setFormGender((s.gender as any) || 'Laki-Laki');
+    setFormGender(formatStudentGender(s.gender));
     setFormClass(s.className || 'VII.1');
     setIsFormModalOpen(true);
   };
@@ -218,7 +219,7 @@ export const StudentManagement: React.FC<StudentManagementProps> = ({
               id: `std-imp-${Date.now()}-${idx}`,
               nisn: nisn || `NISN-${Math.floor(1000000000 + Math.random() * 9000000000)}`,
               name,
-              gender: gender.toLowerCase().includes('perempuan') || gender.toLowerCase() === 'p' ? 'Perempuan' : 'Laki-Laki',
+              gender: formatStudentGender(gender),
               className: className || 'VII.1'
             };
           })
@@ -430,12 +431,12 @@ export const StudentManagement: React.FC<StudentManagementProps> = ({
                           <td className="py-3 px-4">
                             <span
                               className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
-                                s.gender.includes('Perempuan')
+                                formatStudentGender(s.gender) === 'Perempuan'
                                   ? 'bg-pink-100 dark:bg-pink-950/50 text-pink-700 dark:text-pink-300'
                                   : 'bg-blue-100 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300'
                               }`}
                             >
-                              {s.gender}
+                              {formatStudentGender(s.gender)}
                             </span>
                           </td>
                           <td className="py-3 px-4 font-bold text-violet-600 dark:text-violet-400">
@@ -720,7 +721,7 @@ export const StudentManagement: React.FC<StudentManagementProps> = ({
                         <tr key={i}>
                           <td className="py-1.5 px-3 font-mono">{row.nisn}</td>
                           <td className="py-1.5 px-3 font-bold">{row.name}</td>
-                          <td className="py-1.5 px-3">{row.gender}</td>
+                          <td className="py-1.5 px-3">{formatStudentGender(row.gender)}</td>
                           <td className="py-1.5 px-3 font-bold text-violet-600">{row.className}</td>
                         </tr>
                       ))}

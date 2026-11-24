@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { ErrorBoundary } from '@/components/common/ErrorBoundary';
 import { initialSubject } from '@/lib/mockData';
-import { initialStudents, resolveStudentSingleClass } from '@/lib/rosterStudents';
+import { initialStudents, resolveStudentSingleClass, formatStudentGender } from '@/lib/rosterStudents';
 import { initialTeachers } from '@/lib/rosterTeachers';
 import { Subject, Question, ExamResult, ExamNotification, ExamMessage, Student, Teacher, SchoolSettings, StudentAnswerItem } from '@/types/cbt';
 import { shuffleQuestionsGroupedByType } from '@/lib/questionRandomizer';
@@ -2067,7 +2067,7 @@ export default function Home() {
                   <div className="flex-1">
                     <p className="font-bold">Terdaftar di Roster Resmi</p>
                     <p className="text-[10px] text-emerald-600/80 dark:text-emerald-400/80">
-                      NISN: <span className="font-mono font-semibold">{matchedStudent.nisn}</span> • JK: {matchedStudent.gender === 'L' ? 'Laki-laki' : 'Perempuan'}
+                      NISN: <span className="font-mono font-semibold">{matchedStudent.nisn}</span> • JK: {formatStudentGender(matchedStudent.gender)}
                     </p>
                   </div>
                 </div>
@@ -2225,7 +2225,7 @@ export default function Home() {
                         </div>
                         <div>
                           <span className="text-slate-400 block text-[10px]">Jenis Kelamin:</span>
-                          <span className="text-slate-800 dark:text-slate-200">{briefingData.student.gender === 'L' || briefingData.student.gender === 'Laki-Laki' ? 'Laki-Laki' : 'Perempuan'}</span>
+                          <span className="text-slate-800 dark:text-slate-200">{formatStudentGender(briefingData.student.gender)}</span>
                         </div>
                       </>
                     )}

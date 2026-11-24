@@ -2212,3 +2212,22 @@ export function isClassInGrade(rawClass: string | undefined | null, targetGrade:
 
   return false;
 }
+
+/**
+ * Standarisasi label Jenis Kelamin siswa ('Laki-Laki' atau 'Perempuan').
+ * Menangani format 'L', 'P', 'LK', 'PR', 'Laki-Laki', 'Perempuan', huruf besar/kecil.
+ */
+export function formatStudentGender(gender?: string | null): 'Laki-Laki' | 'Perempuan' {
+  if (!gender) return 'Laki-Laki';
+  const clean = String(gender).trim().toLowerCase();
+  if (
+    clean === 'p' ||
+    clean === 'pr' ||
+    clean.startsWith('per') ||
+    clean.includes('wanita') ||
+    clean.includes('female')
+  ) {
+    return 'Perempuan';
+  }
+  return 'Laki-Laki';
+}
